@@ -1,0 +1,30 @@
+{
+  "name": "struo",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Struo — the operating system of a construction company (multi-tenant SaaS, PWA, MCP).",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @struo/web dev",
+    "build": "pnpm --filter @struo/web build",
+    "start": "pnpm --filter @struo/web start",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test",
+    "db:local": "node scripts/db-local.mjs",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed": "tsx scripts/seed.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.12"
+  }
+}

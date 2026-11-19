@@ -1,0 +1,14 @@
+node_modules/
+.output/
+dist/
+.local/
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+apps/web/src/routeTree.gen.ts
+.tanstack/
+.nitro/
+.vinxi/
+storage/
