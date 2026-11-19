@@ -16,6 +16,11 @@ export interface Env {
   OPENAI_API_KEY: string;
   OPENAI_MODEL: string;
   OPENAI_TRANSCRIBE_MODEL: string;
+  /** The assistant's model on the company's key (spec 034). */
+  OPENAI_AGENT_MODEL: string;
+  /** Sign in with ChatGPT (OpenAI partner programme): empty until OpenAI issues the client. */
+  OPENAI_SIWC_CLIENT_ID: string;
+  OPENAI_SIWC_CLIENT_SECRET: string;
   JOBS_ENABLED: boolean;
   PLATFORM_MONEROO_SECRET_KEY: string;
   PLATFORM_MONEROO_WEBHOOK_SECRET: string;
@@ -58,6 +63,9 @@ export function env(): Env {
     OPENAI_API_KEY: read('OPENAI_API_KEY'),
     OPENAI_MODEL: read('OPENAI_MODEL', 'gpt-4o-mini'),
     OPENAI_TRANSCRIBE_MODEL: read('OPENAI_TRANSCRIBE_MODEL', 'whisper-1'),
+    OPENAI_AGENT_MODEL: read('OPENAI_AGENT_MODEL', 'gpt-4.1-mini'),
+    OPENAI_SIWC_CLIENT_ID: read('OPENAI_SIWC_CLIENT_ID'),
+    OPENAI_SIWC_CLIENT_SECRET: read('OPENAI_SIWC_CLIENT_SECRET'),
     JOBS_ENABLED: read('JOBS_ENABLED', 'true') !== 'false',
     PLATFORM_MONEROO_SECRET_KEY: read('PLATFORM_MONEROO_SECRET_KEY'),
     PLATFORM_MONEROO_WEBHOOK_SECRET: read('PLATFORM_MONEROO_WEBHOOK_SECRET'),
