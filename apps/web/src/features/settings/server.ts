@@ -2,6 +2,7 @@ import * as core from '@struo/core';
 import { verifyOAuthQueryParams } from '@better-auth/oauth-provider';
 import { createServerFn } from '@tanstack/react-start';
 import { translate } from '@/i18n/index.tsx';
+import { monerooGateway, simulatorGateway } from '@/server/adapters.server.ts';
 import { chooseCompany, guarded, loadViewer, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 
@@ -49,7 +50,7 @@ export const acceptInvitation = createServerFn({ method: 'POST' })
 export const getSettingsPage = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { db, env } = runtime();
-    const [settings, configuration, members, invitations, provider, keys, subscription, connections] = await Promise.all([
+    const [settings, configuration, members, invitations, provider, keys, subscription, connections, subscriptionPayments, plans] = await Promise.all([
       core.getSettings(db, actor),
       core.getConfiguration(db, actor),
       core.listMembers(db, actor),
@@ -58,9 +59,12 @@ export const getSettingsPage = createServerFn({ method: 'GET' }).handler(() =>
       core.can(actor.role, 'apikeys.manage') ? core.listApiKeys(db, actor) : Promise.resolve([]),
       core.getSubscription(db, actor),
       core.listMcpConnections(db, actor),
+      core.listSubscriptionPayments(db, actor),
+      core.listPlans(db),
     ]);
     return {
-      role: actor.role, userId: actor.userId, settings, configuration, members, invitations, provider, keys, subscription, connections,
+      role: actor.role, userId: actor.userId, settings, configuration, members, invitations, provider, keys, subscription, connections, subscriptionPayments, plans,
+      platformPayment: platformGatewayCode(),
       baseUrl: env.APP_BASE_URL, orgId: actor.orgId, simulatorAvailable: env.PAYMENTS_SIMULATOR,
     };
   }),
@@ -187,3 +191,67 @@ export const grantMcpCompany = createServerFn({ method: 'POST' })
 export const revokeMcpConnection = createServerFn({ method: 'POST' })
   .validator((input: { clientId: string }) => input)
   .handler(({ data }) => act((actor) => core.revokeMcpConnection(runtime().db, actor, data.clientId)));
+
+// ---------------------------------------------------------------- subscription payment (spec 017)
+
+/** The platform's own payment account: Moneroo when configured, the simulator in test, else none. */
+function platformGatewayCode(): 'moneroo' | 'simulator' | null {
+  const { env } = runtime();
+  if (env.PLATFORM_MONEROO_SECRET_KEY) return 'moneroo';
+  return env.PAYMENTS_SIMULATOR ? 'simulator' : null;
+}
+
+export const paySubscription = createServerFn({ method: 'POST' })
+  .validator((input: { planCode: string; months: number }) => ({ planCode: String(input.planCode), months: Number(input.months) }))
+  .handler(({ data }) =>
+    act(async (actor) => {
+      const { db, owner, env } = runtime();
+      const code = platformGatewayCode();
+      if (!code) throw new core.DomainError('payment_unavailable', 409);
+      const payment = await core.startSubscriptionPayment(db, actor, { ...data, provider: code });
+      const viewer = await loadViewer();
+      const gateway =
+        code === 'moneroo'
+          ? monerooGateway(env.PLATFORM_MONEROO_SECRET_KEY, env.PLATFORM_MONEROO_WEBHOOK_SECRET)
+          : { ...simulatorGateway(env.APP_BASE_URL), initiate: async () => ({ providerRef: `sim_${payment.id}`, checkoutUrl: `${env.APP_BASE_URL}/pay/subscription/${payment.id}` }) };
+      const checkout = await gateway.initiate({
+        amountMinor: payment.amountMinor,
+        currencyCode: payment.currencyCode,
+        reference: payment.id,
+        description: `Struo ${payment.planName} — ${data.months}`,
+        returnUrl: `${env.APP_BASE_URL}/app/settings`,
+        customer: { email: viewer?.email ?? 'client@example.invalid', name: viewer?.name ?? 'Client' },
+        metadata: { subscription_payment_id: payment.id },
+      });
+      await core.attachSubscriptionCheckout(owner, payment.id, checkout.providerRef, checkout.checkoutUrl);
+      return { checkoutUrl: checkout.checkoutUrl };
+    }),
+  );
+
+export const getSubscriptionCheckout = createServerFn({ method: 'GET' })
+  .validator((input: { id: string }) => ({ id: String(input.id) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const { owner, env } = runtime();
+      if (!env.PAYMENTS_SIMULATOR) throw new core.DomainError('not_found', 404);
+      const payment = await core.findSubscriptionPayment(owner, { id: data.id });
+      if (!payment || payment.provider !== 'simulator') throw new core.DomainError('not_found', 404);
+      return payment;
+    }),
+  );
+
+export const settleSimulatedSubscription = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; outcome: string }) => ({
+    id: String(input.id), outcome: input.outcome === 'succeeded' ? ('succeeded' as const) : ('failed' as const),
+  }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const { owner, env } = runtime();
+      if (!env.PAYMENTS_SIMULATOR) throw new core.DomainError('not_found', 404);
+      const payment = await core.findSubscriptionPayment(owner, { id: data.id });
+      if (!payment || payment.provider !== 'simulator') throw new core.DomainError('not_found', 404);
+      return core.settleSubscriptionPayment(owner, {
+        id: data.id, status: data.outcome, amountMinor: payment.amountMinor, currencyCode: payment.currencyCode,
+      });
+    }),
+  );

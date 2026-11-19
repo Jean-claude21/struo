@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Badge, DateText, ErrorText, Field, formData, formatMoney, Tabs, useAction } from '@/components/ui.tsx';
 import {
   addConfigurationItem, createApiKey, getSettingsPage, inviteMember, removeConfigurationItem, removeMember, revokeApiKey,
-  revokeInvitation, revokeMcpConnection, setMemberRole, setPaymentProvider, updateSettings,
+  paySubscription, revokeInvitation, revokeMcpConnection, setMemberRole, setPaymentProvider, updateSettings,
 } from '@/features/settings/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
@@ -412,20 +412,99 @@ function IntegrationsTab({ data }: { data: Data }) {
 
 function SubscriptionTab({ data }: { data: Data }) {
   const { t, locale } = useI18n();
-  const { plan, users, projects, trialEndsAt } = data.subscription;
+  const { plan, users, projects, trialEndsAt, paidUntil, paymentDue } = data.subscription;
+  const { run, error, busy } = useAction();
+  const payable = data.plans.filter((candidate) => candidate.priceMinor > 0);
+  const [planCode, setPlanCode] = useState(payable.find((candidate) => candidate.code === plan.code)?.code ?? payable[0]?.code ?? '');
+  const [months, setMonths] = useState(1);
+  const chosen = payable.find((candidate) => candidate.code === planCode);
+  const manage = data.role === 'owner' || data.role === 'admin';
+  const date = (value: string) => new Intl.DateTimeFormat(locale).format(new Date(value));
   return (
-    <section className="card stack">
-      <h2>
-        {t('settings.plan')} : <span className="accent">{plan.name}</span>
-      </h2>
-      <p>{plan.priceMinor > 0 ? `${formatMoney(locale, plan.priceMinor, plan.currencyCode)} ${t('landing.perMonth')}` : null}</p>
-      <p>{t('settings.usage', { users, projects })}</p>
-      <p className="muted">
-        {plan.maxUsers ? t('landing.users', { n: plan.maxUsers }) : t('landing.usersUnlimited')} ·{' '}
-        {plan.maxProjects ? t('landing.projects', { n: plan.maxProjects }) : t('landing.projectsUnlimited')}
-      </p>
-      {plan.code === 'trial' ? <p>{t('dashboard.trialEnds', { date: new Intl.DateTimeFormat(locale).format(new Date(trialEndsAt)) })}</p> : null}
-      <p className="notice info">{t('settings.changePlan')}</p>
-    </section>
+    <div className="stack">
+      <section className="card stack">
+        <h2>
+          {t('settings.plan')} : <span className="accent">{plan.name}</span>
+        </h2>
+        <p>{t('settings.usage', { users, projects })}</p>
+        <p className="muted">
+          {plan.maxUsers ? t('landing.users', { n: plan.maxUsers }) : t('landing.usersUnlimited')} ·{' '}
+          {plan.maxProjects ? t('landing.projects', { n: plan.maxProjects }) : t('landing.projectsUnlimited')}
+        </p>
+        {plan.code === 'trial' ? <p>{t('dashboard.trialEnds', { date: date(trialEndsAt) })}</p> : null}
+        {paidUntil ? <p>{t('settings.paidUntil', { date: date(paidUntil) })}</p> : null}
+        {paymentDue ? <p className="error">{t('settings.paymentDue')}</p> : null}
+      </section>
+      {manage && data.platformPayment && payable.length ? (
+        <section className="card stack">
+          <h2>{t('settings.payPlan')}</h2>
+          <div className="form-grid">
+            <Field label={t('settings.plan')}>
+              <select value={planCode} onChange={(event) => setPlanCode(event.target.value)}>
+                {payable.map((candidate) => (
+                  <option key={candidate.code} value={candidate.code}>
+                    {candidate.name} — {formatMoney(locale, candidate.priceMinor, candidate.currencyCode)} {t('landing.perMonth')}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t('settings.months')}>
+              <select value={months} onChange={(event) => setMonths(Number(event.target.value))}>
+                {[1, 3, 6, 12].map((value) => (
+                  <option key={value} value={value}>
+                    {t('settings.monthsCount', { n: value })}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          {chosen ? (
+            <p>
+              {t('app.total')} : <strong>{formatMoney(locale, chosen.priceMinor * months, chosen.currencyCode)}</strong>
+              {data.platformPayment === 'simulator' ? <span className="muted small"> · {t('settings.simulatorNote')}</span> : null}
+            </p>
+          ) : null}
+          <ErrorText error={error} />
+          <button
+            type="button"
+            className="btn"
+            disabled={busy || !chosen}
+            onClick={async () => {
+              const result = await run(() => paySubscription({ data: { planCode, months } }), { reload: false });
+              if (result) window.location.href = result.checkoutUrl;
+            }}
+          >
+            {t('settings.payNow')}
+          </button>
+        </section>
+      ) : (
+        <p className="notice info">{t('settings.changePlan')}</p>
+      )}
+      {data.subscriptionPayments.length ? (
+        <section className="card table-wrap">
+          <h2>{t('settings.paymentHistory')}</h2>
+          <table>
+            <tbody>
+              {data.subscriptionPayments.map((payment) => (
+                <tr key={payment.id}>
+                  <td>
+                    <DateText value={payment.createdAt} />
+                  </td>
+                  <td>
+                    {payment.planName} · {t('settings.monthsCount', { n: payment.months })}
+                  </td>
+                  <td className="right">{formatMoney(locale, payment.amountMinor, payment.currencyCode)}</td>
+                  <td>
+                    <Badge tone={payment.status === 'succeeded' ? 'ok' : payment.status === 'pending' ? 'warn' : 'bad'}>
+                      {t(`settings.paymentStatus.${payment.status as 'pending'}`)}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+    </div>
   );
 }

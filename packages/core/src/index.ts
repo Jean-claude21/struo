@@ -4,6 +4,7 @@ export * from './access.ts';
 export * from './migrate.ts';
 export * from './orgs.ts';
 export * from './saas.ts';
+export * from './subscriptions.ts';
 export * from './projects.ts';
 export * from './field.ts';
 export * from './finance.ts';
