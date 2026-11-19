@@ -123,7 +123,7 @@ console.log(`Neon: branch « ${branch.name} » ready`);
 const projects = await coolify('/projects');
 let project = projects.find((p) => p.name === 'Struo');
 if (!project) {
-  project = await coolify('/projects', { method: 'POST', body: JSON.stringify({ name: 'Struo', description: 'Struo — gestion de chantiers BTP' }) });
+  project = await coolify('/projects', { method: 'POST', body: JSON.stringify({ name: 'Struo', description: 'Struo - gestion de chantiers BTP' }) });
   console.log('Coolify: project « Struo » created');
 }
 const detail = await coolify(`/projects/${project.uuid}`);
@@ -145,7 +145,7 @@ if (!application) {
       server_uuid: server.uuid,
       environment_name: target.environment,
       name: target.app,
-      description: `Struo — ${args.env}`,
+      description: `Struo - ${args.env}`,
       docker_registry_image_name: image,
       docker_registry_image_tag: target.tag,
       ports_exposes: '3000',
