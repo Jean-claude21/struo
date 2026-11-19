@@ -27,6 +27,7 @@ export type OutboxItem =
       lastError: string | null;
       payload: { id: string; projectId: string; phaseId: string | null; progressPct: number | null; note: string | null; latitude: number | null; longitude: number | null; takenAt: string };
       photos: OutboxPhoto[];
+      audio?: { blob: Blob; mediaType: string; seconds: number } | null;
     }
   | {
       id: string;
@@ -112,6 +113,7 @@ export function syncOutbox(): Promise<{ sent: number; failed: number }> {
               JSON.stringify(item.photos.map(({ id, takenAt, latitude, longitude, mediaType }) => ({ id, takenAt, latitude, longitude, mediaType }))),
             );
             for (const photo of item.photos) body.append(`photo:${photo.id}`, photo.blob, `${photo.id}.jpg`);
+            if (item.audio) body.append('audio', new Blob([item.audio.blob], { type: item.audio.mediaType }), 'note');
             response = await fetch('/api/field/reports', { method: 'POST', body, credentials: 'same-origin' });
           } else {
             response = await fetch('/api/field/incidents', {

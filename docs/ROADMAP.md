@@ -20,7 +20,7 @@ real external account · ⏳ next.
 | 012 | `012-saas` | Plans and limits, landing page with pricing, platform console | ✅ | Trial limit test; landing rendered with plans from the database. Prices are provisional |
 | 013 | `013-ai` | Reminder and formal notice drafting from real figures | 🟡 | Template path; OpenAI path needs `OPENAI_API_KEY` in the environment |
 | 014 | `014-whatsapp` | WhatsApp channel for reminders | 🟡 | Simulator path; real sending needs a WhatsApp Business account |
-| 015 | `015-voice` | Voice notes on field reports, transcribed at sync | ⏳ | |
+| 015 | `015-voice` | Voice notes on field reports, transcribed after sync | ✅ | Voice note test; transcription needs `OPENAI_API_KEY` (set in staging) |
 | 016 | `016-oauth-mcp` | OAuth for MCP clients (Claude.ai, ChatGPT) besides API keys | ⏳ | |
 | 017 | `017-subscription-payments` | Paying the subscription online (platform Moneroo account) | ⏳ | |
 | 018 | `018-exports` | Accounting export, full company export (zip) and erasure | ⏳ | |

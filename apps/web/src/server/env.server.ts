@@ -15,6 +15,7 @@ export interface Env {
   WHATSAPP_PHONE_NUMBER_ID: string;
   OPENAI_API_KEY: string;
   OPENAI_MODEL: string;
+  OPENAI_TRANSCRIBE_MODEL: string;
   JOBS_ENABLED: boolean;
   PAYMENTS_SIMULATOR: boolean;
 }
@@ -54,6 +55,7 @@ export function env(): Env {
     WHATSAPP_PHONE_NUMBER_ID: read('WHATSAPP_PHONE_NUMBER_ID'),
     OPENAI_API_KEY: read('OPENAI_API_KEY'),
     OPENAI_MODEL: read('OPENAI_MODEL', 'gpt-4o-mini'),
+    OPENAI_TRANSCRIBE_MODEL: read('OPENAI_TRANSCRIBE_MODEL', 'whisper-1'),
     JOBS_ENABLED: read('JOBS_ENABLED', 'true') !== 'false',
     // The payment simulator never runs in production unless explicitly allowed (demo instance).
     PAYMENTS_SIMULATOR: appEnv !== 'production' || read('PAYMENTS_SIMULATOR') === 'true',

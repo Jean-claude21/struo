@@ -6,7 +6,7 @@ import {
   portalValidateMilestone, portalView, receivablesAging, recordPayment, revokeApiKey, revokePortalLink, reviewReport,
   submitReport, financeSummary, operationsSummary, recentActivity, listProjects, listMilestones, gantt, listExpenses,
   marginByProject, complianceByProject, listReports, listIncidents, listPayments, listClients, getSettings, getSubscription,
-  getConfiguration, listMembers, fieldSnapshot, listApiKeys, listPortalLinks, listMessages, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
+  getConfiguration, listMembers, fieldSnapshot, listApiKeys, listPortalLinks, listMessages, reportAudioLocation, setReportTranscript, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
 } from '../src/index.ts';
 import { addMember, createTestCompany, setupDatabase, today, type TestDb } from './helpers.ts';
 
@@ -188,5 +188,26 @@ describe('every read of the dashboard and pages answers (smoke)', () => {
     expect(results.filter((r) => r.status === 'rejected').map((r) => String((r as PromiseRejectedResult).reason))).toEqual([]);
     const { id } = await createProject(db.app, owner, { name: 'Smoke' });
     await expect(Promise.all([listPortalLinks(db.app, owner, id), listMessages(db.app, owner, id), getProject(db.app, owner, id)])).resolves.toBeTruthy();
+  });
+});
+
+describe('voice notes (spec 015)', () => {
+  it('keeps a voice note with its report, then its transcript', async () => {
+    const { id: projectId } = await createProject(db.app, owner, { name: 'Chantier vocal', status: 'active' });
+    const id = randomUUID();
+    const result = await submitReport(db.app, owner, {
+      id, projectId, takenAt: new Date().toISOString(),
+      audio: { storageKey: `org/${owner.orgId}/audio/${id}`, mediaType: 'audio/webm', sizeBytes: 2048 },
+    });
+    expect(result).toMatchObject({ created: true, hasAudio: true });
+    expect(await reportAudioLocation(db.app, owner, id)).toEqual({ storageKey: `org/${owner.orgId}/audio/${id}`, mediaType: 'audio/webm' });
+    let [report] = await listReports(db.app, owner, { projectId });
+    expect(report).toMatchObject({ hasAudio: true, transcriptStatus: 'pending', transcript: null });
+    await setReportTranscript(db.app, { ...owner, door: 'job' }, id, { status: 'done', text: 'Coulage de la dalle terminé.' });
+    [report] = await listReports(db.app, owner, { projectId });
+    expect(report).toMatchObject({ transcriptStatus: 'done', transcript: 'Coulage de la dalle terminé.' });
+    // Another company cannot reach the note.
+    const other = await createTestCompany(db, 'Autre entreprise');
+    expect(await reportAudioLocation(db.app, other, id)).toBeNull();
   });
 });

@@ -49,13 +49,21 @@ const reportInput = z.object({
   longitude: z.number().min(-180).max(180).nullable().optional(),
   takenAt: z.string().datetime({ offset: true }),
   photos: z.array(photoInput).max(20).default([]),
+  audio: z
+    .object({
+      storageKey: z.string().min(1).max(300),
+      mediaType: z.string().regex(/^audio\/[a-z0-9.+-]+$/u),
+      sizeBytes: z.number().int().positive().max(25 * 1024 * 1024),
+    })
+    .nullable()
+    .optional(),
 });
 
 /**
  * Receives a report written on the device. Its id is the idempotency key: sending it again (the
  * network dropped after the server saved it) changes nothing and answers `created: false`.
  */
-export async function submitReport(db: Db, actor: Actor, input: unknown): Promise<{ id: string; created: boolean }> {
+export async function submitReport(db: Db, actor: Actor, input: unknown): Promise<{ id: string; created: boolean; hasAudio: boolean }> {
   ensure(actor, 'field.report');
   const data = parse(reportInput, input);
   if (data.progressPct != null && !data.phaseId) throw new DomainError('phase_required', 422);
@@ -63,10 +71,13 @@ export async function submitReport(db: Db, actor: Actor, input: unknown): Promis
     const project = await tx.query('select 1 from project where id = $1 and org_id = $2', [data.projectId, actor.orgId]);
     if (!project.rowCount) throw notFound();
     const inserted = await tx.query(
-      `insert into site_report (id, org_id, project_id, phase_id, author_id, progress_pct, note, latitude, longitude, taken_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) on conflict (id) do nothing`,
+      `insert into site_report (id, org_id, project_id, phase_id, author_id, progress_pct, note, latitude, longitude, taken_at,
+                                audio_key, audio_media_type, audio_size_bytes, transcript_status)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) on conflict (id) do nothing`,
       [data.id, actor.orgId, data.projectId, data.phaseId ?? null, actor.userId, data.progressPct ?? null,
-        data.note || null, data.latitude ?? null, data.longitude ?? null, data.takenAt],
+        data.note || null, data.latitude ?? null, data.longitude ?? null, data.takenAt,
+        data.audio?.storageKey ?? null, data.audio?.mediaType ?? null, data.audio?.sizeBytes ?? null,
+        data.audio ? 'pending' : 'none'],
     );
     for (const photo of data.photos) {
       await tx.query(
@@ -77,8 +88,8 @@ export async function submitReport(db: Db, actor: Actor, input: unknown): Promis
       );
     }
     const created = inserted.rowCount === 1;
-    if (created) await journal(tx, actor, 'report.submit', data.id, null, { ...data, photos: data.photos.length });
-    return { id: data.id, created };
+    if (created) await journal(tx, actor, 'report.submit', data.id, null, { ...data, photos: data.photos.length, audio: Boolean(data.audio) });
+    return { id: data.id, created, hasAudio: created && Boolean(data.audio) };
   });
 }
 
@@ -120,6 +131,9 @@ export interface ReportRow {
   takenAt: string;
   status: 'submitted' | 'validated' | 'rejected';
   reviewNote: string | null;
+  hasAudio: boolean;
+  transcript: string | null;
+  transcriptStatus: 'none' | 'pending' | 'done' | 'failed';
   photos: { id: string; takenAt: string }[];
 }
 
@@ -132,7 +146,8 @@ export async function listReports(
     const { rows } = await tx.query<ReportRow>(
       `select r.id, r.project_id as "projectId", p.name as "projectName", ph.name as "phaseName", u.name as "authorName",
               r.progress_pct as "progressPct", r.note, r.latitude, r.longitude, r.taken_at as "takenAt", r.status,
-              r.review_note as "reviewNote",
+              r.review_note as "reviewNote", r.audio_key is not null as "hasAudio", r.transcript,
+              r.transcript_status as "transcriptStatus",
               coalesce((select json_agg(json_build_object('id', f.id, 'takenAt', f.taken_at) order by f.taken_at)
                           from report_photo f where f.report_id = r.id), '[]') as photos
          from site_report r join project p on p.id = r.project_id
@@ -217,5 +232,33 @@ export async function photoLocation(db: Db, actor: Actor, photoId: string) {
       [photoId, actor.orgId],
     );
     return rows[0] ?? null;
+  });
+}
+
+/** Where a report's voice note is stored, if the actor's company owns it. */
+export async function reportAudioLocation(db: Db, actor: Actor, reportId: string) {
+  return asActor(db, actor, async (tx) => {
+    const { rows } = await tx.query<{ storageKey: string; mediaType: string }>(
+      `select audio_key as "storageKey", audio_media_type as "mediaType" from site_report
+        where id = $1 and org_id = $2 and audio_key is not null`,
+      [reportId, actor.orgId],
+    );
+    return rows[0] ?? null;
+  });
+}
+
+/** Records the transcription of a voice note (done by the job, as the report's author). */
+export async function setReportTranscript(
+  db: Db,
+  actor: Pick<Actor, 'userId' | 'orgId' | 'door'>,
+  reportId: string,
+  outcome: { status: 'done' | 'failed'; text?: string },
+): Promise<void> {
+  await asActor(db, actor as Actor, async (tx) => {
+    await tx.query(
+      `update site_report set transcript = $3, transcript_status = $4 where id = $1 and org_id = $2`,
+      [reportId, actor.orgId, outcome.text?.slice(0, 20000) ?? null, outcome.status],
+    );
+    await journal(tx, actor, 'report.transcript', reportId, null, { status: outcome.status });
   });
 }
