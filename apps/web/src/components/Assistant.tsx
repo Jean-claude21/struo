@@ -18,7 +18,7 @@ export function AssistantPanel({ initial }: { initial?: string }) {
     setBusy(true); setQuestion('');
     try {
       const { answer } = await askAssistant({ data: { question: clean } });
-      setHistory((current) => [...current.slice(-4), { q: clean, a: answer }]);
+      setHistory((current) => [...current.slice(-4), { q: clean, a: answer.replace(/\*\*(.+?)\*\*/gu, '$1').replace(/^#+\s*/gmu, '') }]);
     } catch (caught) {
       setHistory((current) => [...current.slice(-4), { q: clean, a: errorText(caught), error: true }]);
     } finally { setBusy(false); }
