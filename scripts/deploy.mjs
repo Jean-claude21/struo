@@ -225,6 +225,10 @@ const variables = {
   ...((admin.RESEND_API_KEY ?? own.RESEND_API_KEY) ? { RESEND_API_KEY: admin.RESEND_API_KEY ?? own.RESEND_API_KEY } : {}),
   ...(own.MAIL_FROM ? { MAIL_FROM: own.MAIL_FROM } : {}),
   ...(admin.OPENAI_API_KEY ? { OPENAI_API_KEY: admin.OPENAI_API_KEY } : {}),
+  // Struo Intelligence (spec 034): the assistant's model, and Sign in with ChatGPT once OpenAI issues the client.
+  ...(own.OPENAI_AGENT_MODEL ? { OPENAI_AGENT_MODEL: own.OPENAI_AGENT_MODEL } : {}),
+  ...(own.OPENAI_SIWC_CLIENT_ID ? { OPENAI_SIWC_CLIENT_ID: own.OPENAI_SIWC_CLIENT_ID } : {}),
+  ...(own.OPENAI_SIWC_CLIENT_SECRET ? { OPENAI_SIWC_CLIENT_SECRET: own.OPENAI_SIWC_CLIENT_SECRET } : {}),
 };
 await coolify(`/applications/${application.uuid}/envs/bulk`, {
   method: 'PATCH',

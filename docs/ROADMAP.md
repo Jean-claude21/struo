@@ -38,6 +38,7 @@ real external account · ⏳ next.
 | 031 | `031-dependencies` | Real milestone dependencies (across sites, with gap, cascade, undo, loops refused) and dated phases | ✅ | `dependencies.test.ts` |
 | 032 | `032-pro-views` | Every behaviour of the reference views: menus, inline edit, quick add, layers, folding Gantt, shortcuts, file drop | ✅ | Walked in the browser as owner, engineer, accountant, site lead, client |
 | 033 | `033-demo-case` | Realistic demo company with photos, and the fixes found by walking every screen | ✅ | Local and staging seed; field cache privacy fix |
+| 034 | `034-intelligence` | Struo Intelligence beside every page (live turns, capabilities with autonomy levels, drafts to validate), one capability registry generating the MCP (49 tools) and its documentation, AI connections: company key with budget, personal key, Sign in with ChatGPT | ✅ | `ai.test.ts`, `registry.test.ts`; live turns and MCP checked |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

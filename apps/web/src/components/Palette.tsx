@@ -6,6 +6,7 @@ import {
   Building2, CalendarRange, FileText, FolderKanban, HardHat, Home, Moon, Plus, Receipt, Search, Settings, Users, Wallet, type LucideIcon,
 } from 'lucide-react';
 import { searchEverything } from '@/features/shell/server.ts';
+import { useAssistant } from './Intelligence.tsx';
 import { useI18n } from '@/i18n/index.tsx';
 import { applyTheme, effectiveDark, readTheme } from '@/lib/theme.ts';
 import { StatusChip } from './kit.tsx';
@@ -13,6 +14,7 @@ import { StatusChip } from './kit.tsx';
 type Item = { id: string; group: string; icon: LucideIcon; label: string; detail?: ReactNode; run: () => void };
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const assistant = useAssistant();
   const { t } = useI18n();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
@@ -65,7 +67,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       : hit.kind === 'invoice' ? go('/app/finance', { invoice: hit.id })
       : go('/app/documents', { doc: hit.id }),
   }));
-  const askItem: Item[] = q.length >= 3 ? [{ id: 'ask', group: t('shell.actions'), icon: Search, label: t('shell.askAssistant', { q: query.trim() }), run: go('/app', { ask: query.trim() }) }] : [];
+  const askItem: Item[] = q.length >= 3 ? [{ id: 'ask', group: t('shell.actions'), icon: Search, label: t('shell.askAssistant', { q: query.trim() }), run: () => { onClose(); assistant.open(query.trim()); } }] : [];
   const items = [...found, ...commands.filter((command) => !q || command.label.toLowerCase().includes(q)), ...askItem];
 
   useEffect(() => { setHighlight(0); }, [query, hits.length]);

@@ -1,11 +1,13 @@
+import { can, type Permission } from '@struo/core/permissions';
 import { useEffect, useRef, useState } from 'react';
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   Building2, CalendarRange, ChevronsUpDown, FileText, FolderKanban, HardHat, Home, LogOut, Menu, Monitor, Moon, Palette, Plus,
-  Keyboard, Receipt, Search, Settings, Shield, Sun, Users, Wallet, WalletCards, Contact, type LucideIcon,
+  Keyboard, Sparkles, Receipt, Search, Settings, Shield, Sun, Users, Wallet, WalletCards, Contact, type LucideIcon,
 } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { CommandPalette } from '@/components/Palette.tsx';
+import { AssistantButton, IntelligenceProvider } from '@/components/Intelligence.tsx';
 import { Avatar, MenuItem, Modal, Popover } from '@/components/kit.tsx';
 import { authClient } from '@/features/auth/client.ts';
 import { clearSnapshot } from '@/features/field/store.ts';
@@ -40,26 +42,27 @@ function OfficeError({ error }: { error: unknown }) {
   );
 }
 
-type NavItem = { to: string; key: MessageKey; icon: LucideIcon; exact?: boolean };
+type NavItem = { to: string; key: MessageKey; icon: LucideIcon; exact?: boolean; permission?: Permission };
 const WORK: NavItem[] = [
   { to: '/app', key: 'shell.today', icon: Home, exact: true },
   { to: '/app/projects', key: 'shell.sites', icon: FolderKanban },
   { to: '/app/planning', key: 'shell.planning', icon: CalendarRange },
   { to: '/app/field', key: 'shell.field', icon: HardHat },
-  { to: '/app/finance', key: 'shell.finance', icon: Wallet },
+  { to: '/app/finance', key: 'shell.finance', icon: Wallet, permission: 'finance.read' },
   { to: '/app/expenses', key: 'shell.expenses', icon: WalletCards },
   { to: '/app/documents', key: 'shell.documents', icon: FileText },
 ];
 const COMPANY: NavItem[] = [
   { to: '/app/clients', key: 'shell.clients', icon: Contact },
   { to: '/app/team', key: 'shell.team', icon: Users },
+  { to: '/app/intelligence', key: 'ai.navLabel', icon: Sparkles },
   { to: '/app/settings', key: 'shell.settings', icon: Settings },
 ];
 const MOBILE: NavItem[] = [
   { to: '/app', key: 'shell.today', icon: Home, exact: true },
   { to: '/app/projects', key: 'shell.sites', icon: FolderKanban },
   { to: '/app/planning', key: 'shell.planning', icon: CalendarRange },
-  { to: '/app/finance', key: 'shell.finance', icon: Wallet },
+  { to: '/app/finance', key: 'shell.finance', icon: Wallet, permission: 'finance.read' },
   { to: '/app/documents', key: 'shell.documents', icon: FileText },
 ];
 
@@ -83,7 +86,7 @@ const CREATE_ON: Record<string, string> = {
   '/app/team': '/app/team?invite=1', '/app/clients': '/app/clients?new=1', '/app/planning': '/app/planning?new=1', '/app/documents': '/app/documents?new=1',
 };
 const SHORTCUTS: [string[], MessageKey][] = [
-  [['Ctrl', 'K'], 'shell.kPalette'], [['/'], 'shell.kSearch'], [['?'], 'shell.kHelp'], [['N'], 'shell.kNew'],
+  [['Ctrl', 'K'], 'shell.kPalette'], [['Ctrl', 'J'], 'ai.open'], [['/'], 'shell.kSearch'], [['?'], 'shell.kHelp'], [['N'], 'shell.kNew'],
   [['G', 'A'], 'shell.today'], [['G', 'C'], 'shell.sites'], [['G', 'P'], 'shell.planning'], [['G', 'T'], 'shell.field'],
   [['G', 'F'], 'shell.finance'], [['G', 'E'], 'shell.expenses'], [['G', 'D'], 'shell.documents'], [['G', 'L'], 'shell.clients'],
   [['G', 'Q'], 'shell.team'], [['G', 'S'], 'shell.settings'], [['Échap'], 'shell.kEscape'],
@@ -130,8 +133,11 @@ function OfficeLayout() {
   const changeTheme = (next: Theme) => { applyTheme(next); setTheme(next); };
   const signOut = async () => { await clearSnapshot().catch(() => undefined); await authClient.signOut(); window.location.href = '/'; };
   const role = t(`roles.${viewer.company.role}` as MessageKey);
+  // A role only sees the pages it may open.
+  const allowed = (item: NavItem) => !item.permission || can(viewer.company.role, item.permission);
 
   return (
+    <IntelligenceProvider>
     <div className="layout">
       {sideOpen ? <button type="button" className="scrim only-m" aria-label={t('ui.close')} onClick={() => setSideOpen(false)} /> : null}
       <nav className={`sidebar ${sideOpen ? 'open' : ''}`} aria-label="Struo">
@@ -163,9 +169,9 @@ function OfficeLayout() {
             </>
           )}
         </Popover>
-        {WORK.map((item) => <NavLink key={item.to} item={item} />)}
+        {WORK.filter(allowed).map((item) => <NavLink key={item.to} item={item} />)}
         <div className="side-section">{t('shell.company')}</div>
-        {COMPANY.map((item) => <NavLink key={item.to} item={item} />)}
+        {COMPANY.filter(allowed).map((item) => <NavLink key={item.to} item={item} />)}
         <div className="side-foot">
           <a href="/field" className="btn secondary small"><HardHat size={15} />{t('shell.openField')}</a>
           {viewer.platformAdmin ? <NavLink item={{ to: '/console', key: 'shell.console', icon: Shield }} /> : null}
@@ -182,6 +188,7 @@ function OfficeLayout() {
             <Search size={14} /><span className="label grow" style={{ textAlign: 'left' }}>{t('ui.searchHint')}</span><span className="kbd hide-m">Ctrl K</span>
           </button>
           <span className="sp" />
+          <AssistantButton />
           <Popover
             align="end"
             trigger={(props) => <button type="button" className="btn small" {...props}><Plus size={15} /><span className="hide-m">{t('shell.create')}</span></button>}
@@ -231,7 +238,7 @@ function OfficeLayout() {
         </main>
       </div>
       <nav className="mobile-nav" aria-label={t('ui.menu')}>
-        {MOBILE.map((item) => (
+        {MOBILE.filter(allowed).map((item) => (
           <Link key={item.to} to={item.to} activeProps={{ className: 'active' }} activeOptions={{ exact: item.exact ?? false }}>
             <item.icon size={20} />{t(item.key)}
           </Link>
@@ -246,5 +253,6 @@ function OfficeLayout() {
         </div>
       </Modal>
     </div>
+    </IntelligenceProvider>
   );
 }

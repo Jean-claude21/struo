@@ -46,20 +46,6 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(() =>
   }),
 );
 
-/** The manager's assistant (spec 029): a question answered from the company's facts only. */
-export const askAssistant = createServerFn({ method: 'POST' })
-  .validator((input: { question: string }) => ({ question: String(input?.question ?? '').trim().slice(0, 500) }))
-  .handler(({ data }) =>
-    act(async (actor) => {
-      const { db, answerer } = runtime();
-      if (!answerer.configured) throw new core.DomainError('assistant_unavailable', 422);
-      if (data.question.length < 3) throw new core.DomainError('invalid_input', 422, { field: 'question', detail: '' });
-      const [facts, settings] = await Promise.all([core.assistantFacts(db, actor), core.getSettings(db, actor)]);
-      const answer = await answerer.answer({ locale: settings.locale, question: data.question, facts });
-      return { answer };
-    }),
-  );
-
 // ---------------------------------------------------------------- projects and clients
 
 export const getProjects = createServerFn({ method: 'GET' })

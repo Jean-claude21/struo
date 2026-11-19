@@ -1,8 +1,10 @@
 // French catalog — the reference: every key here must exist in en.ts (checked by the compiler and
 // by i18n.test.ts). Placeholders: {name}.
 import { uxFr } from './ux.fr.ts';
+import { aiFr } from './ai.fr.ts';
 export const fr = {
   ...uxFr,
+  ...aiFr,
   app: {
     name: 'Struo',
     tagline: 'Pilotez tous vos chantiers, même sans réseau.',
@@ -65,6 +67,13 @@ export const fr = {
     accountant: 'Comptable',
   },
   errors: {
+    ai_personal_off: "L’entreprise n’autorise pas les connexions IA personnelles.",
+    ai_connection_required: "L’entreprise demande que chacun utilise sa propre connexion IA : connectez-en une dans Intelligence & MCP.",
+    ai_budget_spent: "Le budget IA de l’entreprise est épuisé pour ce mois : utilisez votre propre connexion ou demandez une rallonge.",
+    ai_reconnect: "Votre connexion IA a expiré : reconnectez-la dans Intelligence & MCP.",
+    ai_key_invalid: "Cette clé n’est pas acceptée par OpenAI.",
+    ai_rate_limited: "Le modèle est saturé ou votre quota est atteint : réessayez dans un instant.",
+    assistant_failed: "L’assistant n’a pas pu répondre. Réessayez.",
     generic: 'Une erreur est survenue. Réessayez.',
     forbidden: 'Votre rôle ne permet pas cette action.',
     not_found: 'Introuvable.',

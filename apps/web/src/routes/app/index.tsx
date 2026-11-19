@@ -6,7 +6,7 @@ import {
   Camera, CloudRain, FileText, FolderKanban, HardHat, Receipt, Sun, TriangleAlert, Users, Wallet, ClipboardCheck, CalendarClock,
 } from 'lucide-react';
 import { AlertList, alertsFor } from '@/components/AlertList.tsx';
-import { AssistantPanel } from '@/components/Assistant.tsx';
+import { AskCard } from '@/components/Intelligence.tsx';
 import { AreaChart, Legend } from '@/components/charts.tsx';
 import { EmptyState, KpiTile, Panel, Progress, StatusChip, useRelative, type Shape } from '@/components/kit.tsx';
 import { DateText, formatMoney, Money } from '@/components/ui.tsx';
@@ -182,7 +182,7 @@ function Manager({ data }: { data: Data }) {
         <ActionCards data={data} />
         <Clients data={data} />
       </div>
-      <AssistantPanel initial={ask} />
+      <AskCard initial={ask} />
       <div className="grid-main">
         {cash.length ? (
           <Panel title={t('today.cashTitle')} sub={t('today.cashSub', { amount: money(collected.at(-1) ?? 0) })}>
