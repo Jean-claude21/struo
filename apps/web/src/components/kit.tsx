@@ -412,19 +412,21 @@ export const menuAt = (event: React.MouseEvent): MenuAt => {
  * inside the window, closes on Escape, an outside click, a scroll or a resize, and is keyboard-driven.
  */
 export function ContextMenu({ at, onClose, children, width }: { at: MenuAt; onClose: () => void; children: ReactNode; width?: number }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
+  // The menu mounts through a portal one render after `at` is set: position it once it exists.
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<CSSProperties>({ visibility: 'hidden' });
   useEscape(onClose, Boolean(at));
   useLayoutEffect(() => {
-    if (!at || !ref.current) return;
-    const box = ref.current.getBoundingClientRect();
+    if (!at || !node) { setPosition({ visibility: 'hidden' }); return; }
+    const box = node.getBoundingClientRect();
     setPosition({
       top: Math.max(8, Math.min(at.y, window.innerHeight - box.height - 8)),
       left: Math.max(8, Math.min(at.x, window.innerWidth - box.width - 8)),
       width,
     });
-    ref.current.querySelector<HTMLElement>('.mi, input, select')?.focus();
-  }, [at, width]);
+    node.querySelector<HTMLElement>('.mi, input, select')?.focus();
+  }, [at, width, node]);
   useEffect(() => {
     if (!at) return;
     const onDown = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) onClose(); };
@@ -437,7 +439,7 @@ export function ContextMenu({ at, onClose, children, width }: { at: MenuAt; onCl
   if (!at) return null;
   return (
     <Portal>
-      <div ref={ref} className="pop" role="menu" style={position} onKeyDown={(event) => menuKeys(ref.current, event)} onContextMenu={(event) => event.preventDefault()}>
+      <div ref={(element) => { ref.current = element; setNode(element); }} className="pop" role="menu" style={position} onKeyDown={(event) => menuKeys(ref.current, event)} onContextMenu={(event) => event.preventDefault()}>
         {children}
       </div>
     </Portal>
