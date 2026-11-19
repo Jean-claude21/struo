@@ -31,7 +31,8 @@ export interface Subscription {
 export async function getSubscription(db: Db, actor: Actor): Promise<Subscription> {
   return asActor(db, actor, async (tx) => {
     const { rows } = await tx.query(
-      `select ${PLAN_COLUMNS.replaceAll('code,', 'p.code,')}, s.trial_ends_at as "trialEndsAt",
+      `select p.code, p.name, p.price_minor as "priceMinor", p.currency_code as "currencyCode",
+              p.max_users as "maxUsers", p.max_projects as "maxProjects", p.features, s.trial_ends_at as "trialEndsAt",
               s.plan_code = 'trial' and s.trial_ends_at < now() as "trialExpired",
               (select count(*)::int from member where "organizationId" = s.org_id) as users,
               (select count(*)::int from project where org_id = s.org_id and archived_at is null) as projects

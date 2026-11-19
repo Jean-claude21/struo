@@ -227,15 +227,18 @@ export async function invoiceDocument(db: Db, actor: Actor, id: string) {
     );
     const row = rows[0];
     if (!row) throw notFound();
-    return row as Record<string, unknown> & {
+    return row as InvoiceDocument;
+  });
+}
+
+export interface InvoiceDocument {
+      id: string; project_id: string;
       number: string; kind: string; label: string | null; issued_on: string; due_on: string; currency_code: string;
       amount_minor: number; vat_bps: number; vat_minor: number; total_minor: number; retention_bps: number;
       retention_minor: number; deduction_minor: number; net_minor: number; paid_minor: number | null;
       balance_minor: number | null; project_code: string; project_name: string; location: string | null;
       client_name: string | null; client_address: string | null; client_email: string | null; client_phone: string | null;
-      company_name: string; status: string;
-    };
-  });
+      company_name: string; status: string; country_code: string;
 }
 
 /** The company's money at a glance (dashboard). */

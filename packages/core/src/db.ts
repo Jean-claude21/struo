@@ -25,8 +25,8 @@ export interface Actor {
   readonly door: Door;
 }
 
-export const ROLES = ['owner', 'admin', 'engineer', 'site_lead', 'accountant'] as const;
-export type Role = (typeof ROLES)[number];
+import type { Role } from './permissions.ts';
+export { ROLES, type Role } from './permissions.ts';
 
 /**
  * Runs `work` in one transaction as `userId`: row-level security then lets it reach only the
