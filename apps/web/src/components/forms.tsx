@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  addDocument, addExpense, addMilestone, createInvoice, draftReminder, recordPayment, reviewReport, sendReminder,
+  addDocument, addExpense, addMilestone, createDraftInvoice, draftReminder, recordPayment, reviewReport, sendReminder,
 } from '@/features/office/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 import { Badge, DateText, DialogButton, ErrorText, Field, FormButtons, formData, orNull, parseMoney, todayIso, useAction } from './ui.tsx';
@@ -29,9 +29,13 @@ const CATEGORIES = ['materials', 'labour', 'subcontracting', 'equipment', 'trans
 const DOC_STATUSES = ['missing', 'pending', 'valid', 'to_fix'] as const;
 const MILESTONE_CATEGORIES = ['admin', 'studies', 'technical', 'finishing', 'delivery'] as const;
 
-export function InvoiceDialog({ projects, projectId, currency, defaultOpen }: { projects?: ProjectOption[]; projectId?: string; currency: string; defaultOpen?: boolean }) {
+/**
+ * A new invoice (spec 035) starts as a draft: the site, its kind, and for a progress statement the
+ * lots prefilled from validated progress; the editor opens to finish it.
+ */
+export function InvoiceDialog({ projects, projectId, defaultOpen }: { projects?: ProjectOption[]; projectId?: string; currency?: string; defaultOpen?: boolean }) {
   const { t } = useI18n();
-  const { run, error, busy, setError } = useAction();
+  const { run, error, busy } = useAction();
   return (
     <DialogButton label={t('finance.newInvoice')} title={t('finance.newInvoice')} defaultOpen={defaultOpen}>
       {(close) => (
@@ -40,44 +44,21 @@ export function InvoiceDialog({ projects, projectId, currency, defaultOpen }: { 
           onSubmit={async (event) => {
             event.preventDefault();
             const v = formData(event.currentTarget);
-            const amountMinor = parseMoney(v.amount ?? '', currency);
-            const deductionMinor = v.deduction ? parseMoney(v.deduction, currency) : 0;
-            if (amountMinor === null || deductionMinor === null) return setError(t('errors.invalid_amount'));
-            const done = await run(() =>
-              createInvoice({ data: { projectId: v.projectId, kind: v.kind, label: orNull(v.label), amountMinor, deductionMinor, issuedOn: v.issuedOn, dueOn: v.dueOn } }),
-            );
-            if (done) close();
+            const done = await run(() => createDraftInvoice({ data: { projectId: v.projectId!, kind: v.kind!, fromProgress: v.fromProgress === 'on', label: v.label || undefined } }), { reload: false });
+            if (done) { close(); window.location.href = `/app/invoices/${(done as { id: string }).id}`; }
           }}
         >
           <ProjectSelect projects={projects} projectId={projectId} />
-          <div className="form-grid">
-            <Field label={t('finance.kind')}>
-              <select name="kind" defaultValue="progress">
-                {INVOICE_KINDS.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {t(`finance.kinds.${kind}`)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label={`${t('finance.amountHt')} (${currency})`}>
-              <input name="amount" inputMode="decimal" required />
-            </Field>
-            <Field label={`${t('finance.deduction')} (${currency})`} hint={t('app.optional')}>
-              <input name="deduction" inputMode="decimal" />
-            </Field>
-            <Field label={t('finance.issuedOn')}>
-              <input name="issuedOn" type="date" defaultValue={todayIso()} required />
-            </Field>
-            <Field label={t('finance.dueOn')}>
-              <input name="dueOn" type="date" defaultValue={todayIso(30)} required />
-            </Field>
-          </div>
-          <Field label={t('finance.label')} hint={t('app.optional')}>
-            <input name="label" maxLength={200} />
+          <Field label={t('finance.kind')}>
+            <select name="kind" defaultValue="progress">
+              {INVOICE_KINDS.map((kind) => <option key={kind} value={kind}>{t(`finance.kinds.${kind}`)}</option>)}
+            </select>
           </Field>
+          <label className="row tight small"><input type="checkbox" name="fromProgress" defaultChecked />{t('inv.fromProgress')}</label>
+          <Field label={t('finance.label')} hint={t('app.optional')}><input name="label" maxLength={200} /></Field>
+          <p className="muted small" style={{ margin: 0 }}>{t('inv.draftNote')}</p>
           <ErrorText error={error} />
-          <FormButtons onCancel={close} busy={busy} submitLabel={t('app.create')} />
+          <FormButtons onCancel={close} busy={busy} submitLabel={t('inv.startDraft')} />
         </form>
       )}
     </DialogButton>

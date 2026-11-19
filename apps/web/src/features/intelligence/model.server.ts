@@ -24,12 +24,15 @@ export interface ModelConnection {
 
 /** Estimated price per million tokens, in micro-dollars (input, output); a plan costs the company nothing. */
 const PRICES: Record<string, [number, number]> = {
+  // OpenAI standard tier, checked 2026-11-19 (developers.openai.com/api/docs/pricing).
+  'gpt-6-luna': [100_000, 500_000], 'gpt-5.6-luna': [200_000, 1_200_000], 'gpt-6.1-terra': [1_000_000, 5_000_000], 'gpt-6.2-sol': [2_000_000, 10_000_000],
+  'gpt-6.2-astra': [8_000_000, 40_000_000], 'gpt-5-nano': [50_000, 400_000],
   'gpt-4.1-mini': [400_000, 1_600_000], 'gpt-4.1': [2_000_000, 8_000_000], 'gpt-4o-mini': [150_000, 600_000], 'gpt-4o': [2_500_000, 10_000_000],
   'gpt-5-mini': [250_000, 2_000_000], 'gpt-5': [1_250_000, 10_000_000],
 };
 export const costMicroUsd = (connection: ModelConnection, inputTokens: number, outputTokens: number) => {
   if (connection.payer === 'plan') return 0;
-  const [input, output] = PRICES[connection.model] ?? [400_000, 1_600_000];
+  const [input, output] = PRICES[connection.model] ?? [100_000, 500_000];
   return Math.round((inputTokens * input + outputTokens * output) / 1_000_000);
 };
 
@@ -53,7 +56,7 @@ export async function connectionFor(rt: Runtime, actor: core.Actor): Promise<Mod
       refreshSealed: box.seal(fresh.refresh ?? box.open(mine.refreshSealed)), expiresAt: fresh.expiresAt });
     token = fresh.access;
   }
-  return { payer: 'plan', token, model: mine.model ?? 'gpt-5-mini', plan: true };
+  return { payer: 'plan', token, model: mine.model ?? 'gpt-6-luna', plan: true };
 }
 
 /** Tries a key (or a token) by listing its models: no token is spent. Returns the models offered. */
@@ -66,7 +69,7 @@ export async function tryOpenAi(token: string): Promise<string[] | null> {
 
 /** A model the assistant can use among those offered (a small fast one first). */
 export const pickModel = (models: string[], fallback: string) =>
-  ['gpt-5-mini', 'gpt-4.1-mini', 'gpt-4o-mini', 'gpt-5', 'gpt-4.1', 'gpt-4o'].find((model) => models.includes(model)) ?? (models.includes(fallback) ? fallback : models[0] ?? fallback);
+  ['gpt-6-luna', 'gpt-5.6-luna', 'gpt-5-mini', 'gpt-4.1-mini', 'gpt-4o-mini', 'gpt-6.2-sol', 'gpt-5', 'gpt-4.1', 'gpt-4o'].find((model) => models.includes(model)) ?? (models.includes(fallback) ? fallback : models[0] ?? fallback);
 
 // ---------------------------------------------------------------- Sign in with ChatGPT (OAuth + PKCE)
 

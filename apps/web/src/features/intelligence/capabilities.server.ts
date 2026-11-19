@@ -295,6 +295,36 @@ export const CAPABILITIES: Capability[] = [
     summary: async (context, input) => `${input.site} · ${input.kind} · ${fmt(context, input.amountMinor)} HT${input.deductionMinor ? ` − ${fmt(context, input.deductionMinor)}` : ''} · ${input.dueOn}${input.label ? ` · ${input.label}` : ''}`,
   }),
   define({
+    name: 'prepare_invoice', group: 'finance', permission: 'finance.write', autonomy: 2,
+    input: z.object({ site, kind: z.enum(core.INVOICE_KINDS), fromProgress: z.boolean().optional().describe('Prefill one progress line per lot from validated progress (default true for progress statements)'),
+      label: z.string().optional(),
+      items: z.array(z.object({ designation: z.string().min(1), unit: z.string().optional(), quantity: z.number().min(0), unitPriceMinor: z.number().int().min(0) })).optional()
+        .describe('Priced lines to add (quantity can have decimals)') }),
+    description: 'Creates an invoice DRAFT with detailed lines (progress lots from validated progress, and/or priced items). Nothing is issued: tell the person to open the draft (link returned), check the lines and press « Émettre » there, or ask you to issue it (issue_invoice).',
+    async run({ rt, actor, projectId }, input) {
+      const id = await projectId(input.site);
+      const { id: invoiceId } = await core.createDraftInvoice(rt.db, actor, { projectId: id, kind: input.kind, label: input.label ?? null, fromProgress: input.fromProgress ?? input.kind === 'progress' });
+      let edit = await core.getInvoiceForEdit(rt.db, actor, invoiceId);
+      if (input.items?.length) {
+        edit = await core.saveDraftInvoice(rt.db, actor, invoiceId, { lines: [
+          ...edit.lines.map(({ kind, section, designation, unit, quantityMilli, unitPriceMinor, phaseId, contractMinor, cumulativeBps, previousMinor }) => ({ kind, section, designation, unit, quantityMilli, unitPriceMinor, phaseId, contractMinor, cumulativeBps, previousMinor })),
+          ...input.items.map((item) => ({ kind: 'item' as const, designation: item.designation, unit: item.unit ?? null, quantityMilli: Math.round(item.quantity * 1000), unitPriceMinor: item.unitPriceMinor })),
+        ] });
+      }
+      return { draftId: invoiceId, editor: `/app/invoices/${invoiceId}`, lines: edit.lines.length, amountMinor: edit.amountMinor, netMinor: edit.netMinor, deductionMinor: edit.deductionMinor };
+    },
+    sources: (result) => [{ kind: 'invoice', label: 'Brouillon de facture', href: (result as { editor: string }).editor }],
+  }),
+  define({
+    name: 'issue_invoice', group: 'finance', permission: 'finance.write', autonomy: 4, input: z.object({ draftId: z.string().uuid() }),
+    description: 'Issues an invoice draft: it gets the next number of the company series and is frozen.',
+    run: ({ rt, actor }, input) => core.issueInvoice(rt.db, actor, input.draftId),
+    async summary({ rt, actor, locale }, input) {
+      const edit = await core.getInvoiceForEdit(rt.db, actor, input.draftId);
+      return `${edit.projectCode} · ${edit.kind} · ${edit.lines.length} ligne(s) · net ${new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'fr-FR').format(edit.netMinor)} ${edit.currencyCode}`;
+    },
+  }),
+  define({
     name: 'record_payment', group: 'finance', permission: 'finance.write', autonomy: 4,
     input: z.object({ site, invoiceId: z.string().uuid().optional(), amountMinor: money, method: z.enum(core.PAYMENT_METHODS), receivedOn: date.optional(), reference: z.string().optional() }),
     description: 'Records a payment received (mobile money, transfer, cheque, cash) on a site, against an invoice if given.',

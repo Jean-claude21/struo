@@ -146,6 +146,8 @@ export const aiEn: typeof aiFr = {
     planning: 'Planning', expenses: 'Expenses', portal: 'Client spaces', team: 'Team',
   },
   caps: {
+    issue_invoice: "Issue an invoice",
+    prepare_invoice: "Prepare a detailed invoice",
     context: 'Company context', dashboard: 'Dashboard', search: 'Search', recent_activity: 'Recent activity',
     list_sites: 'List sites', get_site: 'Site in full', create_site: 'Create a site', update_site: 'Change a site', set_phase: 'Set a phase',
     list_clients: 'List clients', create_client: 'Add a client', update_client: 'Change a client',
@@ -162,6 +164,8 @@ export const aiEn: typeof aiFr = {
     list_team: 'Team', invite_member: 'Invite a member',
   },
   capsd: {
+    issue_invoice: "Issues a draft: it gets the series number and is frozen. Needs your confirmation.",
+    prepare_invoice: "Creates an invoice draft with its lines (progress lots from validated progress, or items) to check and issue in the editor.",
     context: 'Call first: the company, your role, the date, the currency and what needs your attention.',
     dashboard: 'Today’s figures: to collect, overdue, due within 30 days, cash, current and expected margin, client risk, sites.',
     search: 'Searches sites, clients, invoices, documents and people by words.',
