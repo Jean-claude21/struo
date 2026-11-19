@@ -24,3 +24,4 @@ export * from './library.ts';
 export * from './insights.ts';
 export * from './ai.ts';
 export * from './invoicing.ts';
+export * from './platform.ts';

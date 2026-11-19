@@ -13,11 +13,15 @@ export function ensure(actor: Actor, permission: Permission): void {
  * user is not a member (or their role is unknown).
  */
 export async function resolveActor(db: Db, userId: string, orgId: string, door: Door): Promise<Actor | null> {
-  const role = await asUser(db, userId, async (tx) => {
-    const { rows } = await tx.query<{ role: string | null }>('select struo_role($1) as role', [orgId]);
-    return rows[0]?.role ?? null;
+  const found = await asUser(db, userId, async (tx) => {
+    const { rows } = await tx.query<{ role: string | null; suspended: string | null }>(
+      'select struo_role($1) as role, (select suspended_at from org_settings where org_id = $1) as suspended', [orgId]);
+    return rows[0] ?? null;
   });
-  return isRole(role) ? { userId, orgId, role, door } : null;
+  if (!found || !isRole(found.role)) return null;
+  // A company the platform suspended cannot be used until it is reactivated (spec 038).
+  if (found.suspended) throw new DomainError('company_suspended', 403);
+  return { userId, orgId, role: found.role, door };
 }
 
 /** Runs work as the actor, in their company. */

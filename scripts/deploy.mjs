@@ -229,6 +229,8 @@ const variables = {
   ...(own.OPENAI_AGENT_MODEL ? { OPENAI_AGENT_MODEL: own.OPENAI_AGENT_MODEL } : {}),
   ...(own.OPENAI_SIWC_CLIENT_ID ? { OPENAI_SIWC_CLIENT_ID: own.OPENAI_SIWC_CLIENT_ID } : {}),
   ...(own.OPENAI_SIWC_CLIENT_SECRET ? { OPENAI_SIWC_CLIENT_SECRET: own.OPENAI_SIWC_CLIENT_SECRET } : {}),
+  // Subscriptions sold as licences on Chariow (spec 038).
+  ...(own.CHARIOW_API_KEY ? { CHARIOW_API_KEY: own.CHARIOW_API_KEY } : {}),
 };
 await coolify(`/applications/${application.uuid}/envs/bulk`, {
   method: 'PATCH',
