@@ -248,19 +248,22 @@ export function Popover({ trigger, children, align = 'start', width }: {
   width?: number;
 }) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
+  // The menu mounts through a portal one render after the click: measure it once it exists
+  // (in development React runs effects twice, which hid this; in production the menu stayed invisible).
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<CSSProperties>({ visibility: 'hidden' });
   const close = useCallback(() => setAnchor(null), []);
   useEscape(close, Boolean(anchor));
   useLayoutEffect(() => {
-    if (!anchor || !ref.current) return;
-    const box = ref.current.getBoundingClientRect();
+    if (!anchor || !node) { setPosition({ visibility: 'hidden' }); return; }
+    const box = node.getBoundingClientRect();
     const top = anchor.bottom + 4 + box.height > window.innerHeight ? Math.max(8, anchor.top - 4 - box.height) : anchor.bottom + 4;
     let left = align === 'end' ? anchor.right - box.width : anchor.left;
     left = Math.max(8, Math.min(left, window.innerWidth - box.width - 8));
     setPosition({ top, left, width });
-    ref.current.querySelector<HTMLElement>('.mi, input')?.focus();
-  }, [anchor, align, width]);
+    node.querySelector<HTMLElement>('.mi, input')?.focus();
+  }, [anchor, align, width, node]);
   useEffect(() => {
     if (!anchor) return;
     const onDown = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) close(); };
@@ -288,7 +291,7 @@ export function Popover({ trigger, children, align = 'start', width }: {
       })}
       {anchor ? (
         <Portal>
-          <div ref={ref} className="pop" role="menu" style={position} onKeyDown={onKeyDown}>
+          <div ref={(element) => { ref.current = element; setNode(element); }} className="pop" role="menu" style={position} onKeyDown={onKeyDown}>
             {children(close)}
           </div>
         </Portal>
