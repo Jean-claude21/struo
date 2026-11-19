@@ -32,6 +32,9 @@ real external account · ⏳ next.
 | 025 | `025-field-journey` | Field app: day actions, checklists, 4-step report, problems, delivery notes read by OCR and signed, records signed | ✅ | `journeys.test.ts`; checklist received from a phone-size browser |
 | 026 | `026-statements` | Progress statement computed from validated progress | ✅ | `journeys.test.ts` |
 | 027 | `027-platform` | Platform console: revenue, trials ending, quiet companies | ✅ | Typecheck; shown to platform admins only |
+| 028 | `028-landing` | Offer-led landing page with generated photos | ✅ | Rendered desktop and phone; live on production |
+| 029 | `029-finalize` | Expenses and profitability, clients with risk, settings roles and journal, 3-step onboarding, manager assistant | ✅ | Staging: assistant answers from real figures; every office page 200 for engineer and accountant |
+| 030 | `030-release` | E-mail through Resend, OCR on staging, release to production | ✅ | Staging: invitation and access code delivered by Resend, delivery note read exactly; production smoke tests |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.
