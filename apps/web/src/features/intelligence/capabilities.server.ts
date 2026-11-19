@@ -90,6 +90,16 @@ export const CAPABILITIES: Capability[] = [
     },
   }),
   define({
+    name: 'indicators', group: 'company', permission: null, autonomy: 1,
+    input: z.object({ from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional() }),
+    description: 'The indicators of a period (default: last 30 days): money (invoiced before VAT, collected, spent, collection rate, DSO, payment delay, receivable, overdue, cash, runway, backlog, retentions, CPI — only for finance roles), planning (SPI, late milestones, on time), field (reports, review time, incidents, checklists, deliveries), compliance, per-site SPI/CPI, and 12 months of trend.',
+    run: ({ rt, actor }, input) => {
+      const to = input.to ?? new Date().toISOString().slice(0, 10);
+      const from = input.from ?? new Date(Date.parse(`${to}T12:00:00Z`) - 29 * 86_400_000).toISOString().slice(0, 10);
+      return core.companyKpis(rt.db, actor, { from, to });
+    },
+  }),
+  define({
     name: 'search', group: 'company', permission: null, autonomy: 1, input: z.object({ query: z.string().min(2) }),
     description: 'Searches sites, clients, invoices, documents and people by words.',
     run: ({ rt, actor }, input) => core.searchCompany(rt.db, actor, input.query),

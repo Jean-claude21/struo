@@ -222,6 +222,39 @@ export const createInvoice = createServerFn({ method: 'POST' })
   .validator(any)
   .handler(({ data }) => act((actor) => core.createInvoice(runtime().db, actor, data)));
 
+// ---------------------------------------------------------------- indicators and reports (spec 039)
+
+const periodOf = (input: { from?: string; to?: string }) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const valid = (value?: string) => (value && /^\d{4}-\d{2}-\d{2}$/u.test(value) ? value : undefined);
+  const to = valid(input.to) ?? today;
+  const from = valid(input.from) ?? new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
+  return from <= to ? { from, to } : { from: to, to: from };
+};
+
+export const getIndicators = createServerFn({ method: 'GET' })
+  .validator((input: { from?: string; to?: string } | undefined) => input ?? {})
+  .handler(({ data }) =>
+    act(async (actor) => {
+      const { db } = runtime();
+      const period = periodOf(data);
+      const [kpis, settings] = await Promise.all([core.companyKpis(db, actor, period), core.getSettings(db, actor)]);
+      return { kpis, currency: settings.currencyCode, role: actor.role };
+    }),
+  );
+
+export const getReport = createServerFn({ method: 'GET' })
+  .validator((input: { from?: string; to?: string } | undefined) => input ?? {})
+  .handler(({ data }) =>
+    act(async (actor) => {
+      const { db } = runtime();
+      const period = periodOf(data);
+      const [kpis, activity, settings, look] = await Promise.all([
+        core.companyKpis(db, actor, period), core.periodActivity(db, actor, period), core.getSettings(db, actor), core.getInvoiceSettings(db, actor)]);
+      return { kpis, activity, company: settings.name, currency: settings.currencyCode, orgId: actor.orgId, logoKey: look.logoKey, generatedAt: new Date().toISOString() };
+    }),
+  );
+
 // ---------------------------------------------------------------- invoice drafts (spec 035)
 
 export const createDraftInvoice = createServerFn({ method: 'POST' })

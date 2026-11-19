@@ -43,6 +43,7 @@ real external account · ⏳ next.
 | 036 | `036-invoice-look` | Invoice look with live preview: three layouts, colour, font, logo (position, size), titles per kind, blocks and columns to show, amount in words, signature, company and per-invoice fields | ✅ | `invoicing.test.ts`, `words.test.ts`; logo printed live |
 | 037 | `037-library-by-day` | Library « by day » view: files grouped per day with sites, authors and jump to a day | ✅ | Typecheck, filters shared with grid and list |
 | 038 | `038-platform-console` | Platform console complete (companies detail, suspend, trial and paid extensions, journal) and subscriptions paid with Chariow licences | ✅ | `platform.test.ts`; Chariow on once the key is set |
+| 039 | `039-indicators-reports` | Indicators (DSO, collection, runway, CPI, SPI, field, compliance) with definitions and trends, printable activity report, weekly and monthly e-mails; predecessors chosen when creating a milestone | ✅ | `kpis.test.ts`, `reports.test.ts` |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

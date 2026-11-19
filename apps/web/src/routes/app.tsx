@@ -2,7 +2,7 @@ import { can, type Permission } from '@struo/core/permissions';
 import { useEffect, useRef, useState } from 'react';
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
-  Building2, CalendarRange, ChevronsUpDown, FileText, FolderKanban, HardHat, Home, LogOut, Menu, Monitor, Moon, Palette, Plus,
+  BarChart3, Building2, CalendarRange, ChevronsUpDown, FileText, FolderKanban, HardHat, Home, LogOut, Menu, Monitor, Moon, Palette, Plus,
   Keyboard, Sparkles, Receipt, Search, Settings, Shield, Sun, Users, Wallet, WalletCards, Contact, type LucideIcon,
 } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
@@ -47,6 +47,7 @@ const WORK: NavItem[] = [
   { to: '/app', key: 'shell.today', icon: Home, exact: true },
   { to: '/app/projects', key: 'shell.sites', icon: FolderKanban },
   { to: '/app/planning', key: 'shell.planning', icon: CalendarRange },
+  { to: '/app/indicators', key: 'kpi.navLabel', icon: BarChart3 },
   { to: '/app/field', key: 'shell.field', icon: HardHat },
   { to: '/app/finance', key: 'shell.finance', icon: Wallet, permission: 'finance.read' },
   { to: '/app/expenses', key: 'shell.expenses', icon: WalletCards },
