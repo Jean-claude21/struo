@@ -46,9 +46,9 @@ export async function operationsSummary(db: Db, actor: Actor) {
          (select count(*)::int from milestone m where m.org_id = $1 and m.actual_on is not null) as "milestonesDone",
          (select coalesce(round(avg(ms.delay_days) filter (where ms.status = 'late'))::int, 0) from milestone_status ms
            where ms.org_id = $1) as "averageDelay",
-         (select case when count(*) filter (where required) = 0 then null
-                      else round(100.0 * count(*) filter (where required and status = 'valid')
-                                 / count(*) filter (where required))::int end
+         (select case when count(*) filter (where ds.required) = 0 then null
+                      else round(100.0 * count(*) filter (where ds.required and ds.status = 'valid')
+                                 / count(*) filter (where ds.required))::int end
             from document_status ds join project p on p.id = ds.project_id
            where ds.org_id = $1 and p.archived_at is null and p.status <> 'done') as "compliancePct",
          (select count(*)::int from site_report where org_id = $1 and taken_at > now() - interval '7 days') as "reportsWeek",

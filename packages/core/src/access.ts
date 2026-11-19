@@ -1,35 +1,12 @@
-import { ROLES, asUser, type Actor, type Db, type Door, type Role, type Tx } from './db.ts';
+import { asUser, type Actor, type Db, type Door, type Tx } from './db.ts';
+import { can, isRole, type Permission } from './permissions.ts';
 import { DomainError, forbidden } from './errors.ts';
 
-/** What each role may do. Reading a company's data is open to every member; writing is not. */
-export const PERMISSIONS = {
-  'org.manage': ['owner', 'admin'],
-  'members.manage': ['owner', 'admin'],
-  'projects.write': ['owner', 'admin', 'engineer'],
-  'clients.write': ['owner', 'admin', 'engineer', 'accountant'],
-  'field.report': ['owner', 'admin', 'engineer', 'site_lead'],
-  'field.review': ['owner', 'admin', 'engineer'],
-  'finance.read': ['owner', 'admin', 'accountant', 'engineer'],
-  'finance.write': ['owner', 'admin', 'accountant'],
-  'documents.write': ['owner', 'admin', 'engineer', 'accountant'],
-  'expenses.write': ['owner', 'admin', 'accountant', 'engineer'],
-  'planning.write': ['owner', 'admin', 'engineer'],
-  'portal.manage': ['owner', 'admin', 'engineer'],
-  'messages.write': ['owner', 'admin', 'engineer', 'accountant'],
-  'apikeys.manage': ['owner', 'admin'],
-} as const satisfies Record<string, readonly Role[]>;
-
-export type Permission = keyof typeof PERMISSIONS;
-
-export const can = (role: Role, permission: Permission) =>
-  (PERMISSIONS[permission] as readonly Role[]).includes(role);
+export { PERMISSIONS, can, isRole, type Permission } from './permissions.ts';
 
 export function ensure(actor: Actor, permission: Permission): void {
   if (!can(actor.role, permission)) throw forbidden();
 }
-
-export const isRole = (value: unknown): value is Role =>
-  typeof value === 'string' && (ROLES as readonly string[]).includes(value);
 
 /**
  * The acting member of `orgId`, read under the user's own row-level security. `null` when the

@@ -4,7 +4,9 @@ import {
   actorFromApiKey, addDocument, addExpense, addMilestone, createApiKey, createInvoice, createPortalLink, createProject,
   getProject, importProjectsCsv, listAlerts, listDocuments, listInvoices, marginBySegment, portalPostMessage,
   portalValidateMilestone, portalView, receivablesAging, recordPayment, revokeApiKey, revokePortalLink, reviewReport,
-  submitReport, financeSummary, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
+  submitReport, financeSummary, operationsSummary, recentActivity, listProjects, listMilestones, gantt, listExpenses,
+  marginByProject, complianceByProject, listReports, listIncidents, listPayments, listClients, getSettings, getSubscription,
+  getConfiguration, listMembers, fieldSnapshot, listApiKeys, listPortalLinks, listMessages, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
 } from '../src/index.ts';
 import { addMember, createTestCompany, setupDatabase, today, type TestDb } from './helpers.ts';
 
@@ -169,5 +171,22 @@ describe('CSV import (spec 003)', () => {
     const result = await importProjectsCsv(db.app, owner, csv);
     expect(result.created).toBe(2);
     expect(result.errors.map((e) => e.code)).toEqual(['invalid_input', 'code_taken']);
+  });
+});
+
+describe('every read of the dashboard and pages answers (smoke)', () => {
+  it('runs each listing without SQL error', async () => {
+    const reads = [
+      operationsSummary(db.app, owner), recentActivity(db.app, owner), listProjects(db.app, owner), listMilestones(db.app, owner),
+      gantt(db.app, owner), listExpenses(db.app, owner), marginByProject(db.app, owner), complianceByProject(db.app, owner),
+      listReports(db.app, owner), listIncidents(db.app, owner), listPayments(db.app, owner), listClients(db.app, owner),
+      getSettings(db.app, owner), getSubscription(db.app, owner), getConfiguration(db.app, owner), listMembers(db.app, owner),
+      fieldSnapshot(db.app, owner), listApiKeys(db.app, owner), financeSummary(db.app, owner), receivablesAging(db.app, owner),
+      listInvoices(db.app, owner), listAlerts(db.app, owner),
+    ];
+    const results = await Promise.allSettled(reads);
+    expect(results.filter((r) => r.status === 'rejected').map((r) => String((r as PromiseRejectedResult).reason))).toEqual([]);
+    const { id } = await createProject(db.app, owner, { name: 'Smoke' });
+    await expect(Promise.all([listPortalLinks(db.app, owner, id), listMessages(db.app, owner, id), getProject(db.app, owner, id)])).resolves.toBeTruthy();
   });
 });
