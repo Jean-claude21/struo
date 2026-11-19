@@ -21,3 +21,4 @@ export * from './search.ts';
 export * from './checklists.ts';
 export * from './signatures.ts';
 export * from './library.ts';
+export * from './insights.ts';

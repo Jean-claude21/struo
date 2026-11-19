@@ -6,6 +6,7 @@ import { translate } from '@/i18n/index.tsx';
 import { guarded, requestLocale, requireActor } from '@/server/context.server.ts';
 import { alertText } from '@/server/jobs.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
+import { forecast, RAIN_LIMIT } from '@/server/weather.server.ts';
 
 const any = (input: unknown) => input as Record<string, unknown>;
 const idOf = (input: unknown) => {
@@ -21,16 +22,27 @@ const act = <T>(work: (actor: core.Actor) => Promise<T>, permission?: core.Permi
 export const getDashboard = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { db } = runtime();
-    const [settings, finance, operations, alerts, projects, activity, subscription] = await Promise.all([
+    const canFinance = core.can(actor.role, 'finance.read');
+    const [settings, finance, operations, alerts, projects, activity, subscription, insights, aging, payments, members] = await Promise.all([
       core.getSettings(db, actor),
-      core.can(actor.role, 'finance.read') ? core.financeSummary(db, actor) : Promise.resolve(null),
+      canFinance ? core.financeSummary(db, actor) : Promise.resolve(null),
       core.operationsSummary(db, actor),
       core.listAlerts(db, actor),
       core.listProjects(db, actor),
       core.recentActivity(db, actor, 15),
       core.getSubscription(db, actor),
+      core.dashboardInsights(db, actor),
+      canFinance ? core.receivablesAging(db, actor) : Promise.resolve(null),
+      canFinance ? core.listPayments(db, actor, { limit: 6 }) : Promise.resolve([]),
+      core.listMembers(db, actor),
     ]);
-    return { role: actor.role, settings, finance, operations, alerts, projects, activity, subscription };
+    const me = members.find((member) => member.userId === actor.userId);
+    const weather = await Promise.all(insights.sites.filter((site) => site.status === 'active' && site.latitude !== null && site.longitude !== null)
+      .map(async (site) => ({ projectId: site.id, code: site.code, location: site.location, days: await forecast(site.latitude!, site.longitude!) })));
+    return {
+      role: actor.role, name: me?.name ?? '', settings, finance, operations, alerts, projects, activity, subscription,
+      insights: canFinance ? insights : { ...insights, cash: [], risk: [] }, aging, payments, weather, rainLimit: RAIN_LIMIT,
+    };
   }),
 );
 

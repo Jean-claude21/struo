@@ -102,6 +102,23 @@ export const inviteMember = createServerFn({ method: 'POST' })
     }),
   );
 
+/** The team page (spec 024): members with their last activity, pending invitations. */
+export const getTeamPage = createServerFn({ method: 'GET' }).handler(() =>
+  act(async (actor) => {
+    const { db, env } = runtime();
+    const [members, invitations, settings, last] = await Promise.all([
+      core.listMembers(db, actor),
+      core.can(actor.role, 'members.manage') ? core.listInvitations(db, actor) : Promise.resolve([]),
+      core.getSettings(db, actor),
+      core.memberActivity(db, actor),
+    ]);
+    return {
+      role: actor.role, userId: actor.userId, companyName: settings.name, baseUrl: env.APP_BASE_URL, invitations,
+      members: members.map((member) => ({ ...member, lastActivity: last.get(member.userId) ?? null })),
+    };
+  }),
+);
+
 export const revokeInvitation = createServerFn({ method: 'POST' })
   .validator((input: { id: string }) => input)
   .handler(({ data }) => act((actor) => core.revokeInvitation(runtime().db, actor, data.id)));
