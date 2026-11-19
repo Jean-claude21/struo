@@ -4,7 +4,7 @@
 // files dropped on the explorer are uploaded; each file has a menu (right click or « … »): preview,
 // open where it comes from, download, copy its link.
 import { useMemo, useState, type ReactNode } from 'react';
-import { Download, Ellipsis, Eye, File, FileAudio, FileImage, FileSpreadsheet, FileText, Grid2x2, Link2, List, Receipt, SquareArrowOutUpRight, Upload } from 'lucide-react';
+import { CalendarDays, Download, Ellipsis, Eye, File, FileAudio, FileImage, FileSpreadsheet, FileText, Grid2x2, Link2, List, Receipt, SquareArrowOutUpRight, Upload } from 'lucide-react';
 import { useI18n } from '@/i18n/index.tsx';
 import { ContextMenu, MenuItem, menuAt, Modal, Seg, type MenuAt, type Shape, StatusChip, useRelative, useToast } from '../kit.tsx';
 
@@ -58,7 +58,7 @@ export function FileExplorer({ items, kindLabels, sites, onUpload, uploadLabel, 
     catch { toast({ text: t('errors.generic'), kind: 'err' }); }
   };
   const ago = useRelative();
-  const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [view, setView] = useState<'grid' | 'list' | 'days'>('grid');
   const [kind, setKind] = useState<'all' | FileKind>('all');
   const [site, setSite] = useState('');
   const [q, setQ] = useState('');
@@ -82,6 +82,38 @@ export function FileExplorer({ items, kindLabels, sites, onUpload, uploadLabel, 
   const dateText = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
   const kinds = (Object.keys(KIND_META) as FileKind[]).filter((key) => counts[key]);
 
+
+  const card = (item: FileItem) => {
+    const meta = KIND_META[item.kind]; const Icon = meta.icon;
+    return (
+      <button key={item.id} type="button" className="fcard" onClick={() => setPreview(item)} onContextMenu={open(item)}>
+                <div className="f-prev">
+                  {item.thumbUrl ? <img src={item.thumbUrl} alt="" loading="lazy" /> : <Icon size={34} style={{ color: meta.color }} />}
+                  <span className="f-ext" style={{ ['--c' as string]: meta.color }}>{extOf(item)}</span>
+                </div>
+                <div className="f-info">
+                  <span className="f-name">{item.name}</span>
+                  <span className="f-meta">{[item.site?.code, ago(item.date), item.author].filter(Boolean).join(' · ')}</span>
+                </div>
+                <span role="button" tabIndex={0} className="icon-btn sm fmenu" aria-label={t('views.actions')} onClick={(event) => { event.stopPropagation(); open(item)(event); }}
+                  onKeyDown={(event) => { if (event.key === 'Enter') { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); setMenu({ item, at: { x: rect.left, y: rect.bottom + 4 } }); } }}><Ellipsis size={14} /></span>
+              </button>
+    );
+  };
+  // By day: newest day first, each day's files in time order.
+  const days = useMemo(() => {
+    const groups = new Map<string, FileItem[]>();
+    for (const item of [...shown].sort((a, b) => b.date.localeCompare(a.date))) {
+      const date = new Date(item.date);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      groups.set(key, [...(groups.get(key) ?? []), item]);
+    }
+    return [...groups.entries()].map(([key, items]) => ({ key, items }));
+  }, [shown]);
+  const dayLabel = (key: string) => {
+    const label = new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(`${key}T12:00:00`));
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  };
   const dropProps = onDropFiles ? {
     onDragOver: (event: React.DragEvent) => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); setDropping(true); } },
     onDragLeave: (event: React.DragEvent) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDropping(false); },
@@ -113,7 +145,7 @@ export function FileExplorer({ items, kindLabels, sites, onUpload, uploadLabel, 
         </select>
         {toolbarExtra}
         <span className="sp" />
-        <Seg label={t('views.grid')} value={view} onChange={setView} items={[{ value: 'grid', label: '', icon: Grid2x2 }, { value: 'list', label: '', icon: List }]} />
+        <Seg label={t('views.grid')} value={view} onChange={setView} items={[{ value: 'grid', label: '', icon: Grid2x2 }, { value: 'days', label: t('views.byDay'), icon: CalendarDays }, { value: 'list', label: '', icon: List }]} />
         {onUpload ? <button type="button" className="btn small" onClick={onUpload}><Upload size={14} />{uploadLabel}</button> : null}
       </div>
       <div className="chips">
@@ -127,26 +159,32 @@ export function FileExplorer({ items, kindLabels, sites, onUpload, uploadLabel, 
           );
         })}
       </div>
-      {!shown.length ? <p className="muted">{t('ui.noResults')}</p> : view === 'grid' ? (
-        <div className="fgrid">
-          {shown.map((item) => {
-            const meta = KIND_META[item.kind]; const Icon = meta.icon;
-            return (
-              <button key={item.id} type="button" className="fcard" onClick={() => setPreview(item)} onContextMenu={open(item)}>
-                <div className="f-prev">
-                  {item.thumbUrl ? <img src={item.thumbUrl} alt="" loading="lazy" /> : <Icon size={34} style={{ color: meta.color }} />}
-                  <span className="f-ext" style={{ ['--c' as string]: meta.color }}>{extOf(item)}</span>
-                </div>
-                <div className="f-info">
-                  <span className="f-name">{item.name}</span>
-                  <span className="f-meta">{[item.site?.code, ago(item.date), item.author].filter(Boolean).join(' · ')}</span>
-                </div>
-                <span role="button" tabIndex={0} className="icon-btn sm fmenu" aria-label={t('views.actions')} onClick={(event) => { event.stopPropagation(); open(item)(event); }}
-                  onKeyDown={(event) => { if (event.key === 'Enter') { event.stopPropagation(); const rect = event.currentTarget.getBoundingClientRect(); setMenu({ item, at: { x: rect.left, y: rect.bottom + 4 } }); } }}><Ellipsis size={14} /></span>
-              </button>
-            );
-          })}
+      {!shown.length ? <p className="muted">{t('ui.noResults')}</p> : view === 'days' ? (
+        <div className="stack">
+          {days.length > 1 ? (
+            <div className="row tight">
+              <span className="small muted">{t('views.jumpTo')}</span>
+              <select style={{ width: 'auto', minHeight: 32 }} value="" onChange={(event) => document.getElementById(`day-${event.target.value}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                <option value="">{t('views.chooseDay')}</option>
+                {days.map((day) => <option key={day.key} value={day.key}>{dayLabel(day.key)} · {day.items.length}</option>)}
+              </select>
+            </div>
+          ) : null}
+          {days.map((day) => (
+            <section key={day.key} id={`day-${day.key}`} className="fday">
+              <header className="fday-h">
+                <b>{dayLabel(day.key)}</b>
+                <span className="faint small">{t('views.filesCount', { n: day.items.length })}</span>
+                <span className="sp" />
+                <span className="small muted trunc">{[...new Set(day.items.map((item) => item.site?.code).filter(Boolean))].join(', ')}</span>
+                <span className="small faint trunc hide-m">{[...new Set(day.items.map((item) => item.author).filter(Boolean))].join(', ')}</span>
+              </header>
+              <div className="fgrid">{day.items.map(card)}</div>
+            </section>
+          ))}
         </div>
+      ) : view === 'grid' ? (
+        <div className="fgrid">{shown.map(card)}</div>
       ) : (
         <div className="panel"><div className="table-wrap"><table>
           <thead><tr><th>{t('views.list')}</th><th>{t('shell.sites')}</th><th>{t('documents.title')}</th><th className="right">Taille</th><th>Date</th></tr></thead>
