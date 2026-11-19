@@ -528,4 +528,16 @@ export const uxFr = {
     created: 'Situation créée : elle apparaît dans les factures.',
     source: 'Calculé à partir des rapports validés par l’ingénieur.',
   },
+  platform: {
+    mrr: 'Revenu mensuel (abonnements payés)',
+    paying: '{n} entreprise(s) à jour de paiement',
+    companies: 'Entreprises',
+    trials: '{n} en essai',
+    trialsEnding: 'Essais finissant sous 7 jours',
+    quiet: 'Entreprises silencieuses',
+    quietSub: 'Aucun rapport terrain depuis 14 jours',
+    revenue: 'Abonnements encaissés par mois',
+    lastReport: 'Dernier rapport le {date}',
+    noReport: 'Aucun rapport',
+  },
 };

@@ -529,4 +529,16 @@ export const uxEn: typeof uxFr = {
     created: 'Statement created: it shows in the invoices.',
     source: 'Computed from the reports validated by the engineer.',
   },
+  platform: {
+    mrr: 'Monthly revenue (paid subscriptions)',
+    paying: '{n} company(ies) paid up',
+    companies: 'Companies',
+    trials: '{n} on trial',
+    trialsEnding: 'Trials ending within 7 days',
+    quiet: 'Quiet companies',
+    quietSub: 'No field report for 14 days',
+    revenue: 'Subscriptions collected per month',
+    lastReport: 'Last report on {date}',
+    noReport: 'No report',
+  },
 };

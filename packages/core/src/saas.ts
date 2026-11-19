@@ -102,6 +102,41 @@ export async function platformOverview(owner: Db): Promise<CompanyOverview[]> {
   return rows;
 }
 
+/**
+ * The platform's own figures (spec 027, owner connection): subscription revenue by month, the
+ * recurring revenue of companies paid up today, trials ending within 7 days, and companies without
+ * any field report for 14 days (at risk of leaving). Never a company's content.
+ */
+export async function platformRevenue(owner: Db) {
+  const months = await owner.query<{ month: string; amount: number; payments: number }>(
+    `with m as (select generate_series(date_trunc('month', current_date) - interval '5 months', date_trunc('month', current_date), interval '1 month')::date as month)
+     select to_char(m.month, 'YYYY-MM') as month,
+            coalesce((select sum(amount_minor) from subscription_payment s where s.status = 'succeeded' and date_trunc('month', s.paid_at) = m.month), 0)::bigint as amount,
+            coalesce((select count(*) from subscription_payment s where s.status = 'succeeded' and date_trunc('month', s.paid_at) = m.month), 0)::int as payments
+       from m order by m.month`,
+  );
+  const summary = await owner.query<{ mrr: number; paying: number; trials: number; trialsEnding: number; companies: number }>(
+    `select coalesce(sum(p.price_minor) filter (where s.paid_until > now()), 0)::bigint as mrr,
+            count(*) filter (where s.paid_until > now())::int as paying,
+            count(*) filter (where s.plan_code = 'trial' and s.trial_ends_at > now())::int as trials,
+            count(*) filter (where s.plan_code = 'trial' and s.trial_ends_at between now() and now() + interval '7 days')::int as "trialsEnding",
+            count(*)::int as companies
+       from org_settings s join plan p on p.code = s.plan_code`,
+  );
+  const quiet = await owner.query<{ orgId: string; name: string; lastReport: string | null }>(
+    `select o.id as "orgId", o.name, (select max(r.created_at) from site_report r where r.org_id = o.id) as "lastReport"
+       from organization o
+      where not exists (select 1 from site_report r where r.org_id = o.id and r.created_at > now() - interval '14 days')
+      order by o."createdAt" desc limit 20`,
+  );
+  const row = summary.rows[0]!;
+  return {
+    months: months.rows.map((item) => ({ ...item, amount: Number(item.amount) })),
+    mrrMinor: Number(row.mrr), paying: row.paying, trials: row.trials, trialsEnding: row.trialsEnding, companies: row.companies,
+    quiet: quiet.rows,
+  };
+}
+
 export async function setCompanyPlan(owner: Db, orgId: string, planCode: string, by: string): Promise<void> {
   const { rowCount } = await owner.query('update org_settings set plan_code = $2 where org_id = $1 and exists (select 1 from plan where code = $2)', [orgId, planCode]);
   if (!rowCount) throw new DomainError('not_found', 404);

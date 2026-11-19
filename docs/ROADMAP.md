@@ -24,6 +24,14 @@ real external account · ⏳ next.
 | 016 | `016-oauth-mcp` | OAuth for MCP clients (Claude.ai, ChatGPT) besides API keys | ✅ | Full OAuth flow verified locally with a PKCE client; grant and revocation tests |
 | 017 | `017-subscription-payments` | Paying the subscription online (platform Moneroo account) | 🟡 | Tests and browser flow with the simulator; real platform Moneroo keys not provided yet |
 | 018 | `018-exports` | Accounting export, full company export (zip) and erasure | ✅ | Export and erasure tests; CSV and zip downloaded over HTTP |
+| 020 | `020-design-system` | Design tokens with a dark theme, UI kit, new shell (company switcher, Ctrl K palette, create menu), `/app/system` | ✅ | Browser checks desktop and phone; i18n parity |
+| 021 | `021-views` | View engine with table, board, Gantt, calendar and file explorer; Finances, Sites, Planning, Documents rebuilt on it | ✅ | Board refusal and Gantt move with undo in the browser; isolation tests |
+| 022 | `022-client-journey` | Client invitation (WhatsApp, e-mail, link, visibility), client space confirmed by e-mail code, finger signature of milestones | ✅ | `journeys.test.ts`; browser flow from invitation to signature |
+| 023 | `023-today` | « Today » per role: decisions, cash, risk score, client activity, weather with pouring advice, phase matrix | ✅ | Browser with demo data; isolation test |
+| 024 | `024-team` | Team page, role-first invitation | ✅ | Browser |
+| 025 | `025-field-journey` | Field app: day actions, checklists, 4-step report, problems, delivery notes read by OCR and signed, records signed | ✅ | `journeys.test.ts`; checklist received from a phone-size browser |
+| 026 | `026-statements` | Progress statement computed from validated progress | ✅ | `journeys.test.ts` |
+| 027 | `027-platform` | Platform console: revenue, trials ending, quiet companies | ✅ | Typecheck; shown to platform admins only |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

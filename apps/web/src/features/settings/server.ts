@@ -164,7 +164,8 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
   guarded(async () => {
     await requirePlatformAdmin();
     const { owner, db } = runtime();
-    return { companies: await core.platformOverview(owner), plans: await core.listPlans(db) };
+    const [companies, plans, revenue] = await Promise.all([core.platformOverview(owner), core.listPlans(db), core.platformRevenue(owner)]);
+    return { companies, plans, revenue };
   }),
 );
 
