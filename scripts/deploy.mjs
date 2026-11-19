@@ -220,7 +220,7 @@ const variables = {
   // The staging instance is a demo: the payment simulator is allowed there, never in production.
   PAYMENTS_SIMULATOR: args.env === 'staging' ? 'true' : 'false',
   ...storageVariables,
-  ...(admin.RESEND_API_KEY ? { RESEND_API_KEY: admin.RESEND_API_KEY } : {}),
+  ...((admin.RESEND_API_KEY ?? own.RESEND_API_KEY) ? { RESEND_API_KEY: admin.RESEND_API_KEY ?? own.RESEND_API_KEY } : {}),
   ...(own.MAIL_FROM ? { MAIL_FROM: own.MAIL_FROM } : {}),
   ...(admin.OPENAI_API_KEY ? { OPENAI_API_KEY: admin.OPENAI_API_KEY } : {}),
 };

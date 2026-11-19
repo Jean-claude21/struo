@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
-  fromMinor, type CheckoutOutcome, type Drafter, type Transcriber, type Mailer, type Messenger, type PaymentGateway, type Storage,
+  fromMinor, type CheckoutOutcome, type Drafter, type Transcriber, type DocumentReader, type Mailer, type Messenger, type PaymentGateway, type Storage,
 } from '@struo/core';
 import type { Env } from './env.server.ts';
 
@@ -268,6 +268,45 @@ export function createTranscriber(env: Env): Transcriber {
       if (!response.ok) throw new Error(`transcription ${response.status}`);
       const body = (await response.json()) as { text?: string };
       return (body.text ?? '').trim();
+    },
+  };
+}
+
+// ---------------------------------------------------------------- delivery notes (OCR)
+
+/** Reads a delivery note photo with OpenAI vision; returns only what is printed (null otherwise). */
+export function createDocumentReader(env: Env): DocumentReader {
+  const clean = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, 300) : null);
+  return {
+    configured: Boolean(env.OPENAI_API_KEY),
+    async readDeliveryNote(image, locale) {
+      if (!env.OPENAI_API_KEY) throw new Error('reader not configured');
+      const dataUrl = `data:${image.mediaType};base64,${Buffer.from(image.body).toString('base64')}`;
+      const instructions = locale === 'en'
+        ? 'You read a photographed delivery note from a building site. Answer JSON only with keys supplier, item, quantity (number), unit, date (YYYY-MM-DD), reference. Use null for anything not clearly printed. Never guess.'
+        : 'Tu lis la photo d’un bon de livraison de chantier. Réponds uniquement en JSON avec les clés supplier, item, quantity (nombre), unit, date (AAAA-MM-JJ), reference. Mets null pour tout ce qui n’est pas clairement imprimé. Ne devine jamais.';
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: env.OPENAI_MODEL,
+          temperature: 0,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: instructions },
+            { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }] },
+          ],
+        }),
+      });
+      if (!response.ok) throw new Error(`reader ${response.status}`);
+      const body = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+      const parsed = JSON.parse(body.choices?.[0]?.message?.content ?? '{}') as Record<string, unknown>;
+      const quantity = typeof parsed.quantity === 'number' ? parsed.quantity : Number.parseFloat(String(parsed.quantity ?? '').replace(',', '.'));
+      const date = clean(parsed.date);
+      return {
+        supplier: clean(parsed.supplier), item: clean(parsed.item), quantity: Number.isFinite(quantity) ? quantity : null, unit: clean(parsed.unit),
+        date: date && /^\d{4}-\d{2}-\d{2}$/u.test(date) ? date : null, reference: clean(parsed.reference),
+      };
     },
   };
 }

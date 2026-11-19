@@ -1,7 +1,9 @@
 import { createServerFn } from '@tanstack/react-start';
 import { setCookie } from '@tanstack/react-start/server';
 import { isLocale, LOCALE_COOKIE } from '@/i18n/index.tsx';
-import { chooseCompany, guarded, loadViewer, requestLocale } from '@/server/context.server.ts';
+import { searchCompany } from '@struo/core';
+import { chooseCompany, guarded, loadViewer, requestLocale, requireActor } from '@/server/context.server.ts';
+import { runtime } from '@/server/runtime.server.ts';
 
 /** What every page needs: the person's language and who is signed in. */
 export const getShell = createServerFn({ method: 'GET' }).handler(async () => {
@@ -30,5 +32,15 @@ export const selectCompany = createServerFn({ method: 'POST' })
       if (!viewer?.companies.some((company) => company.id === data.orgId)) throw new Error('forbidden');
       chooseCompany(data.orgId);
       return { ok: true };
+    }),
+  );
+
+/** Command palette: the company's sites, clients, invoices and documents matching a query. */
+export const searchEverything = createServerFn({ method: 'GET' })
+  .validator((input: { q: string }) => ({ q: String(input?.q ?? '').slice(0, 80) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const actor = await requireActor();
+      return searchCompany(runtime().db, actor, data.q);
     }),
   );

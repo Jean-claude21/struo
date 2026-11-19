@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { z } from 'zod';
 import { asActor, ensure, journal, parse } from './access.ts';
 import type { Actor, Db } from './db.ts';
@@ -256,5 +256,134 @@ export async function getPaymentProvider(db: Db, actor: Actor) {
       [actor.orgId],
     );
     return rows[0] ?? null;
+  });
+}
+
+// ---------------------------------------------------------------- client access by e-mail code (spec 022)
+
+export interface PortalAccess {
+  linkId: string;
+  orgId: string;
+  projectId: string;
+  requireCode: boolean;
+  verified: boolean;
+  contactEmail: string | null;
+  contactName: string | null;
+  show: { photos: boolean; planning: boolean; finance: boolean; documents: boolean; messages: boolean };
+}
+
+/** Who may see what through a link, and whether this device has been confirmed. */
+export async function portalAccess(db: Db, token: string, deviceToken: string | null): Promise<PortalAccess | null> {
+  const { rows } = await db.query<Record<string, unknown>>('select * from struo_portal_access($1, $2)', [hashToken(token), deviceToken ? hashToken(deviceToken) : '']);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    linkId: String(row.link_id), orgId: String(row.org_id), projectId: String(row.project_id), requireCode: Boolean(row.require_code),
+    verified: Boolean(row.verified), contactEmail: (row.contact_email as string | null) ?? null, contactName: (row.contact_name as string | null) ?? null,
+    show: {
+      photos: Boolean(row.show_photos), planning: Boolean(row.show_planning), finance: Boolean(row.show_finance),
+      documents: Boolean(row.show_documents), messages: Boolean(row.show_messages),
+    },
+  };
+}
+
+export const maskEmail = (email: string) => {
+  const [name = '', domain = ''] = email.split('@');
+  return `${name.slice(0, 2)}${'*'.repeat(Math.max(1, name.length - 2))}@${domain}`;
+};
+
+/** Issues a 6-digit code for the link's contact e-mail. The caller sends it; only its hash is kept. */
+export async function portalIssueCode(db: Db, token: string): Promise<{ email: string; code: string }> {
+  const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+  try {
+    const { rows } = await db.query<{ email: string }>('select struo_portal_issue_code($1, $2) as email', [hashToken(token), hashToken(code)]);
+    return { email: rows[0]!.email, code };
+  } catch (error) {
+    const message = String((error as Error).message);
+    for (const known of ['portal_link_invalid', 'portal_no_email', 'portal_too_many_codes']) {
+      if (message.includes(known)) throw new DomainError(known, known === 'portal_link_invalid' ? 404 : 422);
+    }
+    throw error;
+  }
+}
+
+/** Checks a code; on success returns a device token to keep in an httpOnly cookie. */
+export async function portalVerifyCode(db: Db, token: string, code: unknown): Promise<string | null> {
+  const clean = parse(z.string().trim().regex(/^\d{6}$/u), code);
+  const device = randomBytes(24).toString('base64url');
+  const { rows } = await db.query<{ ok: boolean }>('select struo_portal_verify_code($1, $2, $3) as ok', [hashToken(token), hashToken(clean), hashToken(device)]);
+  return rows[0]?.ok ? device : null;
+}
+
+/** The client validates a milestone by signing with their finger (the image is stored first). */
+export async function portalSignMilestone(
+  db: Db, token: string, input: { milestoneId: string; signer: unknown; verdict: unknown; reserve: unknown }, signatureId: string, imageKey: string,
+): Promise<boolean> {
+  const signer = parse(z.string().trim().min(2).max(120), input.signer);
+  const verdict = parse(z.enum(['conform', 'reserve']), input.verdict);
+  const reserve = parse(z.string().trim().max(2000).nullable(), input.reserve ?? null);
+  const { rows } = await db.query<{ done: boolean }>('select struo_portal_sign_milestone($1, $2, $3, $4, $5, $6, $7) as done', [
+    hashToken(token), input.milestoneId, signer, signatureId, imageKey, verdict, reserve,
+  ]);
+  return rows[0]?.done ?? false;
+}
+
+export interface PortalReport { id: string; takenAt: string; note: string | null; phase: string | null; progress: number | null; author: string; photos: string[] }
+
+export async function portalReports(db: Db, token: string): Promise<PortalReport[]> {
+  const { rows } = await db.query<{ reports: PortalReport[] }>('select struo_portal_reports($1) as reports', [hashToken(token)]);
+  return rows[0]?.reports ?? [];
+}
+
+const linkSettings = z.object({
+  label: z.string().trim().max(120).nullable().optional(),
+  contactName: z.string().trim().max(120).nullable().optional(),
+  contactEmail: z.string().trim().toLowerCase().email().max(254).nullable().optional().or(z.literal('').transform(() => null)),
+  contactPhone: z.string().trim().max(40).nullable().optional(),
+  requireCode: z.boolean().optional(),
+  showPhotos: z.boolean().optional(),
+  showPlanning: z.boolean().optional(),
+  showFinance: z.boolean().optional(),
+  showDocuments: z.boolean().optional(),
+  showMessages: z.boolean().optional(),
+  invited: z.boolean().optional(),
+});
+
+/** What the client sees through a link, and who the link is for. */
+export async function updatePortalLink(db: Db, actor: Actor, id: string, input: unknown): Promise<void> {
+  ensure(actor, 'portal.manage');
+  const data = parse(linkSettings, input);
+  const columns: Record<string, string> = {
+    label: 'label', contactName: 'contact_name', contactEmail: 'contact_email', contactPhone: 'contact_phone', requireCode: 'require_code',
+    showPhotos: 'show_photos', showPlanning: 'show_planning', showFinance: 'show_finance', showDocuments: 'show_documents', showMessages: 'show_messages',
+  };
+  const entries = Object.entries(data).filter(([key, value]) => value !== undefined && columns[key]);
+  await asActor(db, actor, async (tx) => {
+    const before = (await tx.query('select * from portal_link where id = $1 and org_id = $2 for update', [id, actor.orgId])).rows[0];
+    if (!before) throw notFound();
+    const sets = entries.map(([key], index) => `${columns[key]} = $${index + 3}`);
+    if (data.invited) sets.push('invited_at = now()');
+    if (sets.length) await tx.query(`update portal_link set ${sets.join(', ')} where id = $1 and org_id = $2`, [id, actor.orgId, ...entries.map(([, value]) => value)]);
+    await journal(tx, actor, 'portal.link_update', id, before, data);
+  });
+}
+
+export interface PortalLinkRow {
+  id: string; label: string | null; createdAt: string; revokedAt: string | null; lastSeenAt: string | null; contactName: string | null;
+  contactEmail: string | null; contactPhone: string | null; requireCode: boolean; showPhotos: boolean; showPlanning: boolean; showFinance: boolean;
+  showDocuments: boolean; showMessages: boolean; invitedAt: string | null; firstOpenedAt: string | null;
+}
+
+export async function listPortalLinksFull(db: Db, actor: Actor, projectId: string): Promise<PortalLinkRow[]> {
+  return asActor(db, actor, async (tx) => {
+    const { rows } = await tx.query<PortalLinkRow>(
+      `select id, label, created_at as "createdAt", revoked_at as "revokedAt", last_seen_at as "lastSeenAt", contact_name as "contactName",
+              contact_email as "contactEmail", contact_phone as "contactPhone", require_code as "requireCode", show_photos as "showPhotos",
+              show_planning as "showPlanning", show_finance as "showFinance", show_documents as "showDocuments", show_messages as "showMessages",
+              invited_at as "invitedAt", first_opened_at as "firstOpenedAt"
+         from portal_link where org_id = $1 and project_id = $2 order by created_at desc`,
+      [actor.orgId, projectId],
+    );
+    return rows;
   });
 }

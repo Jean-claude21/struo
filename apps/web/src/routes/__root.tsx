@@ -1,7 +1,9 @@
 /// <reference types="vite/client" />
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
+import { ToastProvider } from '@/components/kit.tsx';
 import { getShell } from '@/features/shell/server.ts';
+import { THEME_BOOT } from '@/lib/theme.ts';
 import { I18nProvider, translate } from '@/i18n/index.tsx';
 import appCss from '@/styles.css?url';
 
@@ -32,10 +34,13 @@ function Shell({ children }: { children: ReactNode }) {
   return (
     <html lang={locale}>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <HeadContent />
       </head>
       <body>
-        <I18nProvider locale={locale}>{children}</I18nProvider>
+        <I18nProvider locale={locale}>
+          <ToastProvider>{children}</ToastProvider>
+        </I18nProvider>
         <Scripts />
       </body>
     </html>

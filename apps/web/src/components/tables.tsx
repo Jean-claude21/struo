@@ -165,7 +165,7 @@ export function DocumentRows({ documents, canWrite, showProject }: { documents: 
   );
 }
 
-function UploadButton({ documentId }: { documentId: string }) {
+export function UploadButton({ documentId }: { documentId: string }) {
   const { t } = useI18n();
   const { run, error } = useAction();
   return (

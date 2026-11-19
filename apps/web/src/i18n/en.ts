@@ -1,7 +1,9 @@
 import type { Catalog } from './fr.ts';
 
 // English catalog — same keys as fr.ts (the compiler refuses a missing or extra key).
+import { uxEn } from './ux.en.ts';
 export const en: Catalog = {
+  ...uxEn,
   app: {
     name: 'Struo',
     tagline: 'Run every site, even without network.',
@@ -96,6 +98,11 @@ export const en: Catalog = {
     sign_up_failed: 'Sign-up failed (e-mail already used?).',
     file_too_large: 'File too large.',
     unsupported_file: 'File type not accepted.',
+    already_validated: 'This step was already validated.',
+    reader_unavailable: 'Automatic reading is unavailable: fill in the fields by hand.',
+    portal_no_email: 'No e-mail address is recorded for this link. Ask the company to add it.',
+    portal_too_many_codes: 'Too many codes requested. Try again in a quarter of an hour.',
+    portal_code_invalid: 'Wrong or expired code.',
   },
   auth: {
     signIn: 'Sign in',
