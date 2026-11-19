@@ -849,3 +849,6 @@ input[type='range'] { accent-color: var(--brand); min-height: 32px; padding: 0; 
 .look-thumb.t-compact { gap: 3px; } .look-thumb.t-compact i { height: 4px; }
 .swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); cursor: pointer; }
 .swatch.on { box-shadow: 0 0 0 2px var(--ink); }
+/* library by day (spec 037) */
+.fday { scroll-margin-top: 1rem; }
+.fday-h { display: flex; align-items: baseline; gap: .6rem; padding: .4rem 0 .6rem; border-bottom: 1px solid var(--divider); margin-bottom: .75rem; position: sticky; top: 0; background: var(--bg); z-index: 2; }
