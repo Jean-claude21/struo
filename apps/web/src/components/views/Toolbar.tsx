@@ -1,6 +1,6 @@
 // One toolbar for every view: search, filters (as chips), sort, group, columns, mode and saved views.
 import { useState, type ReactNode } from 'react';
-import { ArrowDownUp, Bookmark, Columns3, ListFilter, Plus, Rows3, Trash2, X, type LucideIcon } from 'lucide-react';
+import { ArrowDownUp, Bookmark, Columns3, ListFilter, Pencil, Plus, RotateCcw, Rows3, Trash2, X, type LucideIcon } from 'lucide-react';
 import { useI18n } from '@/i18n/index.tsx';
 import { MenuItem, Modal, Popover, Seg } from '../kit.tsx';
 import { optionsOf, type FieldDef, type Filter, type SavedView, type ViewState } from './engine.ts';
@@ -24,14 +24,15 @@ export interface ToolbarProps<T> {
   saved?: SavedView[];
   onSave?: (name: string) => void;
   onRemoveSaved?: (id: string) => void;
+  onRenameSaved?: (id: string, name: string) => void;
   extra?: ReactNode;
   right?: ReactNode;
 }
 
-export function ViewToolbar<T>({ rows, fields, state, update, modes, columns, group = true, saved, onSave, onRemoveSaved, extra, right }: ToolbarProps<T>) {
+export function ViewToolbar<T>({ rows, fields, state, update, modes, columns, group = true, saved, onSave, onRemoveSaved, onRenameSaved, extra, right }: ToolbarProps<T>) {
   const { t } = useI18n();
   const labels = useBucketLabels();
-  const [naming, setNaming] = useState(false);
+  const [naming, setNaming] = useState<false | 'new' | string>(false);
   const [name, setName] = useState('');
   const filterable = fields.filter((field) => field.filterable !== false && (field.type === 'enum' || field.type === 'date' || field.type === 'person' || field.options));
   const sortable = fields.filter((field) => field.sortable !== false);
@@ -106,6 +107,8 @@ export function ViewToolbar<T>({ rows, fields, state, update, modes, columns, gr
                     </label>
                   );
                 })}
+                <div className="msep" />
+                <MenuItem icon={RotateCcw} onSelect={() => update({ widths: {}, hidden: [] })}>{t('views.resetColumns')}</MenuItem>
               </>
             )}
           </Popover>
@@ -117,11 +120,12 @@ export function ViewToolbar<T>({ rows, fields, state, update, modes, columns, gr
                 {saved?.map((view) => (
                   <div key={view.id} className="row nowrap" style={{ gap: 0 }}>
                     <MenuItem onSelect={() => { update(view.state); close(); }}>{view.name}</MenuItem>
+                    {onRenameSaved ? <button type="button" className="icon-btn sm" aria-label={t('views.renameView')} onClick={() => { close(); setName(view.name); setNaming(view.id); }}><Pencil size={13} /></button> : null}
                     <button type="button" className="icon-btn sm" aria-label={t('views.deleteView')} onClick={() => onRemoveSaved?.(view.id)}><Trash2 size={13} /></button>
                   </div>
                 ))}
                 {saved?.length ? <div className="msep" /> : null}
-                <MenuItem icon={Plus} onSelect={() => { close(); setName(''); setNaming(true); }}>{t('views.saveView')}</MenuItem>
+                <MenuItem icon={Plus} onSelect={() => { close(); setName(''); setNaming('new'); }}>{t('views.saveView')}</MenuItem>
               </>
             )}
           </Popover>
@@ -171,12 +175,24 @@ export function ViewToolbar<T>({ rows, fields, state, update, modes, columns, gr
               </span>
             );
           })}
+          <Popover trigger={(props) => <button type="button" className="btn ghost small" {...props}><Plus size={13} />{t('views.filter')}</button>}>
+            {(close) => (
+              <>
+                {filterable.map((field) => (
+                  <MenuItem key={field.key} onSelect={() => { update({ filters: [...state.filters, { field: field.key, op: 'is', values: [] }] }); close(); }}>{field.label}</MenuItem>
+                ))}
+              </>
+            )}
+          </Popover>
           <button type="button" className="btn ghost small" onClick={() => update({ filters: [] })}>{t('views.clearAll')}</button>
         </div>
       ) : null}
-      <Modal open={naming} onClose={() => setNaming(false)} title={t('views.saveView')}
+      <Modal open={naming !== false} onClose={() => setNaming(false)} title={naming === 'new' ? t('views.saveView') : t('views.renameView')}
         footer={(<><button type="button" className="btn secondary" onClick={() => setNaming(false)}>{t('app.cancel')}</button>
-          <button type="button" className="btn" disabled={!name.trim()} onClick={() => { onSave?.(name.trim()); setNaming(false); }}>{t('app.save')}</button></>)}>
+          <button type="button" className="btn" disabled={!name.trim()} onClick={() => {
+            if (naming === 'new') onSave?.(name.trim()); else if (naming) onRenameSaved?.(naming, name.trim());
+            setNaming(false);
+          }}>{t('app.save')}</button></>)}>
         <label className="field">{t('views.viewName')}<input value={name} onChange={(event) => setName(event.target.value)} data-autofocus maxLength={60} /></label>
       </Modal>
     </>

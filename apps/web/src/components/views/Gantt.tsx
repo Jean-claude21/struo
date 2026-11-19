@@ -3,13 +3,15 @@
 // (dashed when the order is broken). Bars and milestones move with the mouse or a finger (pointer
 // events, snapped to the day); the right edge of a bar changes its end.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Crosshair } from 'lucide-react';
+import { ChevronDown, ChevronRight, Crosshair } from 'lucide-react';
 import { useI18n } from '@/i18n/index.tsx';
-import { Seg } from '../kit.tsx';
+import { ContextMenu, Seg, type MenuAt } from '../kit.tsx';
 
 export type GanttItem =
   | { type: 'group'; id: string; label: ReactNode; extra?: ReactNode }
-  | { type: 'bar'; id: string; label: ReactNode; start: string; end: string; progress?: number; color?: string; suspended?: boolean; title?: string; onOpen?: () => void; editable?: boolean }
+  | { type: 'bar'; id: string; label: ReactNode; start: string; end: string; progress?: number; color?: string; suspended?: boolean; thin?: boolean; late?: boolean; title?: string; onOpen?: () => void; editable?: boolean;
+      /** A summary row that folds its children; folded, its milestones are drawn on the bar. */
+      fold?: { open: boolean; onToggle: () => void; markers?: { id: string; date: string; status: 'reached' | 'late' | 'pending' | 'in_progress'; caption?: string; onOpen?: () => void }[] } }
   | { type: 'ms'; id: string; label: ReactNode; date: string; status: 'reached' | 'late' | 'pending' | 'in_progress'; delay?: number; onOpen?: () => void; editable?: boolean; caption?: string };
 
 export interface GanttDep { from: string; to: string }
@@ -23,7 +25,7 @@ export const shiftIso = (value: string, days: number) => iso(addDays(parse(value
 
 const ROW = 38;
 
-export function Gantt({ items, deps = [], onMoveBar, onResizeBar, onMoveMilestone, leftLabel, emptyText }: {
+export function Gantt({ items, deps = [], onMoveBar, onResizeBar, onMoveMilestone, leftLabel, emptyText, itemMenu, header, initialZoom = 'week' }: {
   items: GanttItem[];
   deps?: GanttDep[];
   onMoveBar?: (id: string, days: number) => void;
@@ -31,9 +33,16 @@ export function Gantt({ items, deps = [], onMoveBar, onResizeBar, onMoveMileston
   onMoveMilestone?: (id: string, days: number) => void;
   leftLabel: string;
   emptyText?: ReactNode;
+  /** The menu of a bar or a milestone (right click). */
+  itemMenu?: (id: string, close: () => void) => ReactNode;
+  /** Shown above the timeline (layers, legend). */
+  header?: ReactNode;
+  initialZoom?: 'week' | 'month';
 }) {
+  const [menu, setMenu] = useState<{ id: string; at: MenuAt } | null>(null);
+  const onMenu = (id: string) => (itemMenu ? (event: React.MouseEvent) => { event.preventDefault(); setMenu({ id, at: { x: event.clientX, y: event.clientY } }); } : undefined);
   const { t, locale } = useI18n();
-  const [zoom, setZoom] = useState<'week' | 'month'>('week');
+  const [zoom, setZoom] = useState<'week' | 'month'>(initialZoom);
   const scroller = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ id: string; kind: 'move' | 'end' | 'ms'; dx: number } | null>(null);
   const suppressClick = useRef(false);
@@ -66,10 +75,15 @@ export function Gantt({ items, deps = [], onMoveBar, onResizeBar, onMoveMileston
   const width = days * dayW;
   const todayX = x(today) + dayW / 2;
 
+  // Opens on today, and again when the zoom changes (not when the rows change).
+  const placed = useRef<string | null>(null);
   useLayoutEffect(() => {
-    if (scroller.current) scroller.current.scrollLeft = Math.max(0, todayX - 220);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoom]);
+    if (!scroller.current || !items.length || placed.current === zoom) return;
+    placed.current = zoom;
+    const target = Math.max(0, todayX - 220);
+    // Once the browser has laid the timeline out (its width depends on fonts and the left column).
+    requestAnimationFrame(() => requestAnimationFrame(() => { if (scroller.current) scroller.current.scrollLeft = target; }));
+  });
 
   // months and ticks
   const months: { label: string; from: number; span: number }[] = [];
@@ -124,7 +138,7 @@ export function Gantt({ items, deps = [], onMoveBar, onResizeBar, onMoveMileston
 
   useEffect(() => { setDrag(null); }, [items]);
 
-  if (!items.length) return <div className="card muted">{emptyText}</div>;
+  if (!items.length) return <div className="stack" style={{ gap: '.5rem' }}>{header}<div className="card muted">{emptyText}</div></div>;
 
   const height = items.length * ROW;
   const weekend = zoom === 'week'
@@ -152,6 +166,7 @@ export function Gantt({ items, deps = [], onMoveBar, onResizeBar, onMoveMileston
 
   return (
     <div className="stack" style={{ gap: '.5rem' }}>
+      {header}
       <div className="row tight">
         <Seg label={t('views.timeline')} value={zoom} onChange={setZoom} items={[{ value: 'week', label: t('views.weeks') }, { value: 'month', label: t('views.months') }]} />
         <button type="button" className="btn ghost small" onClick={() => { if (scroller.current) scroller.current.scrollTo({ left: Math.max(0, todayX - 220), behavior: 'smooth' }); }}>
@@ -186,6 +201,10 @@ export function Gantt({ items, deps = [], onMoveBar, onResizeBar, onMoveMileston
                 <div key={item.id} className={`gs-row ${item.type === 'group' ? 'g' : ''}`} style={{ top, width: LEFT + width }}>
                   <div className={`gs-left ${item.type === 'ms' ? 'ms' : ''}`}>
                     {item.type === 'ms' ? <span className={`gx-ms-mini ${item.status}`} aria-hidden /> : null}
+                    {item.type === 'bar' && item.fold ? (
+                      <button type="button" className="icon-btn sm" aria-expanded={item.fold.open} aria-label={item.fold.open ? t('views.collapse') : t('views.expand')}
+                        onClick={item.fold.onToggle}>{item.fold.open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button>
+                    ) : null}
                     <span className="trunc grow">{item.label}</span>
                     {item.type === 'group' ? item.extra : null}
                   </div>
@@ -195,15 +214,21 @@ export function Gantt({ items, deps = [], onMoveBar, onResizeBar, onMoveMileston
                     const inside = w > 120;
                     return (
                       <>
-                        <div className={`gx-bar ${item.suspended ? 'suspended' : ''} ${isDrag ? 'dragging' : ''}`}
-                          style={{ left: LEFT + left, top: 8, width: w, ['--c' as string]: item.color ?? 'var(--brand)', cursor: item.editable && onMoveBar ? undefined : 'pointer' }}
+                        <div className={`gx-bar ${item.suspended ? 'suspended' : ''} ${item.thin ? 'thin' : ''} ${item.late ? 'late' : ''} ${isDrag ? 'dragging' : ''}`}
+                          style={{ left: LEFT + left, top: item.thin ? 12 : 8, width: w, ['--c' as string]: item.color ?? 'var(--brand)', cursor: item.editable && onMoveBar ? undefined : 'pointer' }}
                           title={item.title} role="button" tabIndex={0} aria-label={item.title}
                           onPointerDown={item.editable && onMoveBar ? (event) => begin(event, item.id, 'move') : undefined}
-                          onClick={open(item.onOpen)} onKeyDown={(event) => { if (event.key === 'Enter') item.onOpen?.(); }}>
+                          onClick={open(item.onOpen)} onContextMenu={onMenu(item.id)} onKeyDown={(event) => { if (event.key === 'Enter') item.onOpen?.(); }}>
                           {!item.suspended ? <span className="pf" style={{ width: `${Math.max(0, Math.min(100, item.progress ?? 0))}%` }} /> : null}
                           {inside ? <span className="lb">{item.progress !== undefined ? `${Math.round(item.progress)} %` : ''}</span> : null}
                           {item.editable && onResizeBar ? <span className="h r" onPointerDown={(event) => begin(event, item.id, 'end')} /> : null}
                         </div>
+                        {item.fold && !item.fold.open ? item.fold.markers?.map((marker) => (
+                          <span key={marker.id} className={`gx-ms small ${marker.status}`} title={marker.caption} aria-label={marker.caption}
+                            role="button" tabIndex={0} onClick={marker.onOpen} onContextMenu={onMenu(marker.id)}
+                            onKeyDown={(event) => { if (event.key === 'Enter') marker.onOpen?.(); }}
+                            style={{ left: LEFT + x(marker.date) + dayW / 2 - 5, top: 14 }} />
+                        )) : null}
                         {!inside ? <span className="gx-out" style={{ left: LEFT + left + w + 6, top: 11 }}>{item.progress !== undefined ? `${Math.round(item.progress)} %` : ''}</span> : null}
                       </>
                     );
@@ -215,7 +240,7 @@ export function Gantt({ items, deps = [], onMoveBar, onResizeBar, onMoveMileston
                         <span className={`gx-ms ${item.status}`} style={{ left: LEFT + left, top: 12 }} role="button" tabIndex={0} title={item.caption}
                           aria-label={item.caption}
                           onPointerDown={item.editable && onMoveMilestone ? (event) => begin(event, item.id, 'ms') : undefined}
-                          onClick={open(item.onOpen)} onKeyDown={(event) => { if (event.key === 'Enter') item.onOpen?.(); }} />
+                          onClick={open(item.onOpen)} onContextMenu={onMenu(item.id)} onKeyDown={(event) => { if (event.key === 'Enter') item.onOpen?.(); }} />
                         {item.status === 'late' && item.delay ? (
                           <span className="gx-ms-lbl late" style={{ left: LEFT + left + 20, top: 11 }}>+{item.delay} j</span>
                         ) : null}
@@ -228,6 +253,7 @@ export function Gantt({ items, deps = [], onMoveBar, onResizeBar, onMoveMileston
           </div>
         </div>
       </div>
+      <ContextMenu at={menu?.at ?? null} onClose={() => setMenu(null)}>{menu && itemMenu ? itemMenu(menu.id, () => setMenu(null)) : null}</ContextMenu>
     </div>
   );
 }

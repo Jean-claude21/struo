@@ -116,7 +116,7 @@ function Expenses() {
         </table></div>
       </Panel>
       <div>
-        <ViewToolbar rows={data.expenses} fields={fields} state={view.state} update={view.update} columns saved={view.saved} onSave={view.saveView} onRemoveSaved={view.removeView} />
+        <ViewToolbar rows={data.expenses} fields={fields} state={view.state} update={view.update} columns saved={view.saved} onSave={view.saveView} onRemoveSaved={view.removeView} onRenameSaved={view.renameView} />
         <DataTable rows={rows} columns={columns} fields={fields} state={view.state} update={view.update} rowId={(row) => row.id}
           groupHeader={(_, groupRows) => <b className="num small">{money(groupRows.reduce((sum, row) => sum + row.amountMinor, 0))}</b>}
           bulkActions={(ids, clear) => (

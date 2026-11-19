@@ -2,14 +2,17 @@ import { can } from '@struo/core/permissions';
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ClipboardCheck, FileSignature, HardHat, ImageOff, Inbox, MapPin, Mic, PackageCheck, TriangleAlert } from 'lucide-react';
-import { Avatar, Drawer, EmptyState, Modal, PageHeader, Panel, Progress, Seg, StatusChip, useRelative, useToast, type Shape } from '@/components/kit.tsx';
+import { Avatar, Drawer, EmptyState, MenuItem, MenuSep, Modal, PageHeader, Panel, Progress, Seg, StatusChip, useRelative, useToast, type Shape } from '@/components/kit.tsx';
 import { DateText } from '@/components/ui.tsx';
 import { Board } from '@/components/views/Board.tsx';
 import { getFieldDesk, reviewReport, updateIncident } from '@/features/office/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 
 export const Route = createFileRoute('/app/field')({
-  validateSearch: (search: Record<string, unknown>): { report?: string } => (typeof search.report === 'string' ? { report: search.report } : {}),
+  validateSearch: (search: Record<string, unknown>): { report?: string; tab?: string } => ({
+    ...(typeof search.report === 'string' ? { report: search.report } : {}),
+    ...(typeof search.tab === 'string' ? { tab: search.tab } : {}),
+  }),
   loader: () => getFieldDesk(),
   component: FieldDesk,
 });
@@ -30,7 +33,8 @@ function FieldDesk() {
   const ago = useRelative();
   const canReview = can(data.role, 'field.review');
   const pending = data.reports.filter((report) => report.status === 'submitted');
-  const [tab, setTab] = useState<Tab>('inbox');
+  const [collapsedCols, setCollapsedCols] = useState<string[]>([]);
+  const [tab, setTab] = useState<Tab>((search.tab as Tab | undefined) ?? 'inbox');
   const [showAll, setShowAll] = useState(Boolean(search.report));
   const list = showAll ? data.reports : pending;
   const [selectedId, setSelectedId] = useState<string | null>(search.report ?? list[0]?.id ?? null);
@@ -175,10 +179,20 @@ function FieldDesk() {
           columns={(['open', 'in_progress', 'resolved'] as const).map((status) => ({ key: status, label: t(`desk.istatus.${status}`), icon: <StatusChip shape={ISTATUS_SHAPE[status]!} label="" /> }))}
           columnOf={(incident) => incident.status}
           rowId={(incident) => incident.id}
-          collapsed={[]}
-          onCollapsedChange={() => undefined}
+          collapsed={collapsedCols}
+          onCollapsedChange={setCollapsedCols}
           canDrag={() => canReview}
           onOpen={(incident) => setOpenIncident(incident)}
+          cardMenu={(incident, close) => (
+            <>
+              <MenuItem onSelect={() => { close(); setOpenIncident(incident); }}>{t('desk.openIncident')}</MenuItem>
+              {canReview ? (['open', 'in_progress', 'resolved'] as const).filter((status) => status !== incident.status).map((status) => (
+                <MenuItem key={status} onSelect={() => { close(); void saveIncident(incident, { status }); }}>{t('views.setStatus', { status: t(`desk.istatus.${status}`) })}</MenuItem>
+              )) : null}
+              <MenuSep />
+              <MenuItem onSelect={() => { close(); window.location.href = `/app/projects/${incident.projectId}`; }}>{t('plan.openSite')}</MenuItem>
+            </>
+          )}
           onMove={(incident, to) => saveIncident(incident, { status: to })}
           renderCard={(incident) => (
             <>

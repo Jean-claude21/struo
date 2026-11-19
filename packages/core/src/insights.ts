@@ -4,7 +4,8 @@ import type { Actor, Db } from './db.ts';
 /**
  * What the « Today » pages show (spec 023): cash over the last months, the photos of the day, each
  * open site with its cover photo and phases, what clients did in their space, and a risk score per
- * client computed from facts only (overdue days, overdue share, progress ahead of payments).
+ * client computed from facts only (overdue days, amount overdue compared with the other clients, overdue share,
+ * progress ahead of payments).
  */
 export async function dashboardInsights(db: Db, actor: Actor, months = 6) {
   return asActor(db, actor, async (tx) => {
@@ -41,7 +42,7 @@ export async function dashboardInsights(db: Db, actor: Actor, months = 6) {
          left join portal_link l on j.actor = 'portal:' || l.id::text
          left join project p on p.id = l.project_id
          left join client c on c.id = p.client_id
-        where j.org_id = $1 and j.door = 'portal' order by j.id desc limit 12`,
+        where j.org_id = $1 and j.door = 'portal' order by j.at desc, j.id desc limit 12`,
       [actor.orgId],
     );
     const risk = await tx.query<{ clientId: string; clientName: string; score: number; overdueMinor: number; maxOverdueDays: number; gap: number }>(
@@ -56,11 +57,12 @@ export async function dashboardInsights(db: Db, actor: Actor, months = 6) {
           where c.org_id = $1 and p.archived_at is null group by c.id, c.name)
        select client_id as "clientId", name as "clientName", overdue::bigint as "overdueMinor", max_days::int as "maxOverdueDays", gap::int as gap,
               least(100, round(
-                (case when overdue > 0 then 30 else 0 end)
-                + least(30, max_days / 3.0)
-                + (case when invoiced > 0 then least(20, 40.0 * overdue / invoiced) else 0 end)
-                + least(20, gap / 2.0)))::int as score
-         from per_client order by score desc`,
+                (case when overdue > 0 then 20 else 0 end)
+                + least(25, max_days / 3.0)
+                + (case when max(overdue) over () > 0 then 25.0 * overdue / max(overdue) over () else 0 end)
+                + (case when invoiced > 0 then least(15, 30.0 * overdue / invoiced) else 0 end)
+                + least(15, gap / 2.0)))::int as score
+         from per_client order by score desc, overdue desc`,
       [actor.orgId],
     );
     return {

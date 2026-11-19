@@ -1,10 +1,10 @@
 import { can } from '@struo/core/permissions';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
-import { Download, FileText, Kanban, Table2, TriangleAlert, Wallet } from 'lucide-react';
+import { BellRing, Ban, Copy, Download, Eye, FileText, Kanban, Table2, TriangleAlert, Wallet } from 'lucide-react';
 import { InvoiceDialog, PaymentDialog, ReminderDialog } from '@/components/forms.tsx';
 import { StatementDialog } from '@/components/StatementDialog.tsx';
-import { Drawer, KpiTile, Modal, PageHeader, Panel, StatusChip, useRelative, useToast, type Shape } from '@/components/kit.tsx';
+import { Drawer, KpiTile, MenuItem, MenuSep, Modal, PageHeader, Panel, StatusChip, useRelative, useToast, type Shape } from '@/components/kit.tsx';
 import { DateText, formatMoney, Money, Tabs } from '@/components/ui.tsx';
 import { Board } from '@/components/views/Board.tsx';
 import { DataTable, type Column } from '@/components/views/DataTable.tsx';
@@ -52,6 +52,20 @@ function Finance() {
   const money = (minor: number) => formatMoney(locale, minor, currency);
   const view = useViewState('finance.invoices', { mode: 'table', sort: { key: 'due', dir: 1 } });
   const stageLabel = (stage: Stage) => t(`fin.stages.${stage}` as MessageKey);
+  /** The same actions on an invoice from a table row, a card, or its drawer. */
+  const invoiceMenu = (row: Invoice, close: () => void) => {
+    const open = row.status === 'issued' && row.balanceMinor > 0;
+    return (
+      <>
+        <MenuItem icon={Eye} onSelect={() => { close(); setOpenId(row.id); }}>{t('fin.openInvoice')}</MenuItem>
+        <MenuItem icon={FileText} onSelect={() => { close(); window.open(`/print/invoice/${row.id}`, '_blank', 'noopener'); }}>{t('fin.openPdf')}</MenuItem>
+        {canWrite && open ? <MenuItem icon={Wallet} onSelect={() => { close(); setPaying(row.id); }}>{t('finance.newPayment')}</MenuItem> : null}
+        {canWrite && open ? <MenuItem icon={BellRing} onSelect={() => { close(); setOpenId(row.id); }}>{t('fin.remind')}</MenuItem> : null}
+        <MenuItem icon={Copy} onSelect={() => { close(); void navigator.clipboard.writeText(row.number).then(() => toast({ text: t('fin.numberCopied') })); }}>{t('fin.copyNumber')}</MenuItem>
+        {canWrite && row.status === 'issued' && row.paidMinor === 0 ? (<><MenuSep /><MenuItem icon={Ban} danger onSelect={() => { close(); setCancelling(row); }}>{t('finance.cancelInvoice')}</MenuItem></>) : null}
+      </>
+    );
+  };
 
   const fields: FieldDef<Invoice>[] = useMemo(() => [
     { key: 'number', label: t('finance.invoice'), type: 'text', get: (row) => row.number },
@@ -132,7 +146,7 @@ function Finance() {
       {tab === 'invoices' ? (
         <div>
           <ViewToolbar rows={data.invoices} fields={fields} state={view.state} update={view.update} columns={view.state.mode === 'table'}
-            group={view.state.mode === 'table'} saved={view.saved} onSave={view.saveView} onRemoveSaved={view.removeView}
+            group={view.state.mode === 'table'} saved={view.saved} onSave={view.saveView} onRemoveSaved={view.removeView} onRenameSaved={view.renameView}
             modes={[{ value: 'table', label: t('views.table'), icon: Table2 }, { value: 'board', label: t('views.board'), icon: Kanban }]} />
           {view.state.mode === 'board' ? (
             <Board
@@ -144,6 +158,10 @@ function Finance() {
               onCollapsedChange={(keys) => view.update({ collapsed: keys })}
               sumOf={(cards) => money(cards.reduce((sum, card) => sum + card.balanceMinor, 0))}
               onOpen={(row) => setOpenId(row.id)}
+              cardMenu={invoiceMenu}
+              columnMenu={(_, cards, close) => (
+                <MenuItem icon={Download} onSelect={() => { close(); exportCsv(cards.map((card) => card.id)); }}>{t('fin.exportColumn', { n: cards.length })}</MenuItem>
+              )}
               canDrag={() => canWrite}
               onMove={(row, to) => {
                 if (to === 'paid') { setPaying(row.id); toast({ text: t('fin.movedPaid'), kind: 'info' }); return; }
@@ -161,6 +179,7 @@ function Finance() {
           ) : (
             <DataTable rows={rows} columns={columns} fields={fields} state={view.state} update={view.update} rowId={(row) => row.id}
               onRowClick={(row) => setOpenId(row.id)}
+              rowMenu={invoiceMenu}
               bulkActions={(ids) => <button type="button" className="btn small" onClick={() => exportCsv(ids)}><Download size={14} />{t('fin.exportCsv')}</button>} />
           )}
         </div>

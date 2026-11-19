@@ -28,8 +28,8 @@ export const TOOL_GROUPS = {
     actions: ['list_documents', 'compliance', 'update_document'],
   },
   planning: {
-    about: 'Milestones: list (or only the late ones), add, update (set actualOn when reached), the consolidated Gantt.',
-    actions: ['list_milestones', 'add_milestone', 'update_milestone', 'gantt'],
+    about: 'Milestones: list (or only the late ones), add, update (set actualOn when reached), move one to a new plannedOn (what waits for it is pushed and listed), set what a milestone waits for (dependsOn: [{ id, lagDays }], loops refused), the consolidated Gantt with phases and dependencies.',
+    actions: ['list_milestones', 'add_milestone', 'update_milestone', 'move_milestone', 'set_milestone_dependencies', 'gantt'],
   },
   expenses: {
     about: 'Costs: list expenses, add an expense, margins per project and per segment.',
@@ -160,6 +160,8 @@ export function createStruoMcpServer(rt: Runtime, actor: core.Actor, locale: 'fr
       if (action === 'list_milestones') return core.listMilestones(db, actor, { projectId: args.project ? await projectId(String(args.project)) : undefined, late: args.late === true });
       if (action === 'add_milestone') return core.addMilestone(db, actor, { ...args, projectId: await projectId(String(args.project ?? args.projectId)) });
       if (action === 'update_milestone') return core.updateMilestone(db, actor, String(args.milestoneId), args.patch);
+      if (action === 'move_milestone') return core.moveMilestone(db, actor, String(args.milestoneId), { plannedOn: args.plannedOn });
+      if (action === 'set_milestone_dependencies') return core.setMilestoneDependencies(db, actor, String(args.milestoneId), { dependsOn: args.dependsOn });
       return core.gantt(db, actor);
     },
     expenses: async (action, args) => {

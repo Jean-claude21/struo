@@ -13,6 +13,7 @@ import { authClient } from '@/features/auth/client.ts';
 import {
   compressPhoto, currentPosition, enqueue, fetchSnapshot, outbox, persist, readSnapshot, syncOutbox, type FieldProject, type FieldSnapshot,
   type OutboxItem, type OutboxPhoto,
+  clearSnapshot,
 } from '@/features/field/store.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 
@@ -57,12 +58,15 @@ function FieldApp() {
     setQueue(await outbox());
     if (navigator.onLine) {
       try {
-        await syncOutbox();
-        const fresh = await fetchSnapshot();
+        // First who is signed in (and their sites), then what they wrote offline, then fresh figures.
+        let fresh = await fetchSnapshot();
+        const { sent } = await syncOutbox(fresh?.user.id);
+        if (sent) fresh = (await fetchSnapshot()) ?? fresh;
         if (fresh) setSnapshot(fresh);
         setAuthError(null);
       } catch (error) {
         setAuthError((error as Error).message);
+        if ((error as Error).message === 'not_signed_in' || (error as Error).message === 'no_company') setSnapshot(null);
       }
       setQueue(await outbox());
     }
@@ -175,7 +179,7 @@ function FieldApp() {
             )) : <p className="muted">{t('field2.noOutbox')}</p>}
             <button type="button" className="btn secondary" onClick={() => void refresh()}><RefreshCw size={16} />{t('fieldApp.syncNow')}</button>
             <a href="/app" className="btn ghost">{t('field2.office')}</a>
-            <button type="button" className="btn ghost" onClick={async () => { await authClient.signOut(); window.location.href = '/login?next=/field'; }}><LogOut size={16} />{t('field2.signOut')}</button>
+            <button type="button" className="btn ghost" onClick={async () => { await clearSnapshot(); await authClient.signOut(); window.location.href = '/login?next=/field'; }}><LogOut size={16} />{t('field2.signOut')}</button>
           </div>
         ) : null}
       </div>
