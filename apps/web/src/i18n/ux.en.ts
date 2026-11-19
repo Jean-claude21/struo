@@ -196,6 +196,10 @@ export const uxEn: typeof uxFr = {
     unitPrice: "Unit price",
   },
   views: {
+    byDay: "By day",
+    jumpTo: "Jump to",
+    chooseDay: "Choose a day…",
+    filesCount: "{n} file(s)",
     saved: "{name} updated",
     setStatus: "Set to « {status} »",
     layerHint: 'Check to show · double click: only this one',

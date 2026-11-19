@@ -195,6 +195,10 @@ export const uxFr = {
     unitPrice: "Prix unitaire",
   },
   views: {
+    byDay: "Par jour",
+    jumpTo: "Aller au",
+    chooseDay: "Choisir un jour…",
+    filesCount: "{n} fichier(s)",
     saved: "{name} mis à jour",
     setStatus: "Passer en « {status} »",
     layerHint: 'Cocher pour afficher · double-clic : uniquement celui-ci',
