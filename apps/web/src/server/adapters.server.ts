@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
-  fromMinor, type CheckoutOutcome, type Drafter, type Transcriber, type DocumentReader, type Mailer, type Messenger, type PaymentGateway, type Storage,
+  fromMinor, type CheckoutOutcome, type Drafter, type Transcriber, type DocumentReader, type Answerer, type Mailer, type Messenger, type PaymentGateway, type Storage,
 } from '@struo/core';
 import type { Env } from './env.server.ts';
 
@@ -268,6 +268,33 @@ export function createTranscriber(env: Env): Transcriber {
       if (!response.ok) throw new Error(`transcription ${response.status}`);
       const body = (await response.json()) as { text?: string };
       return (body.text ?? '').trim();
+    },
+  };
+}
+
+// ---------------------------------------------------------------- assistant (questions on the data)
+
+/** OpenAI answers from the company's facts only; without a key the assistant is simply unavailable. */
+export function createAnswerer(env: Env): Answerer {
+  return {
+    configured: Boolean(env.OPENAI_API_KEY),
+    async answer({ locale, question, facts }) {
+      if (!env.OPENAI_API_KEY) throw new Error('answerer not configured');
+      const system = locale === 'en'
+        ? 'You are the assistant of a construction company. Answer the question using ONLY the JSON facts given (amounts are in minor units of their currency; XOF has no decimals). Be short and concrete: a sentence, then at most 5 bullet points naming sites by their code. Never invent a figure, a date or a name. If the facts do not answer, say so plainly and suggest where to look in the app.'
+        : 'Tu es l’assistant d’une entreprise du BTP. Réponds à la question en utilisant UNIQUEMENT les faits JSON fournis (montants en unités mineures de leur devise ; le XOF n’a pas de décimales). Sois court et concret : une phrase, puis 5 puces au plus, en nommant les chantiers par leur code. N’invente jamais un chiffre, une date ou un nom. Si les faits ne répondent pas, dis-le simplement et indique où regarder dans l’application.';
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: env.OPENAI_MODEL,
+          temperature: 0.1,
+          messages: [{ role: 'system', content: system }, { role: 'user', content: `FACTS:\n${JSON.stringify(facts)}\n\nQUESTION: ${question}` }],
+        }),
+      });
+      if (!response.ok) throw new Error(`answerer ${response.status}`);
+      const body = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+      return (body.choices?.[0]?.message?.content ?? '').trim();
     },
   };
 }

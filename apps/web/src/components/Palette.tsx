@@ -65,7 +65,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       : hit.kind === 'invoice' ? go('/app/finance', { invoice: hit.id })
       : go('/app/documents', { doc: hit.id }),
   }));
-  const items = [...found, ...commands.filter((command) => !q || command.label.toLowerCase().includes(q))];
+  const askItem: Item[] = q.length >= 3 ? [{ id: 'ask', group: t('shell.actions'), icon: Search, label: t('shell.askAssistant', { q: query.trim() }), run: go('/app', { ask: query.trim() }) }] : [];
+  const items = [...found, ...commands.filter((command) => !q || command.label.toLowerCase().includes(q)), ...askItem];
 
   useEffect(() => { setHighlight(0); }, [query, hits.length]);
 

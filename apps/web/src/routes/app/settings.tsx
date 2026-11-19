@@ -2,6 +2,9 @@ import { can, ROLES } from '@struo/core/permissions';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Badge, DateText, ErrorText, Field, formData, formatMoney, Tabs, useAction } from '@/components/ui.tsx';
+import { Check, Minus } from 'lucide-react';
+import { PERMISSIONS, type Permission } from '@struo/core/permissions';
+import { Avatar, PageHeader, Panel } from '@/components/kit.tsx';
 import {
   addConfigurationItem, createApiKey, getSettingsPage, inviteMember, removeConfigurationItem, removeMember, revokeApiKey,
   eraseCompany, paySubscription, revokeInvitation, revokeMcpConnection, setMemberRole, setPaymentProvider, updateSettings,
@@ -13,21 +16,23 @@ export const Route = createFileRoute('/app/settings')({
   component: Settings,
 });
 
-type Tab = 'company' | 'configuration' | 'members' | 'payments' | 'integrations' | 'subscription' | 'data';
+type Tab = 'company' | 'configuration' | 'members' | 'roles' | 'payments' | 'integrations' | 'subscription' | 'journal' | 'data';
 type Data = Awaited<ReturnType<typeof getSettingsPage>>;
 
 function Settings() {
   const { t } = useI18n();
   const data = Route.useLoaderData();
   const [tab, setTab] = useState<Tab>('company');
-  const tabs: Tab[] = ['company', 'configuration', 'members', 'payments', 'integrations', 'subscription', 'data'];
+  const tabs: Tab[] = ['company', 'configuration', 'members', 'roles', 'payments', 'integrations', 'subscription', ...(data.journal.length ? ['journal' as Tab] : []), 'data'];
   return (
     <div className="stack">
-      <h1>{t('settings.title')}</h1>
-      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: t(`settings.${value}`) }))} />
+      <PageHeader title={t('settings.title')} text={data.settings.name} />
+      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'roles' ? t('set2.roles') : value === 'journal' ? t('set2.journal') : t(`settings.${value}`) }))} />
       {tab === 'company' ? <CompanyTab data={data} /> : null}
       {tab === 'configuration' ? <ConfigurationTab data={data} /> : null}
       {tab === 'members' ? <MembersTab data={data} /> : null}
+      {tab === 'roles' ? <RolesTab /> : null}
+      {tab === 'journal' ? <JournalTab data={data} /> : null}
       {tab === 'payments' ? <PaymentsTab data={data} /> : null}
       {tab === 'integrations' ? <IntegrationsTab data={data} /> : null}
       {tab === 'subscription' ? <SubscriptionTab data={data} /> : null}
@@ -150,7 +155,7 @@ function ConfigurationTab({ data }: { data: Data }) {
                 if (done) form.reset();
               }}
             >
-              <input name="name" required maxLength={80} placeholder={t('app.name')} />
+              <input name="name" required maxLength={80} placeholder={t('clientInvite.contactName')} />
               {list.kind === 'docType' ? (
                 <label className="check">
                   <input type="checkbox" name="hasExpiry" /> {t('settings.hasExpiry')}
@@ -572,5 +577,50 @@ function DataTab({ data }: { data: Data }) {
         </section>
       ) : null}
     </div>
+  );
+}
+
+/** Who may do what (screen A4): the permission table of the domain, read-only. */
+function RolesTab() {
+  const { t } = useI18n();
+  const permissions = Object.keys(PERMISSIONS) as Permission[];
+  return (
+    <Panel title={t('set2.roles')} sub={t('set2.rolesSub')} flush>
+      <div className="table-wrap"><table>
+        <thead><tr><th />{ROLES.map((role) => <th key={role} style={{ textAlign: 'center' }}>{t(`roles.${role}`)}</th>)}</tr></thead>
+        <tbody>{permissions.map((permission) => (
+          <tr key={permission}>
+            <td>{t(`set2.perm.${permission.replace('.', '_')}` as 'set2.roles')}</td>
+            {ROLES.map((role) => (
+              <td key={role} style={{ textAlign: 'center' }}>{can(role, permission) ? <Check size={17} style={{ color: 'var(--ok)' }} aria-label="✓" /> : <Minus size={15} style={{ color: 'var(--ink-faint)' }} aria-label="—" />}</td>
+            ))}
+          </tr>
+        ))}</tbody>
+      </table></div>
+      <p className="muted small" style={{ padding: '0 1rem 1rem' }}>{t('set2.clientNote')}</p>
+    </Panel>
+  );
+}
+
+/** The company's journal (screen A6): who did what, from which door. */
+function JournalTab({ data }: { data: Data }) {
+  const { t } = useI18n();
+  const [q, setQ] = useState('');
+  const rows = data.journal.filter((row) => !q || `${row.actorName} ${row.command} ${row.door}`.toLowerCase().includes(q.toLowerCase()));
+  const doorLabel = (door: string) => t(`set2.doors.${door}` as 'set2.roles');
+  return (
+    <Panel title={t('set2.journal')} sub={t('set2.journalSub')} actions={<input value={q} onChange={(event) => setQ(event.target.value)} placeholder={t('ui.search')} style={{ maxWidth: 220, minHeight: 32 }} />} flush>
+      <div className="table-wrap"><table>
+        <thead><tr><th>{t('app.date')}</th><th>{t('clientInvite.contactName')}</th><th>{t('set2.action')}</th><th>{t('set2.door')}</th></tr></thead>
+        <tbody>{rows.map((row) => (
+          <tr key={row.id}>
+            <td className="nowrap muted"><DateText value={row.at} time /></td>
+            <td><span className="row tight nowrap"><Avatar name={row.actorName} />{row.actorName}</span></td>
+            <td><code>{row.command}</code></td>
+            <td><span className="badge">{doorLabel(row.door)}</span></td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+    </Panel>
   );
 }

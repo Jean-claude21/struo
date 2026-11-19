@@ -11,12 +11,13 @@ import { Badge, DateText, DialogButton, Empty, ErrorText, Field, FormButtons, fo
 import { createClient, createProject, getProjects, importProjects, updateProject } from '@/features/office/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
-type Search = { q?: string; status?: string };
+type Search = { q?: string; status?: string; new?: string };
 
 export const Route = createFileRoute('/app/projects/')({
   validateSearch: (search: Record<string, unknown>): Search => ({
     q: typeof search.q === 'string' ? search.q : undefined,
     status: typeof search.status === 'string' ? search.status : undefined,
+    ...(typeof search.new === 'string' ? { new: search.new } : {}),
   }),
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => getProjects({ data: deps }),
@@ -31,6 +32,7 @@ function Projects() {
   const router = useRouter();
   const toast = useToast();
   const canWrite = can(data.role, 'projects.write');
+  const search = Route.useSearch();
   const view = useViewState('projects', { mode: 'grid' });
   const money = (minor: number, currency: string) => formatMoney(locale, minor, currency);
   const statusShape: Record<string, Shape> = { pending: 'todo', active: 'progress', suspended: 'blocked', done: 'done' };
@@ -60,7 +62,7 @@ function Projects() {
   return (
     <div className="stack loose">
       <PageHeader title={t('projects.title')} text={t('views.count', { n: data.projects.length })}>
-        {canWrite ? (<><ImportDialog /><NewProjectDialog data={data} /></>) : null}
+        {canWrite ? (<><ImportDialog /><NewProjectDialog data={data} defaultOpen={search.new === '1'} /></>) : null}
       </PageHeader>
       <div>
         <ViewToolbar rows={data.projects} fields={fields} state={view.state} update={view.update} columns={view.state.mode === 'table'} group={view.state.mode === 'table'}
@@ -114,13 +116,13 @@ function Projects() {
 
 type ProjectsData = Awaited<ReturnType<typeof getProjects>>;
 
-function NewProjectDialog({ data }: { data: ProjectsData }) {
+function NewProjectDialog({ data, defaultOpen }: { data: ProjectsData; defaultOpen?: boolean }) {
   const { t } = useI18n();
   const { run, error, busy, setError } = useAction();
   const navigate = useNavigate();
   const [clientId, setClientId] = useState('');
   return (
-    <DialogButton label={t('projects.new')} title={t('projects.new')}>
+    <DialogButton label={t('projects.new')} title={t('projects.new')} defaultOpen={defaultOpen}>
       {(close) => (
         <form
           className="stack"

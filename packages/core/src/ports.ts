@@ -79,6 +79,12 @@ export interface DocumentReader {
   readDeliveryNote(image: { body: Uint8Array; mediaType: string }, locale: 'fr' | 'en'): Promise<DeliveryNoteFields>;
 }
 
+export interface Answerer {
+  readonly configured: boolean;
+  /** Answers a question about the company from the given facts only; says so when they do not tell. */
+  answer(input: { locale: 'fr' | 'en'; question: string; facts: unknown }): Promise<string>;
+}
+
 export interface Transcriber {
   readonly configured: boolean;
   /** Turns a recorded voice note into text, in the company's language. */
