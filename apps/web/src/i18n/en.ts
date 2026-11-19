@@ -98,6 +98,10 @@ export const en: Catalog = {
     sign_up_failed: 'Sign-up failed (e-mail already used?).',
     file_too_large: 'File too large.',
     unsupported_file: 'File type not accepted.',
+    reader_unavailable: 'Automatic reading is unavailable: fill in the fields by hand.',
+    portal_no_email: 'No e-mail address is recorded for this link. Ask the company to add it.',
+    portal_too_many_codes: 'Too many codes requested. Try again in a quarter of an hour.',
+    portal_code_invalid: 'Wrong or expired code.',
   },
   auth: {
     signIn: 'Sign in',

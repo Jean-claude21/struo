@@ -16,7 +16,7 @@
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm test",
     "db:local": "node scripts/db-local.mjs",
-    "db:migrate": "tsx scripts/migrate.ts",
+    "db:migrate": "tsx --env-file-if-exists=apps/web/.env.local scripts/migrate.ts",
     "db:seed": "cd apps/web && tsx --env-file=.env.local scripts/seed.ts"
   },
   "devDependencies": {

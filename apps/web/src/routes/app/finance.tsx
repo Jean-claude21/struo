@@ -13,9 +13,9 @@ import { cancelInvoice, getFinance } from '@/features/office/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 
 export const Route = createFileRoute('/app/finance')({
-  validateSearch: (search: Record<string, unknown>) => ({
-    new: typeof search.new === 'string' ? search.new : undefined,
-    invoice: typeof search.invoice === 'string' ? search.invoice : undefined,
+  validateSearch: (search: Record<string, unknown>): { new?: string; invoice?: string } => ({
+    ...(typeof search.new === 'string' ? { new: search.new } : {}),
+    ...(typeof search.invoice === 'string' ? { invoice: search.invoice } : {}),
   }),
   loader: () => getFinance(),
   component: Finance,

@@ -144,6 +144,29 @@ export const resolveIncident = createServerFn({ method: 'POST' })
   .validator(idOf)
   .handler(({ data }) => act((actor) => core.resolveIncident(runtime().db, actor, data.id)));
 
+export const updateIncident = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; patch: Record<string, unknown> }) => input)
+  .handler(({ data }) => act((actor) => core.updateIncident(runtime().db, actor, data.id, data.patch)));
+
+/** The engineer's field desk: reports, incidents, checklists, deliveries and signatures. */
+export const getFieldDesk = createServerFn({ method: 'GET' }).handler(() =>
+  act(async (actor) => {
+    const { db } = runtime();
+    const [reports, incidents, checklists, deliveries, signatures, members] = await Promise.all([
+      core.listReports(db, actor, { limit: 150 }),
+      core.listIncidents(db, actor, {}),
+      core.listChecklistRuns(db, actor, { limit: 80 }),
+      core.listDeliveries(db, actor),
+      core.listSignatures(db, actor),
+      core.listMembers(db, actor),
+    ]);
+    return {
+      role: actor.role, userId: actor.userId, reports, incidents, checklists, deliveries, signatures,
+      members: members.map((member) => ({ userId: member.userId, name: member.name, role: member.role })),
+    };
+  }),
+);
+
 // ---------------------------------------------------------------- finance
 
 export const getFinance = createServerFn({ method: 'GET' }).handler(() =>
@@ -265,14 +288,15 @@ export const removeExpense = createServerFn({ method: 'POST' })
 export const getDocuments = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { db } = runtime();
-    const [documents, compliance, configuration, projects] = await Promise.all([
+    const [documents, compliance, configuration, projects, files] = await Promise.all([
       core.listDocuments(db, actor),
       core.complianceByProject(db, actor),
       core.getConfiguration(db, actor),
       core.listProjects(db, actor),
+      core.fileLibrary(db, actor),
     ]);
     return {
-      role: actor.role, documents, compliance, docTypes: configuration.docTypes,
+      role: actor.role, documents, compliance, docTypes: configuration.docTypes, files,
       projects: projects.map((project) => ({ id: project.id, code: project.code, name: project.name })),
     };
   }),
