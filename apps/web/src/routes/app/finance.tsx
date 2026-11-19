@@ -58,6 +58,7 @@ function Finance() {
     return (
       <>
         <MenuItem icon={Eye} onSelect={() => { close(); setOpenId(row.id); }}>{t('fin.openInvoice')}</MenuItem>
+        <MenuItem icon={FileText} onSelect={() => { close(); void router.navigate({ to: '/app/invoices/$invoiceId', params: { invoiceId: row.id } }); }}>{t(row.status === 'draft' ? 'inv.editDraft' : 'inv.seeLines')}</MenuItem>
         <MenuItem icon={FileText} onSelect={() => { close(); window.open(`/print/invoice/${row.id}`, '_blank', 'noopener'); }}>{t('fin.openPdf')}</MenuItem>
         {canWrite && open ? <MenuItem icon={Wallet} onSelect={() => { close(); setPaying(row.id); }}>{t('finance.newPayment')}</MenuItem> : null}
         {canWrite && open ? <MenuItem icon={BellRing} onSelect={() => { close(); setOpenId(row.id); }}>{t('fin.remind')}</MenuItem> : null}
@@ -122,7 +123,7 @@ function Finance() {
           <>
             <StatementDialog projects={data.projects} currency={currency} />
             <PaymentDialog projects={data.projects} currency={currency} invoices={data.invoices} />
-            <InvoiceDialog projects={data.projects} currency={currency} defaultOpen={search.new === '1'} />
+            <InvoiceDialog projects={data.projects} defaultOpen={search.new === '1'} />
           </>
         ) : null}
       </PageHeader>
@@ -157,7 +158,7 @@ function Finance() {
               collapsed={view.state.collapsed.length ? view.state.collapsed : ['cancelled']}
               onCollapsedChange={(keys) => view.update({ collapsed: keys })}
               sumOf={(cards) => money(cards.reduce((sum, card) => sum + card.balanceMinor, 0))}
-              onOpen={(row) => setOpenId(row.id)}
+              onOpen={(row) => (row.status === 'draft' ? void router.navigate({ to: '/app/invoices/$invoiceId', params: { invoiceId: row.id } }) : setOpenId(row.id))}
               cardMenu={invoiceMenu}
               columnMenu={(_, cards, close) => (
                 <MenuItem icon={Download} onSelect={() => { close(); exportCsv(cards.map((card) => card.id)); }}>{t('fin.exportColumn', { n: cards.length })}</MenuItem>
@@ -178,7 +179,7 @@ function Finance() {
             />
           ) : (
             <DataTable rows={rows} columns={columns} fields={fields} state={view.state} update={view.update} rowId={(row) => row.id}
-              onRowClick={(row) => setOpenId(row.id)}
+              onRowClick={(row) => (row.status === 'draft' ? void router.navigate({ to: '/app/invoices/$invoiceId', params: { invoiceId: row.id } }) : setOpenId(row.id))}
               rowMenu={invoiceMenu}
               bulkActions={(ids) => <button type="button" className="btn small" onClick={() => exportCsv(ids)}><Download size={14} />{t('fin.exportCsv')}</button>} />
           )}

@@ -144,6 +144,8 @@ export const aiFr = {
     planning: 'Planning', expenses: 'Dépenses', portal: 'Espaces clients', team: 'Équipe',
   },
   caps: {
+    issue_invoice: "Émettre une facture",
+    prepare_invoice: "Préparer une facture détaillée",
     context: 'Contexte de l’entreprise', dashboard: 'Tableau de bord', search: 'Rechercher', recent_activity: 'Activité récente',
     list_sites: 'Lister les chantiers', get_site: 'Fiche d’un chantier', create_site: 'Créer un chantier', update_site: 'Modifier un chantier', set_phase: 'Régler une phase',
     list_clients: 'Lister les clients', create_client: 'Ajouter un client', update_client: 'Modifier un client',
@@ -160,6 +162,8 @@ export const aiFr = {
     list_team: 'Équipe', invite_member: 'Inviter un membre',
   },
   capsd: {
+    issue_invoice: "Émet un brouillon : il reçoit le numéro de la série et est figé. Exige votre confirmation.",
+    prepare_invoice: "Crée un brouillon de facture avec ses lignes (lots en situation depuis l’avancement validé, ou articles) à vérifier et émettre dans l’éditeur.",
     context: 'À appeler en premier : l’entreprise, votre rôle, la date, la devise et ce qui demande votre attention.',
     dashboard: 'Les chiffres du jour : à encaisser, en retard, attendu sous 30 jours, trésorerie, marge actuelle et prévue, risque client, chantiers.',
     search: 'Cherche chantiers, clients, factures, documents et personnes par mots.',
