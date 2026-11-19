@@ -1,6 +1,6 @@
 import { can, ROLES } from '@struo/core/permissions';
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Badge, DateText, ErrorText, Field, formData, formatMoney, Tabs, useAction } from '@/components/ui.tsx';
 import { Check, Minus } from 'lucide-react';
 import { PERMISSIONS, type Permission } from '@struo/core/permissions';
@@ -9,10 +9,11 @@ import {
   addConfigurationItem, createApiKey, getSettingsPage, inviteMember, removeConfigurationItem, removeMember, revokeApiKey,
   eraseCompany, paySubscription, revokeInvitation, revokeMcpConnection, setMemberRole, setPaymentProvider, updateSettings,
 } from '@/features/settings/server.ts';
-import { getInvoiceSettings, updateInvoiceSettings } from '@/features/office/server.ts';
+import { InvoiceLookSettings } from '@/components/InvoiceLookSettings.tsx';
 import { useI18n } from '@/i18n/index.tsx';
 
 export const Route = createFileRoute('/app/settings')({
+  validateSearch: (search: Record<string, unknown>): { tab?: string } => (typeof search.tab === 'string' ? { tab: search.tab } : {}),
   loader: () => getSettingsPage(),
   component: Settings,
 });
@@ -23,14 +24,15 @@ type Data = Awaited<ReturnType<typeof getSettingsPage>>;
 function Settings() {
   const { t } = useI18n();
   const data = Route.useLoaderData();
-  const [tab, setTab] = useState<Tab>('company');
+  const search = Route.useSearch();
+  const [tab, setTab] = useState<Tab>((search.tab as Tab | undefined) ?? 'company');
   const tabs: Tab[] = ['company', ...(can(data.role, 'finance.read') ? ['invoicing' as Tab] : []), 'configuration', 'members', 'roles', 'payments', 'integrations', 'subscription', ...(data.journal.length ? ['journal' as Tab] : []), 'data'];
   return (
     <div className="stack">
       <PageHeader title={t('settings.title')} text={data.settings.name} />
       <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'roles' ? t('set2.roles') : value === 'journal' ? t('set2.journal') : value === 'invoicing' ? t('inv.settingsTab') : t(`settings.${value}`) }))} />
       {tab === 'company' ? <CompanyTab data={data} /> : null}
-      {tab === 'invoicing' ? <InvoicingTab canWrite={can(data.role, 'finance.write')} /> : null}
+      {tab === 'invoicing' ? <InvoiceLookSettings canWrite={can(data.role, 'finance.write')} /> : null}
       {tab === 'configuration' ? <ConfigurationTab data={data} /> : null}
       {tab === 'members' ? <MembersTab data={data} /> : null}
       {tab === 'roles' ? <RolesTab /> : null}
@@ -624,61 +626,5 @@ function JournalTab({ data }: { data: Data }) {
         ))}</tbody>
       </table></div>
     </Panel>
-  );
-}
-
-/** How the company's invoices look and are numbered (spec 035). */
-function InvoicingTab({ canWrite }: { canWrite: boolean }) {
-  const { t } = useI18n();
-  const { run, error, busy } = useAction();
-  const [settings, setSettings] = useState<Awaited<ReturnType<typeof getInvoiceSettings>> | null>(null);
-  const [saved, setSaved] = useState(false);
-  useEffect(() => { void getInvoiceSettings().then(setSettings); }, []);
-  if (!settings) return <p className="muted">{t('ui.loading')}</p>;
-  const year = new Date().getFullYear();
-  const example = (prefix: string, padding: number, yearly: boolean) => `${prefix}-${yearly ? `${year}-` : ''}${'1'.padStart(padding, '0')}`;
-  const text = (name: keyof typeof settings, label: string, rows?: number, hint?: string) => (
-    <Field label={label} hint={hint}>
-      {rows ? <textarea name={name} rows={rows} defaultValue={String(settings[name] ?? '')} /> : <input name={name} defaultValue={String(settings[name] ?? '')} />}
-    </Field>
-  );
-  return (
-    <form className="stack" onSubmit={async (event) => {
-      event.preventDefault();
-      const v = formData(event.currentTarget);
-      setSaved(false);
-      const done = await run(() => updateInvoiceSettings({ data: {
-        numberPrefix: v.numberPrefix, numberPadding: Number(v.numberPadding), numberYearly: v.numberYearly === 'on', dueDays: Number(v.dueDays),
-        legalName: v.legalName, taxId: v.taxId, tradeRegister: v.tradeRegister, address: v.address, phone: v.phone, email: v.email,
-        bankDetails: v.bankDetails, mobileMoney: v.mobileMoney, paymentTerms: v.paymentTerms, footer: v.footer,
-      } }), { reload: false });
-      if (done) { setSaved(true); setSettings(await getInvoiceSettings()); }
-    }}>
-      <fieldset disabled={!canWrite} className="stack" style={{ border: 0, padding: 0, margin: 0 }}>
-        <Panel title={t('inv.numbering')} sub={t('inv.numberingExample', { example: example(settings.numberPrefix, settings.numberPadding, settings.numberYearly) })}>
-          <div className="form-grid">
-            {text('numberPrefix', t('inv.prefix'))}
-            <Field label={t('inv.padding')}><input name="numberPadding" type="number" min={2} max={8} defaultValue={settings.numberPadding} /></Field>
-            <Field label={t('inv.dueDays')}><input name="dueDays" type="number" min={0} max={365} defaultValue={settings.dueDays} /></Field>
-            <label className="row tight small" style={{ alignSelf: 'end' }}><input type="checkbox" name="numberYearly" defaultChecked={settings.numberYearly} />{t('inv.yearly')}</label>
-          </div>
-        </Panel>
-        <Panel title={t('inv.legal')} sub={t('inv.legalSub')}>
-          <div className="form-grid">
-            {text('legalName', t('inv.legalName'))}{text('taxId', t('inv.taxId'))}{text('tradeRegister', t('inv.tradeRegister'))}
-            {text('phone', t('inv.phone'))}{text('email', t('inv.email'))}
-          </div>
-          {text('address', t('inv.address'), 2)}
-        </Panel>
-        <Panel title={t('inv.payment')}>
-          {text('bankDetails', t('inv.bank'), 3, t('inv.bankHint'))}
-          {text('mobileMoney', t('inv.mobileMoney'), 2)}
-          {text('paymentTerms', t('inv.paymentTerms'), 2, t('inv.paymentTermsHint'))}
-          {text('footer', t('inv.footer'), 2)}
-        </Panel>
-      </fieldset>
-      <ErrorText error={error} />
-      {canWrite ? <div className="row"><button type="submit" className="btn" disabled={busy}>{t('app.save')}</button>{saved ? <span className="small" style={{ color: 'var(--ok)' }}><Check size={14} /> {t('inv.saved')}</span> : null}</div> : null}
-    </form>
   );
 }

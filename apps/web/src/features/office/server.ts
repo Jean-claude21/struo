@@ -252,6 +252,41 @@ export const deleteDraftInvoice = createServerFn({ method: 'POST' })
 
 export const getInvoiceSettings = createServerFn({ method: 'GET' }).handler(() => act((actor) => core.getInvoiceSettings(runtime().db, actor)));
 
+/**
+ * What the appearance preview shows (spec 036): the company's latest invoice with lines (else its
+ * latest invoice), or a fixed example when it has none yet. Its settings come separately: the
+ * preview applies the ones being edited.
+ */
+export const getInvoicePreview = createServerFn({ method: 'GET' }).handler(() =>
+  act(async (actor) => {
+    const { db } = runtime();
+    const [settings, company] = await Promise.all([core.getInvoiceSettings(db, actor), core.getSettings(db, actor)]);
+    const rows = await core.listInvoices(db, actor, {});
+    const candidates = rows.filter((row) => row.status !== 'cancelled');
+    for (const row of candidates.slice(0, 12)) {
+      const doc = await core.invoiceDocument(db, actor, row.id);
+      if (doc.lines.length) return { settings, orgId: actor.orgId, doc, sample: false };
+    }
+    if (candidates[0]) return { settings, orgId: actor.orgId, doc: await core.invoiceDocument(db, actor, candidates[0].id), sample: false };
+    const today = new Date().toISOString().slice(0, 10);
+    const doc = {
+      number: `${settings.numberPrefix}-${today.slice(0, 4)}-${'1'.padStart(settings.numberPadding, '0')}`, kind: 'progress', status: 'issued', label: 'Situation n°2',
+      issued_on: today, due_on: today, currency_code: company.currencyCode, amount_minor: 9_500_000, vat_bps: 1800, vat_minor: 1_710_000, total_minor: 11_210_000,
+      retention_bps: 500, retention_minor: 560_500, deduction_minor: 1_000_000, net_minor: 9_649_500, paid_minor: 0, balance_minor: 9_649_500,
+      project_code: 'P001', project_name: 'Villa R+1', location: 'Lomé', client_name: 'M. Client Exemple', client_address: 'Quartier, Lomé',
+      client_email: 'client@example.test', client_phone: '+228 90 00 00 00', company_name: company.name, contract_ref: 'Marché n°12/2026', order_ref: null,
+      notes: null, terms: settings.paymentTerms, vat_exempt_reason: null, extra_fields: [],
+      lines: [
+        { kind: 'text', designation: 'Lot 1 — Gros œuvre', unit: null, quantity_milli: 0, unit_price_minor: 0, contract_minor: 0, cumulative_bps: 0, previous_minor: 0, amount_minor: 0 },
+        { kind: 'progress', designation: 'Fondations', unit: null, quantity_milli: 0, unit_price_minor: 0, contract_minor: 10_000_000, cumulative_bps: 10_000, previous_minor: 6_000_000, amount_minor: 4_000_000 },
+        { kind: 'progress', designation: 'Élévation', unit: null, quantity_milli: 0, unit_price_minor: 0, contract_minor: 20_000_000, cumulative_bps: 2_750, previous_minor: 0, amount_minor: 5_500_000 },
+      ],
+      adjustments: [],
+    };
+    return { settings, orgId: actor.orgId, doc, sample: true };
+  }),
+);
+
 export const updateInvoiceSettings = createServerFn({ method: 'POST' })
   .validator((input: Record<string, unknown>) => input)
   .handler(({ data }) => act((actor) => core.updateInvoiceSettings(runtime().db, actor, data)));

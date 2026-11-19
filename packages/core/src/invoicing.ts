@@ -18,27 +18,44 @@ const text = (max: number) => z.string().trim().max(max).nullable().optional();
 
 // ---------------------------------------------------------------- settings
 
+export const INVOICE_TEMPLATES = ['classic', 'modern', 'compact'] as const;
+export interface CustomField { label: string; value: string }
+
 export interface InvoiceSettings {
   numberPrefix: string; numberPadding: number; numberYearly: boolean; dueDays: number;
   legalName: string | null; taxId: string | null; tradeRegister: string | null; address: string | null; phone: string | null; email: string | null;
   bankDetails: string | null; mobileMoney: string | null; paymentTerms: string | null; footer: string | null;
+  // How it looks (spec 036).
+  logoKey: string | null; template: (typeof INVOICE_TEMPLATES)[number]; accentColor: string | null; logoPosition: 'left' | 'center' | 'right';
+  logoHeight: number; font: 'sans' | 'serif'; showAmountWords: boolean; showSignature: boolean; signerName: string | null; signerTitle: string | null;
+  showClientContact: boolean; showSite: boolean; showPayments: boolean; showUnitColumns: boolean;
+  titles: Partial<Record<'advance' | 'progress' | 'final', string>>; customFields: CustomField[];
 }
 
 const SETTINGS_COLUMNS = {
   numberPrefix: 'number_prefix', numberPadding: 'number_padding', numberYearly: 'number_yearly', dueDays: 'due_days',
   legalName: 'legal_name', taxId: 'tax_id', tradeRegister: 'trade_register', address: 'address', phone: 'phone', email: 'email',
   bankDetails: 'bank_details', mobileMoney: 'mobile_money', paymentTerms: 'payment_terms', footer: 'footer',
+  template: 'template', accentColor: 'accent_color', logoPosition: 'logo_position', logoHeight: 'logo_height', font: 'font',
+  showAmountWords: 'show_amount_words', showSignature: 'show_signature', signerName: 'signer_name', signerTitle: 'signer_title',
+  showClientContact: 'show_client_contact', showSite: 'show_site', showPayments: 'show_payments', showUnitColumns: 'show_unit_columns',
+  titles: 'titles', customFields: 'custom_fields',
 } as const;
+/** Columns the settings form writes (the logo has its own door). */
+type Writable = Exclude<keyof InvoiceSettings, 'logoKey'>;
+const JSON_COLUMNS = new Set<string>(['titles', 'customFields']);
 
 const DEFAULT_SETTINGS: InvoiceSettings = {
   numberPrefix: 'F', numberPadding: 4, numberYearly: true, dueDays: 30, legalName: null, taxId: null, tradeRegister: null, address: null,
   phone: null, email: null, bankDetails: null, mobileMoney: null, paymentTerms: null, footer: null,
+  logoKey: null, template: 'classic', accentColor: null, logoPosition: 'left', logoHeight: 56, font: 'sans', showAmountWords: true, showSignature: false,
+  signerName: null, signerTitle: null, showClientContact: true, showSite: true, showPayments: true, showUnitColumns: true, titles: {}, customFields: [],
 };
 
-async function readSettings(tx: Tx, orgId: string): Promise<InvoiceSettings> {
-  const select = Object.entries(SETTINGS_COLUMNS).map(([key, column]) => `${column} as "${key}"`).join(', ');
+export async function readSettings(tx: Tx, orgId: string): Promise<InvoiceSettings> {
+  const select = [...Object.entries(SETTINGS_COLUMNS), ['logoKey', 'logo_key']].map(([key, column]) => `${column} as "${key}"`).join(', ');
   const { rows } = await tx.query<InvoiceSettings>(`select ${select} from invoice_settings where org_id = $1`, [orgId]);
-  return rows[0] ?? DEFAULT_SETTINGS;
+  return rows[0] ? { ...DEFAULT_SETTINGS, ...rows[0] } : DEFAULT_SETTINGS;
 }
 
 export async function getInvoiceSettings(db: Db, actor: Actor): Promise<InvoiceSettings> {
@@ -52,6 +69,11 @@ const settingsInput = z.object({
   dueDays: z.number().int().min(0).max(365),
   legalName: text(200), taxId: text(60), tradeRegister: text(80), address: text(400), phone: text(60), email: text(200),
   bankDetails: text(600), mobileMoney: text(300), paymentTerms: text(600), footer: text(600),
+  template: z.enum(INVOICE_TEMPLATES), accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/u).nullable(), logoPosition: z.enum(['left', 'center', 'right']),
+  logoHeight: z.number().int().min(24).max(160), font: z.enum(['sans', 'serif']), showAmountWords: z.boolean(), showSignature: z.boolean(),
+  signerName: text(120), signerTitle: text(120), showClientContact: z.boolean(), showSite: z.boolean(), showPayments: z.boolean(), showUnitColumns: z.boolean(),
+  titles: z.object({ advance: z.string().trim().max(80).optional(), progress: z.string().trim().max(80).optional(), final: z.string().trim().max(80).optional() }),
+  customFields: z.array(z.object({ label: z.string().trim().min(1).max(60), value: z.string().trim().max(200) })).max(12),
 }).partial();
 
 export async function updateInvoiceSettings(db: Db, actor: Actor, input: unknown): Promise<void> {
@@ -60,15 +82,36 @@ export async function updateInvoiceSettings(db: Db, actor: Actor, input: unknown
   await asActor(db, actor, async (tx) => {
     const before = await readSettings(tx, actor.orgId);
     const next = { ...before, ...Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value === '' ? null : value])) } as InvoiceSettings;
-    const keys = Object.keys(SETTINGS_COLUMNS) as (keyof InvoiceSettings)[];
+    const keys = Object.keys(SETTINGS_COLUMNS) as Writable[];
     await tx.query(
       `insert into invoice_settings (org_id, ${keys.map((key) => SETTINGS_COLUMNS[key]).join(', ')}, updated_at)
-       values ($1, ${keys.map((_, index) => `$${index + 2}`).join(', ')}, now())
+       values ($1, ${keys.map((key, index) => `$${index + 2}${JSON_COLUMNS.has(key) ? '::jsonb' : ''}`).join(', ')}, now())
        on conflict (org_id) do update set ${keys.map((key) => `${SETTINGS_COLUMNS[key]} = excluded.${SETTINGS_COLUMNS[key]}`).join(', ')}, updated_at = now()`,
-      [actor.orgId, ...keys.map((key) => next[key])],
+      [actor.orgId, ...keys.map((key) => (JSON_COLUMNS.has(key) ? JSON.stringify(next[key]) : next[key]))],
     );
     await journal(tx, actor, 'invoice.settings', actor.orgId, before, next);
   });
+}
+
+/**
+ * The company's logo (spec 036): stored by the application, its key kept here; the same logo is
+ * printed on invoices and shown in client spaces. `null` removes it.
+ */
+export async function setCompanyLogo(db: Db, actor: Actor, key: string | null, publicPath: string | null): Promise<void> {
+  ensure(actor, 'finance.write');
+  await asActor(db, actor, async (tx) => {
+    await tx.query(
+      `insert into invoice_settings (org_id, logo_key) values ($1, $2) on conflict (org_id) do update set logo_key = excluded.logo_key, updated_at = now()`,
+      [actor.orgId, key]);
+    await tx.query('update organization set logo = $2 where id = $1', [actor.orgId, publicPath]);
+    await journal(tx, actor, key ? 'company.logo' : 'company.logo_remove', actor.orgId, null, null);
+  });
+}
+
+/** Where a company's logo is stored (public: printed on invoices). */
+export async function companyLogoKey(db: Db, orgId: string): Promise<string | null> {
+  const { rows } = await db.query<{ key: string | null }>('select struo_org_logo($1) as key', [orgId]);
+  return rows[0]?.key ?? null;
 }
 
 /** The next number of the company's series: prefix, year (when yearly), counter with its padding. */
@@ -202,6 +245,7 @@ const saveInput = z.object({
   vatExemptReason: text(200),
   retentionBps: z.number().int().min(0).max(10_000).optional(),
   deductionMinor: z.number().int().min(0).max(1e15).optional(),
+  extraFields: z.array(z.object({ label: z.string().trim().min(1).max(60), value: z.string().trim().max(200) })).max(12).optional(),
   lines: z.array(lineInput).max(300).optional(),
   adjustments: z.array(adjustmentInput).max(20).optional(),
 });
@@ -221,11 +265,12 @@ export async function saveDraftInvoice(db: Db, actor: Actor, id: string, input: 
     const columns: Record<string, string> = {
       kind: 'kind', label: 'label', issuedOn: 'issued_on', dueOn: 'due_on', contractRef: 'contract_ref', orderRef: 'order_ref', notes: 'notes',
       terms: 'terms', vatBps: 'vat_bps', vatExemptReason: 'vat_exempt_reason', retentionBps: 'retention_bps', deductionMinor: 'deduction_minor',
+      extraFields: 'extra_fields',
     };
     const entries = Object.entries(data).filter(([key, value]) => columns[key] && value !== undefined);
     if (entries.length) {
-      await tx.query(`update invoice set ${entries.map(([key], index) => `${columns[key]} = $${index + 3}`).join(', ')} where id = $1 and org_id = $2`,
-        [id, actor.orgId, ...entries.map(([, value]) => value)]);
+      await tx.query(`update invoice set ${entries.map(([key], index) => `${columns[key]} = $${index + 3}${key === 'extraFields' ? '::jsonb' : ''}`).join(', ')} where id = $1 and org_id = $2`,
+        [id, actor.orgId, ...entries.map(([key, value]) => (key === 'extraFields' ? JSON.stringify(value) : value))]);
     }
     if (data.lines) {
       await tx.query('delete from invoice_line where invoice_id = $1 and org_id = $2', [id, actor.orgId]);
@@ -313,6 +358,7 @@ export interface InvoiceEdit {
   id: string; status: string; number: string; kind: string; label: string | null; issuedOn: string; dueOn: string; currencyCode: string;
   projectId: string; projectCode: string; projectName: string; clientName: string | null;
   contractRef: string | null; orderRef: string | null; notes: string | null; terms: string | null; vatExemptReason: string | null;
+  extraFields: CustomField[];
   amountMinor: number; vatBps: number; vatMinor: number; totalMinor: number; retentionBps: number; retentionMinor: number;
   deductionMinor: number; otherDeductionsMinor: number; netMinor: number;
   lines: InvoiceLineRow[]; adjustments: InvoiceAdjustmentRow[];
@@ -327,7 +373,7 @@ export async function getInvoiceForEdit(db: Db, actor: Actor, id: string): Promi
     const head = (await tx.query(
       `select i.id, i.status, i.number, i.kind, i.label, to_char(i.issued_on, 'YYYY-MM-DD') as "issuedOn", to_char(i.due_on, 'YYYY-MM-DD') as "dueOn",
               i.currency_code as "currencyCode", i.project_id as "projectId", p.code as "projectCode", p.name as "projectName", c.name as "clientName",
-              i.contract_ref as "contractRef", i.order_ref as "orderRef", i.notes, i.terms, i.vat_exempt_reason as "vatExemptReason",
+              i.contract_ref as "contractRef", i.order_ref as "orderRef", i.notes, i.terms, i.vat_exempt_reason as "vatExemptReason", i.extra_fields as "extraFields",
               i.amount_minor as "amountMinor", i.vat_bps as "vatBps", i.vat_minor as "vatMinor", i.total_minor as "totalMinor",
               i.retention_bps as "retentionBps", i.retention_minor as "retentionMinor", i.deduction_minor as "deductionMinor",
               i.other_deductions_minor as "otherDeductionsMinor", i.net_minor as "netMinor"

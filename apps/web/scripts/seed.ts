@@ -116,6 +116,20 @@ for (const file of ['sig1.png', 'sig2.png', 'sig3.png']) {
 }
 console.log(`files: ${Object.keys(photoKey).length} photos, ${signatureKeys.length} signatures`);
 
+// The company's invoices: its (generated) logo, fictional legal and bank details, its look (spec 036).
+const logoKey = `org/${orgId}/branding/logo-demo`;
+await storage.put(logoKey, new Uint8Array(readFileSync(path.join(here, 'demo/logo-kekeli.png'))), 'image/png');
+await core.setCompanyLogo(app, boss, logoKey, `/api/files/logo/${orgId}`);
+await core.updateInvoiceSettings(app, boss, {
+  legalName: 'Kekeli Construction SARL', taxId: '1000000000 (fictif)', tradeRegister: 'TG-LOM-0000-B-00000 (fictif)',
+  address: 'Boulevard du 13 Janvier, Lomé, Togo', phone: '+228 22 00 00 00', email: 'facturation@kekeli.example.test',
+  bankDetails: 'Banque exemple — compte fictif\nTitulaire : Kekeli Construction SARL', mobileMoney: 'T-Money / Flooz : +228 90 00 00 00 (fictif)',
+  paymentTerms: 'Paiement à 30 jours par virement ou mobile money. Retenue de garantie libérée à la réception définitive.',
+  footer: 'Kekeli Construction SARL — société fictive de démonstration Struo',
+  template: 'classic', accentColor: '#e8590c', showSignature: true, signerName: 'Afi Mensah', signerTitle: 'Gérante',
+  titles: { progress: 'Situation de travaux' }, customFields: [{ label: 'Agrément', value: 'BTP catégorie B (fictif)' }],
+});
+
 // ---------------------------------------------------------------- clients
 const client = async (name: string, kind: 'individual' | 'company' | 'public', phone: string, email: string | null) =>
   (await core.createClient(app, boss, { name, kind, phone, email })).id;
