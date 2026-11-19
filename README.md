@@ -43,7 +43,10 @@ pnpm typecheck
 
 ## Connect an assistant (MCP)
 
-Create a key in **Settings → MCP & API**, then:
+Claude.ai, ChatGPT and other OAuth-capable assistants: add `https://<your-host>/mcp` as a connector;
+you sign in, choose the company, and the assistant is connected (revocable in Settings → MCP & API).
+
+With a company key instead (Settings → MCP & API), for example in Claude Code:
 
 ```bash
 claude mcp add --transport http struo https://<your-host>/mcp --header "Authorization: Bearer <key>"

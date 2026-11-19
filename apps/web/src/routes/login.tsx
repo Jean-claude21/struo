@@ -3,12 +3,30 @@ import { useState } from 'react';
 import { Mascot } from '@/components/Mascot.tsx';
 import { PublicHeader } from '@/components/PublicHeader.tsx';
 import { ErrorText, Field } from '@/components/ui.tsx';
-import { authClient } from '@/features/auth/client.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
-export const nextSearch = (search: Record<string, unknown>): { next?: string } => ({
+// Keeps the OAuth request of an assistant (client_id, sig…) next to `next`, untouched.
+export const nextSearch = (search: Record<string, unknown>): { next?: string } & Record<string, string | undefined> => ({
+  ...Object.fromEntries(Object.entries(search).filter(([, value]) => typeof value === 'string')),
   next: typeof search.next === 'string' && search.next.startsWith('/') && !search.next.startsWith('//') ? search.next : undefined,
 });
+
+/**
+ * Signs in or up. During an assistant's OAuth flow (the page was opened with its client_id), the
+ * request goes along and the accounts library answers with where to go next (the consent page).
+ */
+export async function authenticate(kind: 'sign-in' | 'sign-up', body: Record<string, string>): Promise<{ ok: boolean; url?: string }> {
+  const query = window.location.search.slice(1);
+  const oauth = new URLSearchParams(query).has('client_id');
+  const response = await fetch(`/api/auth/${kind}/email`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(oauth ? { ...body, oauth_query: query } : body),
+  });
+  const data = (await response.json().catch(() => ({}))) as { url?: string };
+  return { ok: response.ok, url: data.url };
+}
 
 export const Route = createFileRoute('/login')({ validateSearch: nextSearch, component: Login });
 
@@ -30,10 +48,10 @@ function Login() {
             const form = new FormData(event.currentTarget);
             setBusy(true);
             setError(null);
-            const result = await authClient.signIn.email({ email: String(form.get('email')), password: String(form.get('password')) });
+            const result = await authenticate('sign-in', { email: String(form.get('email')), password: String(form.get('password')) });
             setBusy(false);
-            if (result.error) setError(t('errors.sign_in_failed'));
-            else window.location.href = next ?? '/app';
+            if (!result.ok) setError(t('errors.sign_in_failed'));
+            else window.location.href = result.url ?? next ?? '/app';
           }}
         >
           <Field label={t('app.email')}>
@@ -44,7 +62,7 @@ function Login() {
           </Field>
           <ErrorText error={error} />
           <div className="pair">
-            <Link to="/signup" search={{ next }} className="btn secondary">
+            <Link to="/signup" search={Route.useSearch()} className="btn secondary">
               {t('auth.signUp')}
             </Link>
             <button className="btn" disabled={busy}>

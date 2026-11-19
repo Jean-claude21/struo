@@ -3,9 +3,8 @@ import { useState } from 'react';
 import { Mascot } from '@/components/Mascot.tsx';
 import { PublicHeader } from '@/components/PublicHeader.tsx';
 import { ErrorText, Field } from '@/components/ui.tsx';
-import { authClient } from '@/features/auth/client.ts';
 import { useI18n } from '@/i18n/index.tsx';
-import { nextSearch } from './login.tsx';
+import { authenticate, nextSearch } from './login.tsx';
 
 export const Route = createFileRoute('/signup')({ validateSearch: nextSearch, component: Signup });
 
@@ -30,14 +29,14 @@ function Signup() {
             const form = new FormData(event.currentTarget);
             setBusy(true);
             setError(null);
-            const result = await authClient.signUp.email({
+            const result = await authenticate('sign-up', {
               name: String(form.get('name')),
               email: String(form.get('email')),
               password: String(form.get('password')),
             });
             setBusy(false);
-            if (result.error) setError(t('errors.sign_up_failed'));
-            else window.location.href = next ?? '/onboarding';
+            if (!result.ok) setError(t('errors.sign_up_failed'));
+            else window.location.href = result.url ?? next ?? '/onboarding';
           }}
         >
           <Field label={t('auth.yourName')}>
@@ -51,7 +50,7 @@ function Signup() {
           </Field>
           <ErrorText error={error} />
           <div className="pair">
-            <Link to="/login" search={{ next }} className="btn secondary">
+            <Link to="/login" search={Route.useSearch()} className="btn secondary">
               {t('auth.signIn')}
             </Link>
             <button className="btn" disabled={busy}>

@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { asActor, ensure, journal, parse, resolveActor } from './access.ts';
-import type { Actor, Db } from './db.ts';
-import { notFound } from './errors.ts';
+import { asUser, type Actor, type Db } from './db.ts';
+import { DomainError, notFound } from './errors.ts';
 import { hashToken } from './portal.ts';
 
 const PREFIX = 'struo_sk_';
@@ -50,4 +50,53 @@ export async function actorFromApiKey(db: Db, key: string, door: 'api' | 'mcp'):
   const owner = rows[0];
   if (!owner) return null;
   return resolveActor(db, owner.user_id, owner.org_id, door);
+}
+
+// ---------------------------------------------------------------- OAuth MCP clients (spec 016)
+
+/** Records which company an OAuth client (Claude.ai, ChatGPT…) may reach for this person. */
+export async function grantMcpCompany(db: Db, userId: string, clientId: string, orgId: string): Promise<void> {
+  const actor = await resolveActor(db, userId, orgId, 'mcp');
+  if (!actor) throw new DomainError('forbidden', 403);
+  await asActor(db, actor, async (tx) => {
+    await tx.query(
+      `insert into mcp_grant (user_id, client_id, org_id) values ($1, $2, $3)
+       on conflict (user_id, client_id) do update set org_id = excluded.org_id, created_at = now()`,
+      [userId, clientId, orgId],
+    );
+    await journal(tx, actor, 'mcp.grant', clientId, null, { orgId });
+  });
+}
+
+/** The actor an OAuth token stands for: its person, in the company chosen at consent. */
+export async function actorFromMcpGrant(db: Db, userId: string, clientId: string): Promise<Actor | null> {
+  const orgId = await asUser(db, userId, async (tx) => {
+    const { rows } = await tx.query<{ org_id: string }>('select org_id from mcp_grant where user_id = $1 and client_id = $2', [userId, clientId]);
+    return rows[0]?.org_id ?? null;
+  });
+  return orgId ? resolveActor(db, userId, orgId, 'mcp') : null;
+}
+
+/** The OAuth clients connected to this company, for its members to see and revoke their own. */
+export async function listMcpConnections(db: Db, actor: Actor) {
+  return asActor(db, actor, async (tx) => {
+    const { rows } = await tx.query(
+      `select g.client_id as "clientId", coalesce(c.name, g.client_id) as "clientName", u.name as "userName",
+              g.user_id = $2 as mine, g.created_at as "createdAt"
+         from mcp_grant g join "user" u on u.id = g.user_id left join "oauthClient" c on c."clientId" = g.client_id
+        where g.org_id = $1 order by g.created_at desc`,
+      [actor.orgId, actor.userId],
+    );
+    return rows as { clientId: string; clientName: string; userName: string; mine: boolean; createdAt: string }[];
+  });
+}
+
+/** Revokes one's own OAuth connection: the grant and the consent go, the token stops working. */
+export async function revokeMcpConnection(db: Db, actor: Actor, clientId: string): Promise<void> {
+  await asActor(db, actor, async (tx) => {
+    await tx.query('delete from mcp_grant where user_id = $1 and client_id = $2', [actor.userId, clientId]);
+    await tx.query('delete from "oauthConsent" where "userId" = $1 and "clientId" = $2', [actor.userId, clientId]);
+    await tx.query('update "oauthAccessToken" set revoked = now() where "userId" = $1 and "clientId" = $2 and revoked is null', [actor.userId, clientId]);
+    await journal(tx, actor, 'mcp.revoke', clientId, null, null);
+  });
 }
