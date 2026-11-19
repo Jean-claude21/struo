@@ -54,7 +54,8 @@ export async function listChecklistRuns(db: Db, actor: Actor, filters: { project
         order by c.done_at desc limit $3`,
       [actor.orgId, filters.projectId || null, Math.min(filters.limit ?? 50, 200)],
     );
-    return rows as {
+    // Timestamps leave the core as ISO strings (the driver gives Date objects).
+    return rows.map((row) => ({ ...row, doneAt: new Date(row.doneAt as string | Date).toISOString() })) as {
       id: string; projectId: string; projectCode: string; projectName: string; name: string; items: { label: string; done: boolean; note?: string | null }[];
       doneCount: number; totalCount: number; completed: boolean; authorName: string; doneAt: string;
     }[];

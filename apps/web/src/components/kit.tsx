@@ -382,3 +382,68 @@ export const daysUntil = (iso: string | null | undefined) => {
   const target = new Date(`${iso.slice(0, 10)}T12:00:00`);
   return Math.round((target.getTime() - today.getTime()) / 86400000);
 };
+
+// ---------------------------------------------------------------- context menu
+
+/** Arrow keys, Home and End move between the items of an open menu. */
+function menuKeys(root: HTMLElement | null, event: React.KeyboardEvent) {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  const items = Array.from(root?.querySelectorAll<HTMLElement>('.mi') ?? []);
+  if (!items.length) return;
+  event.preventDefault();
+  const index = items.indexOf(document.activeElement as HTMLElement);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+    : event.key === 'ArrowDown' ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+  items[next]?.focus();
+}
+
+export type MenuAt = { x: number; y: number } | null;
+
+/** Where a right click (or a « … » button) asks for a menu. */
+export const menuAt = (event: React.MouseEvent): MenuAt => {
+  event.preventDefault(); event.stopPropagation();
+  if (event.type === 'contextmenu') return { x: event.clientX, y: event.clientY };
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  return { x: rect.left, y: rect.bottom + 4 };
+};
+
+/**
+ * A menu opened at a point: right click on a row, a card or a file, or its « … » button. It stays
+ * inside the window, closes on Escape, an outside click, a scroll or a resize, and is keyboard-driven.
+ */
+export function ContextMenu({ at, onClose, children, width }: { at: MenuAt; onClose: () => void; children: ReactNode; width?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<CSSProperties>({ visibility: 'hidden' });
+  useEscape(onClose, Boolean(at));
+  useLayoutEffect(() => {
+    if (!at || !ref.current) return;
+    const box = ref.current.getBoundingClientRect();
+    setPosition({
+      top: Math.max(8, Math.min(at.y, window.innerHeight - box.height - 8)),
+      left: Math.max(8, Math.min(at.x, window.innerWidth - box.width - 8)),
+      width,
+    });
+    ref.current.querySelector<HTMLElement>('.mi, input, select')?.focus();
+  }, [at, width]);
+  useEffect(() => {
+    if (!at) return;
+    const onDown = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) onClose(); };
+    const onScroll = (event: Event) => { if (!ref.current?.contains(event.target as Node)) onClose(); };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('resize', onClose);
+    window.addEventListener('scroll', onScroll, true);
+    return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('resize', onClose); window.removeEventListener('scroll', onScroll, true); };
+  }, [at, onClose]);
+  if (!at) return null;
+  return (
+    <Portal>
+      <div ref={ref} className="pop" role="menu" style={position} onKeyDown={(event) => menuKeys(ref.current, event)} onContextMenu={(event) => event.preventDefault()}>
+        {children}
+      </div>
+    </Portal>
+  );
+}
+
+/** A thin rule between groups of menu items, and a small heading. */
+export const MenuSep = () => <div className="msep" />;
+export const MenuHead = ({ children }: { children: ReactNode }) => <div className="mhead">{children}</div>;

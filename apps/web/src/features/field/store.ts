@@ -16,7 +16,7 @@ export interface FieldProject {
 
 export interface FieldSnapshot {
   at: string;
-  user: { name: string; role: string; canReport: boolean };
+  user: { id?: string; name: string; role: string; canReport: boolean };
   company: { name: string };
   projects: FieldProject[];
   templates?: { id: string; name: string; items: string[]; required: boolean }[];
@@ -118,8 +118,15 @@ async function withStore<T>(name: 'kv' | 'outbox', mode: IDBTransactionMode, wor
 }
 
 export const saveSnapshot = (snapshot: FieldSnapshot) => withStore('kv', 'readwrite', (store) => store.put(snapshot, 'snapshot'));
+/** Forgets the cached sites: another person signed in, or this one signed out. */
+export const clearSnapshot = () => withStore('kv', 'readwrite', (store) => store.delete('snapshot'));
 export const readSnapshot = () => withStore<FieldSnapshot | undefined>('kv', 'readonly', (store) => store.get('snapshot') as IDBRequest<FieldSnapshot | undefined>);
-export const enqueue = (item: OutboxItem) => withStore('outbox', 'readwrite', (store) => store.put(item));
+const put = (item: OutboxItem) => withStore('outbox', 'readwrite', (store) => store.put(item));
+/** Queues an item, tagged with the person who wrote it (it is only ever sent under their account). */
+export async function enqueue(item: OutboxItem): Promise<void> {
+  const owner = (item as { userId?: string }).userId ?? (await readSnapshot())?.user.id;
+  await put({ ...item, ...(owner ? { userId: owner } : {}) } as OutboxItem);
+}
 export const outbox = () => withStore<OutboxItem[]>('outbox', 'readonly', (store) => store.getAll() as IDBRequest<OutboxItem[]>);
 const remove = (id: string) => withStore('outbox', 'readwrite', (store) => store.delete(id));
 
@@ -134,7 +141,10 @@ export async function persist(): Promise<void> {
 
 export async function fetchSnapshot(): Promise<FieldSnapshot | null> {
   const response = await fetch('/api/field/snapshot', { credentials: 'same-origin', headers: { accept: 'application/json' } });
-  if (response.status === 401 || response.status === 403) throw new Error(response.status === 401 ? 'not_signed_in' : 'no_company');
+  if (response.status === 401 || response.status === 403) {
+    await clearSnapshot(); // never keep showing someone else's sites
+    throw new Error(response.status === 401 ? 'not_signed_in' : 'no_company');
+  }
   if (!response.ok) return null;
   const snapshot = (await response.json()) as FieldSnapshot;
   await saveSnapshot(snapshot);
@@ -147,13 +157,16 @@ let syncing: Promise<{ sent: number; failed: number }> | null = null;
  * Sends the outbox, oldest first. A refusal the server will never accept (4xx other than 401/429)
  * is kept with its error for the person to see; a network error simply waits for the next try.
  */
-export function syncOutbox(): Promise<{ sent: number; failed: number }> {
+export function syncOutbox(userId?: string): Promise<{ sent: number; failed: number }> {
   syncing ??= (async () => {
     let sent = 0;
     let failed = 0;
     try {
       const items = (await outbox()).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       for (const item of items) {
+        // Written by someone else on this phone: it waits for them to sign in again.
+        const author = (item as { userId?: string }).userId;
+        if (userId && author && author !== userId) continue;
         try {
           let response: Response;
           if (item.type === 'report') {
@@ -194,7 +207,7 @@ export function syncOutbox(): Promise<{ sent: number; failed: number }> {
           } else {
             failed += 1;
             const reason = ((await response.json().catch(() => ({}))) as { error?: string }).error ?? String(response.status);
-            await enqueue({ ...item, attempts: item.attempts + 1, lastError: reason });
+            await put({ ...item, attempts: item.attempts + 1, lastError: reason });
             if (response.status === 401) break;
           }
         } catch {

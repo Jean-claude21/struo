@@ -35,6 +35,9 @@ real external account · ⏳ next.
 | 028 | `028-landing` | Offer-led landing page with generated photos | ✅ | Rendered desktop and phone; live on production |
 | 029 | `029-finalize` | Expenses and profitability, clients with risk, settings roles and journal, 3-step onboarding, manager assistant | ✅ | Staging: assistant answers from real figures; every office page 200 for engineer and accountant |
 | 030 | `030-release` | E-mail through Resend, OCR on staging, release to production | ✅ | Staging: invitation and access code delivered by Resend, delivery note read exactly; production smoke tests |
+| 031 | `031-dependencies` | Real milestone dependencies (across sites, with gap, cascade, undo, loops refused) and dated phases | ✅ | `dependencies.test.ts` |
+| 032 | `032-pro-views` | Every behaviour of the reference views: menus, inline edit, quick add, layers, folding Gantt, shortcuts, file drop | ✅ | Walked in the browser as owner, engineer, accountant, site lead, client |
+| 033 | `033-demo-case` | Realistic demo company with photos, and the fixes found by walking every screen | ✅ | Local and staging seed; field cache privacy fix |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

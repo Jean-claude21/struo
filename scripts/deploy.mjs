@@ -253,7 +253,7 @@ if (!args['no-deploy']) {
       const response = await fetch(`${domain}/api/health`);
       if (response.ok) {
         console.log(`Healthy: ${domain}/api/health`);
-        if (args.seed) seedDemo();
+        if (args.seed) seedDemo(storageVariables);
         process.exit(0);
       }
     } catch {
@@ -265,11 +265,12 @@ if (!args['no-deploy']) {
 }
 
 /** Fictional demo company on staging (apps/web/scripts/seed.ts), password kept in the project secrets. */
-function seedDemo() {
+function seedDemo(storage = {}) {
   const password = secret('DEMO_PASSWORD_STAGING', () => `demo-${randomBytes(6).toString('hex')}`);
   const result = spawnSync('pnpm', ['exec', 'tsx', 'scripts/seed.ts'], {
     cwd: path.join(ROOT, 'apps/web'), stdio: 'inherit', shell: process.platform === 'win32',
-    env: { ...process.env, DATABASE_URL: appUrl, DATABASE_OWNER_URL: ownerUrl, SEED_PASSWORD: password, NODE_ENV: 'staging' },
+    // The demo photos go to the same storage as the app's files.
+    env: { ...process.env, ...storage, DATABASE_URL: appUrl, DATABASE_OWNER_URL: ownerUrl, SEED_PASSWORD: password, NODE_ENV: 'staging', APP_BASE_URL: domain },
   });
   console.log(result.status === 0 ? 'Demo data seeded (accounts: demo@, jean@, komi@, akossiwa@struo.test; password DEMO_PASSWORD_STAGING)' : 'Demo seed failed');
 }

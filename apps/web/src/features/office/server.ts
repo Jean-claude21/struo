@@ -372,7 +372,7 @@ export const getPlanning = createServerFn({ method: 'GET' }).handler(() =>
       core.listMilestones(db, actor, { late: true }),
       core.listProjects(db, actor),
     ]);
-    return { role: actor.role, gantt, late, projects: projects.map((p) => ({ id: p.id, code: p.code, name: p.name })) };
+    return { role: actor.role, gantt: gantt.sites, dependencies: gantt.dependencies, late, projects: projects.map((p) => ({ id: p.id, code: p.code, name: p.name })) };
   }),
 );
 
@@ -383,6 +383,22 @@ export const addMilestone = createServerFn({ method: 'POST' })
 export const updateMilestone = createServerFn({ method: 'POST' })
   .validator((input: { id: string; patch: Record<string, unknown> }) => input)
   .handler(({ data }) => act((actor) => core.updateMilestone(runtime().db, actor, data.id, data.patch)));
+
+export const moveMilestone = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; plannedOn: string }) => input)
+  .handler(({ data }) => act((actor) => core.moveMilestone(runtime().db, actor, data.id, { plannedOn: data.plannedOn })));
+
+export const restoreMilestoneDates = createServerFn({ method: 'POST' })
+  .validator((input: { items: { id: string; plannedOn: string }[] }) => input)
+  .handler(({ data }) => act((actor) => core.restoreMilestoneDates(runtime().db, actor, data)));
+
+export const setMilestoneDependencies = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; dependsOn: { id: string; lagDays: number }[] }) => input)
+  .handler(({ data }) => act((actor) => core.setMilestoneDependencies(runtime().db, actor, data.id, { dependsOn: data.dependsOn })));
+
+export const updatePhaseDates = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; startDate: string | null; endDate: string | null }) => input)
+  .handler(({ data }) => act((actor) => core.updatePhase(runtime().db, actor, data.id, { startDate: data.startDate, endDate: data.endDate })));
 
 export const removeMilestone = createServerFn({ method: 'POST' })
   .validator(idOf)

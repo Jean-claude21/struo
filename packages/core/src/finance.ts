@@ -253,18 +253,35 @@ export async function financeSummary(db: Db, actor: Actor) {
               coalesce(sum(f.spent_minor), 0)::bigint as "spentMinor",
               coalesce(sum(f.overdue_minor), 0)::bigint as "overdueMinor",
               coalesce(sum(f.cash_minor), 0)::bigint as "cashMinor",
-              case when sum(f.budget_minor) > 0 then round(sum(f.collected_minor)::numeric * 100 / sum(f.budget_minor))::int else 0 end
+              -- collected out of what was invoiced (the same rate as the finance page)
+              case when sum(f.invoiced_net_minor) > 0 then round(sum(f.collected_minor)::numeric * 100 / sum(f.invoiced_net_minor))::int else 0 end
                 as "collectedPct",
               case when sum(f.collected_minor) > 0
                    then round((sum(f.collected_minor) - sum(f.spent_minor))::numeric * 100 / sum(f.collected_minor))::int
-                   else null end as "marginPct"
+                   else null end as "marginPct",
+              -- margin expected at completion: the cost so far, projected from the progress of each open site
+              case when sum(f.budget_minor) filter (where p.status in ('active', 'suspended') and f.progress_pct > 0) > 0
+                   then round((sum(f.budget_minor) filter (where p.status in ('active', 'suspended') and f.progress_pct > 0)
+                               - sum(f.spent_minor * 100.0 / f.progress_pct) filter (where p.status in ('active', 'suspended') and f.progress_pct > 0))
+                              * 100 / sum(f.budget_minor) filter (where p.status in ('active', 'suspended') and f.progress_pct > 0))::int
+                   else null end as "projectedMarginPct",
+              (select coalesce(sum(b.balance_minor), 0) from invoice_balance b join invoice i on i.id = b.invoice_id
+                where b.org_id = $1 and i.status = 'issued' and b.balance_minor > 0 and b.due_on between current_date and current_date + 30)::bigint
+                as "dueSoonMinor"
          from project_finance f join project p on p.id = f.project_id
         where f.org_id = $1 and p.archived_at is null`,
       [actor.orgId],
     );
-    return rows[0] as {
+    const row = rows[0];
+    return {
+      ...row,
+      budgetMinor: Number(row.budgetMinor), invoicedMinor: Number(row.invoicedMinor), collectedMinor: Number(row.collectedMinor),
+      receivableMinor: Number(row.receivableMinor), retentionMinor: Number(row.retentionMinor), spentMinor: Number(row.spentMinor),
+      overdueMinor: Number(row.overdueMinor), cashMinor: Number(row.cashMinor), dueSoonMinor: Number(row.dueSoonMinor),
+    } as {
       budgetMinor: number; invoicedMinor: number; collectedMinor: number; receivableMinor: number; retentionMinor: number;
       spentMinor: number; overdueMinor: number; cashMinor: number; collectedPct: number; marginPct: number | null;
+      projectedMarginPct: number | null; dueSoonMinor: number;
     };
   });
 }

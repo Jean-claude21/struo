@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react';
-import { createFileRoute, Link, Outlet, redirect, useRouterState } from '@tanstack/react-router';
+import { useEffect, useRef, useState } from 'react';
+import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   Building2, CalendarRange, ChevronsUpDown, FileText, FolderKanban, HardHat, Home, LogOut, Menu, Monitor, Moon, Palette, Plus,
-  Receipt, Search, Settings, Shield, Sun, Users, Wallet, WalletCards, Contact, type LucideIcon,
+  Keyboard, Receipt, Search, Settings, Shield, Sun, Users, Wallet, WalletCards, Contact, type LucideIcon,
 } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { CommandPalette } from '@/components/Palette.tsx';
-import { Avatar, MenuItem, Popover } from '@/components/kit.tsx';
+import { Avatar, MenuItem, Modal, Popover } from '@/components/kit.tsx';
 import { authClient } from '@/features/auth/client.ts';
+import { clearSnapshot } from '@/features/field/store.ts';
 import { getShell, selectCompany } from '@/features/shell/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 import { applyTheme, readTheme, type Theme } from '@/lib/theme.ts';
@@ -72,10 +73,29 @@ function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void 
   );
 }
 
+// Keyboard: « G » then a letter goes to a page; « N » creates on the pages that have something to create.
+const GO_KEYS: Record<string, string> = {
+  a: '/app', c: '/app/projects', p: '/app/planning', t: '/app/field', f: '/app/finance', d: '/app/documents',
+  e: '/app/expenses', l: '/app/clients', q: '/app/team', s: '/app/settings',
+};
+const CREATE_ON: Record<string, string> = {
+  '/app/projects': '/app/projects?new=1', '/app/finance': '/app/finance?new=1', '/app/expenses': '/app/expenses?new=1',
+  '/app/team': '/app/team?invite=1', '/app/clients': '/app/clients?new=1', '/app/planning': '/app/planning?new=1', '/app/documents': '/app/documents?new=1',
+};
+const SHORTCUTS: [string[], MessageKey][] = [
+  [['Ctrl', 'K'], 'shell.kPalette'], [['/'], 'shell.kSearch'], [['?'], 'shell.kHelp'], [['N'], 'shell.kNew'],
+  [['G', 'A'], 'shell.today'], [['G', 'C'], 'shell.sites'], [['G', 'P'], 'shell.planning'], [['G', 'T'], 'shell.field'],
+  [['G', 'F'], 'shell.finance'], [['G', 'E'], 'shell.expenses'], [['G', 'D'], 'shell.documents'], [['G', 'L'], 'shell.clients'],
+  [['G', 'Q'], 'shell.team'], [['G', 'S'], 'shell.settings'], [['Échap'], 'shell.kEscape'],
+];
+
 function OfficeLayout() {
   const { t } = useI18n();
   const { viewer } = Route.useLoaderData();
   const [palette, setPalette] = useState(false);
+  const [help, setHelp] = useState(false);
+  const goPending = useRef(false);
+  const navigate = useNavigate();
   const [sideOpen, setSideOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>('system');
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -85,15 +105,30 @@ function OfficeLayout() {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       const typing = /input|textarea|select/iu.test((event.target as HTMLElement).tagName) || (event.target as HTMLElement).isContentEditable;
-      if ((event.key === 'k' || event.key === 'K') && (event.metaKey || event.ctrlKey)) { event.preventDefault(); setPalette((open) => !open); }
-      else if (event.key === '/' && !typing) { event.preventDefault(); setPalette(true); }
+      if ((event.key === 'k' || event.key === 'K') && (event.metaKey || event.ctrlKey)) { event.preventDefault(); setPalette((open) => !open); return; }
+      if (typing || event.metaKey || event.ctrlKey || event.altKey || document.querySelector('.modal, .pop')) return;
+      if (event.key === '/') { event.preventDefault(); setPalette(true); return; }
+      if (event.key === '?') { event.preventDefault(); setHelp(true); return; }
+      // « G » then a letter: go to a page (within 1.2 s).
+      if (goPending.current) {
+        goPending.current = false;
+        const target = GO_KEYS[event.key.toLowerCase()];
+        if (target) { event.preventDefault(); void navigate({ to: target }); }
+        return;
+      }
+      if (event.key === 'g' || event.key === 'G') { goPending.current = true; window.setTimeout(() => { goPending.current = false; }, 1200); return; }
+      // « N »: create on the current page (a site, an invoice, an expense…).
+      if (event.key === 'n' || event.key === 'N') {
+        const create = CREATE_ON[window.location.pathname];
+        if (create) { event.preventDefault(); window.location.href = create; }
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
   const changeTheme = (next: Theme) => { applyTheme(next); setTheme(next); };
-  const signOut = async () => { await authClient.signOut(); window.location.href = '/'; };
+  const signOut = async () => { await clearSnapshot().catch(() => undefined); await authClient.signOut(); window.location.href = '/'; };
   const role = t(`roles.${viewer.company.role}` as MessageKey);
 
   return (
@@ -183,6 +218,7 @@ function OfficeLayout() {
                 <MenuItem icon={Monitor} checked={theme === 'system'} onSelect={() => changeTheme('system')}>{t('ui.themeSystem')}</MenuItem>
                 <div className="msep" />
                 <div style={{ padding: '.25rem .6rem' }}><LanguageSwitch /></div>
+                <MenuItem icon={Keyboard} onSelect={() => { close(); setHelp(true); }} right="?">{t('shell.shortcuts')}</MenuItem>
                 <MenuItem icon={Palette} onSelect={() => { close(); window.location.href = '/app/system'; }}>{t('shell.system')}</MenuItem>
                 <MenuItem icon={LogOut} onSelect={() => { close(); void signOut(); }}>{t('shell.signOut')}</MenuItem>
               </>
@@ -201,6 +237,13 @@ function OfficeLayout() {
         ))}
       </nav>
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
+      <Modal open={help} onClose={() => setHelp(false)} title={t('shell.shortcuts')}>
+        <div className="shortcuts">
+          {SHORTCUTS.map(([keys, label]) => (
+            <div key={label} className="alert-row"><span className="grow">{t(label)}</span><span className="row tight">{keys.map((key) => <span key={key} className="kbd">{key}</span>)}</span></div>
+          ))}
+        </div>
+      </Modal>
     </div>
   );
 }

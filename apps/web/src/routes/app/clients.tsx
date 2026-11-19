@@ -110,7 +110,7 @@ function Clients() {
         {canWrite ? <DialogButton label={t('clients.new')} title={t('clients.new')}>{(close) => <ClientForm onDone={close} onCancel={close} />}</DialogButton> : null}
       </PageHeader>
       <div>
-        <ViewToolbar rows={data.clients} fields={fields} state={view.state} update={view.update} columns saved={view.saved} onSave={view.saveView} onRemoveSaved={view.removeView} />
+        <ViewToolbar rows={data.clients} fields={fields} state={view.state} update={view.update} columns saved={view.saved} onSave={view.saveView} onRemoveSaved={view.removeView} onRenameSaved={view.renameView} />
         <DataTable rows={rows} columns={columns} fields={fields} state={view.state} update={view.update} rowId={(row) => row.id} onRowClick={(row) => { setEditing(false); setOpenId(row.id); }}
           empty={<div className="card"><Empty text={t('clients.noClients')} /></div>} />
       </div>
