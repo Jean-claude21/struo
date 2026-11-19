@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Badge, DateText, ErrorText, Field, formData, formatMoney, Tabs, useAction } from '@/components/ui.tsx';
 import {
   addConfigurationItem, createApiKey, getSettingsPage, inviteMember, removeConfigurationItem, removeMember, revokeApiKey,
-  paySubscription, revokeInvitation, revokeMcpConnection, setMemberRole, setPaymentProvider, updateSettings,
+  eraseCompany, paySubscription, revokeInvitation, revokeMcpConnection, setMemberRole, setPaymentProvider, updateSettings,
 } from '@/features/settings/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
@@ -13,14 +13,14 @@ export const Route = createFileRoute('/app/settings')({
   component: Settings,
 });
 
-type Tab = 'company' | 'configuration' | 'members' | 'payments' | 'integrations' | 'subscription';
+type Tab = 'company' | 'configuration' | 'members' | 'payments' | 'integrations' | 'subscription' | 'data';
 type Data = Awaited<ReturnType<typeof getSettingsPage>>;
 
 function Settings() {
   const { t } = useI18n();
   const data = Route.useLoaderData();
   const [tab, setTab] = useState<Tab>('company');
-  const tabs: Tab[] = ['company', 'configuration', 'members', 'payments', 'integrations', 'subscription'];
+  const tabs: Tab[] = ['company', 'configuration', 'members', 'payments', 'integrations', 'subscription', 'data'];
   return (
     <div className="stack">
       <h1>{t('settings.title')}</h1>
@@ -31,6 +31,7 @@ function Settings() {
       {tab === 'payments' ? <PaymentsTab data={data} /> : null}
       {tab === 'integrations' ? <IntegrationsTab data={data} /> : null}
       {tab === 'subscription' ? <SubscriptionTab data={data} /> : null}
+      {tab === 'data' ? <DataTab data={data} /> : null}
     </div>
   );
 }
@@ -503,6 +504,71 @@ function SubscriptionTab({ data }: { data: Data }) {
               ))}
             </tbody>
           </table>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function DataTab({ data }: { data: Data }) {
+  const { t } = useI18n();
+  const { run, error, busy } = useAction();
+  const year = new Date().getFullYear();
+  const [from, setFrom] = useState(`${year}-01-01`);
+  const [to, setTo] = useState(`${year}-12-31`);
+  const [confirmName, setConfirmName] = useState('');
+  const finance = ['owner', 'admin', 'accountant', 'engineer'].includes(data.role);
+  const manage = data.role === 'owner' || data.role === 'admin';
+  return (
+    <div className="stack">
+      {finance ? (
+        <section className="card stack">
+          <h2>{t('settings.accountingExport')}</h2>
+          <p className="muted">{t('settings.accountingHelp')}</p>
+          <div className="form-grid">
+            <Field label={t('settings.from')}>
+              <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+            </Field>
+            <Field label={t('settings.to')}>
+              <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            </Field>
+          </div>
+          <div className="row">
+            {(['invoices', 'payments', 'expenses'] as const).map((kind) => (
+              <a key={kind} className="btn secondary" href={`/api/export/accounting/${kind}?from=${from}&to=${to}`}>
+                {t(`settings.exports.${kind}`)}
+              </a>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {manage ? (
+        <section className="card stack">
+          <h2>{t('settings.fullExport')}</h2>
+          <p className="muted">{t('settings.fullExportHelp')}</p>
+          <a className="btn" href="/api/export/company">
+            {t('settings.downloadZip')}
+          </a>
+        </section>
+      ) : null}
+      {data.role === 'owner' ? (
+        <section className="card stack" style={{ borderColor: 'var(--bad)' }}>
+          <h2 className="error">{t('settings.erase')}</h2>
+          <p>{t('settings.eraseHelp', { name: data.settings.name })}</p>
+          <input value={confirmName} onChange={(event) => setConfirmName(event.target.value)} placeholder={data.settings.name} aria-label={t('settings.erase')} />
+          <ErrorText error={error} />
+          <button
+            type="button"
+            className="btn danger"
+            disabled={busy || confirmName.trim() !== data.settings.name.trim()}
+            onClick={async () => {
+              if (!window.confirm(t('settings.eraseConfirm'))) return;
+              const done = await run(() => eraseCompany({ data: { confirmName } }), { reload: false });
+              if (done) window.location.href = '/onboarding';
+            }}
+          >
+            {t('settings.eraseButton')}
+          </button>
         </section>
       ) : null}
     </div>

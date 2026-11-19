@@ -255,3 +255,17 @@ export const settleSimulatedSubscription = createServerFn({ method: 'POST' })
       });
     }),
   );
+
+// ---------------------------------------------------------------- erasure (spec 018)
+
+/** Erases the company for good (owner, exact name typed): rows by cascade, then its files. */
+export const eraseCompany = createServerFn({ method: 'POST' })
+  .validator((input: { confirmName: string }) => ({ confirmName: String(input.confirmName ?? '').slice(0, 200) }))
+  .handler(({ data }) =>
+    act(async (actor) => {
+      const { db, storage } = runtime();
+      const { storagePrefix } = await core.eraseCompany(db, actor, data.confirmName);
+      await storage.removePrefix(storagePrefix).catch((error: unknown) => console.error('[erase] files', error));
+      return { erased: true };
+    }),
+  );

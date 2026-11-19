@@ -11,6 +11,8 @@ export interface StoredFile {
 export interface Storage {
   put(key: string, body: Uint8Array, mediaType: string): Promise<void>;
   get(key: string): Promise<StoredFile | null>;
+  /** Removes every file under a prefix (erasure of a company). */
+  removePrefix(prefix: string): Promise<void>;
 }
 
 export interface MailMessage {

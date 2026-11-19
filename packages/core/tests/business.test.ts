@@ -7,7 +7,7 @@ import {
   submitReport, financeSummary, operationsSummary, recentActivity, listProjects, listMilestones, gantt, listExpenses,
   marginByProject, complianceByProject, listReports, listIncidents, listPayments, listClients, getSettings, getSubscription,
   getConfiguration, listMembers, fieldSnapshot, listApiKeys, listPortalLinks, listMessages, reportAudioLocation, setReportTranscript, grantMcpCompany, actorFromMcpGrant, revokeMcpConnection, listMcpConnections,
-  startSubscriptionPayment, settleSubscriptionPayment, listSubscriptionPayments, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
+  startSubscriptionPayment, settleSubscriptionPayment, listSubscriptionPayments, accountingExport, companyExport, eraseCompany, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
 } from '../src/index.ts';
 import { addMember, createTestCompany, setupDatabase, today, type TestDb } from './helpers.ts';
 
@@ -255,5 +255,41 @@ describe('subscription payments (spec 017)', () => {
     expect(days).toBeGreaterThan(85);
     expect(days).toBeLessThan(95);
     expect((await listSubscriptionPayments(db.app, company))[0]?.status).toBe('succeeded');
+  });
+});
+
+describe('exports and erasure (spec 018)', () => {
+  it('exports invoices as CSV for the accountant, and the whole company without secrets', async () => {
+    const company = await createTestCompany(db, 'Entreprise exportée');
+    const { id: projectId } = await createProject(db.app, company, { name: 'Projet « export »; test', status: 'active' });
+    await createInvoice(db.app, company, { projectId, kind: 'progress', amountMinor: 1_000_000, dueOn: today(30) });
+    const invoices = await accountingExport(db.app, company, 'invoices');
+    const lines = invoices.content.slice(1).trim().split(/\r?\n/u);
+    expect(invoices.content.codePointAt(0)).toBe(0xfeff);
+    expect(lines[0]).toContain('numero;type;statut');
+    expect(lines[1]).toContain('"Projet « export »; test"');
+    expect(lines[1]).toContain(';1000000;18;180000;1180000;59000;0;1121000;0;1121000');
+    await createApiKey(db.app, company, 'Clé secrète');
+    const exported = await companyExport(db.app, company);
+    expect(exported.tables.project).toHaveLength(1);
+    expect(exported.tables.journal!.length).toBeGreaterThan(0);
+    expect(JSON.stringify(exported)).not.toMatch(/key_hash|token_hash|secret_enc/u);
+    const accountant = await addMember(db, company.orgId, 'accountant');
+    await expect(companyExport(db.app, accountant)).rejects.toMatchObject({ code: 'forbidden' });
+    expect((await accountingExport(db.app, accountant, 'payments')).filename).toMatch(/^encaissements_/u);
+  });
+
+  it('erases a company only for its owner with its exact name, leaving the others untouched', async () => {
+    const company = await createTestCompany(db, 'À effacer SARL');
+    const neighbour = await createTestCompany(db, 'Voisine SARL');
+    await createProject(db.app, company, { name: 'Projet effacé' });
+    await createProject(db.app, neighbour, { name: 'Projet gardé' });
+    const admin = await addMember(db, company.orgId, 'admin');
+    await expect(eraseCompany(db.app, admin, 'À effacer SARL')).rejects.toMatchObject({ code: 'forbidden' });
+    await expect(eraseCompany(db.app, company, 'Mauvais nom')).rejects.toMatchObject({ code: 'erase_name_mismatch' });
+    expect(await eraseCompany(db.app, company, 'À effacer SARL')).toEqual({ storagePrefix: `org/${company.orgId}/` });
+    const left = await db.owner.query('select count(*)::int as n from project where org_id = $1', [company.orgId]);
+    expect(left.rows[0].n).toBe(0);
+    expect(await listProjects(db.app, neighbour)).toHaveLength(1);
   });
 });
