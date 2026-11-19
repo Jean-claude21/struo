@@ -17,6 +17,8 @@ export interface Env {
   OPENAI_MODEL: string;
   OPENAI_TRANSCRIBE_MODEL: string;
   JOBS_ENABLED: boolean;
+  PLATFORM_MONEROO_SECRET_KEY: string;
+  PLATFORM_MONEROO_WEBHOOK_SECRET: string;
   PAYMENTS_SIMULATOR: boolean;
 }
 
@@ -57,6 +59,8 @@ export function env(): Env {
     OPENAI_MODEL: read('OPENAI_MODEL', 'gpt-4o-mini'),
     OPENAI_TRANSCRIBE_MODEL: read('OPENAI_TRANSCRIBE_MODEL', 'whisper-1'),
     JOBS_ENABLED: read('JOBS_ENABLED', 'true') !== 'false',
+    PLATFORM_MONEROO_SECRET_KEY: read('PLATFORM_MONEROO_SECRET_KEY'),
+    PLATFORM_MONEROO_WEBHOOK_SECRET: read('PLATFORM_MONEROO_WEBHOOK_SECRET'),
     // The payment simulator never runs in production unless explicitly allowed (demo instance).
     PAYMENTS_SIMULATOR: appEnv !== 'production' || read('PAYMENTS_SIMULATOR') === 'true',
   };

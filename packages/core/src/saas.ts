@@ -24,6 +24,10 @@ export interface Subscription {
   plan: Plan;
   trialEndsAt: string;
   trialExpired: boolean;
+  /** End of the paid period (null: never paid). */
+  paidUntil: string | null;
+  /** A paying plan whose period is over: the company is asked to pay. */
+  paymentDue: boolean;
   users: number;
   projects: number;
 }
@@ -34,14 +38,18 @@ export async function getSubscription(db: Db, actor: Actor): Promise<Subscriptio
       `select p.code, p.name, p.price_minor as "priceMinor", p.currency_code as "currencyCode",
               p.max_users as "maxUsers", p.max_projects as "maxProjects", p.features, s.trial_ends_at as "trialEndsAt",
               s.plan_code = 'trial' and s.trial_ends_at < now() as "trialExpired",
+              s.paid_until as "paidUntil",
+              p.price_minor > 0 and s.plan_code <> 'trial' and (s.paid_until is null or s.paid_until < now()) as "paymentDue",
               (select count(*)::int from member where "organizationId" = s.org_id) as users,
               (select count(*)::int from project where org_id = s.org_id and archived_at is null) as projects
          from org_settings s join plan p on p.code = s.plan_code where s.org_id = $1`,
       [actor.orgId],
     );
-    const row = rows[0] as Plan & { trialEndsAt: string; trialExpired: boolean; users: number; projects: number };
-    const { trialEndsAt, trialExpired, users, projects, ...plan } = row;
-    return { plan, trialEndsAt, trialExpired, users, projects };
+    const row = rows[0] as Plan & {
+      trialEndsAt: string; trialExpired: boolean; paidUntil: string | null; paymentDue: boolean; users: number; projects: number;
+    };
+    const { trialEndsAt, trialExpired, paidUntil, paymentDue, users, projects, ...plan } = row;
+    return { plan, trialEndsAt, trialExpired, paidUntil, paymentDue, users, projects };
   });
 }
 

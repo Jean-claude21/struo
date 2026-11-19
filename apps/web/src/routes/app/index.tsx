@@ -33,6 +33,11 @@ function Dashboard() {
                 : t('dashboard.trialEnds', { date: new Intl.DateTimeFormat(locale).format(new Date(data.subscription.trialEndsAt)) })}
             </p>
           ) : null}
+          {data.subscription.paymentDue ? (
+            <p className="error">
+              {t('settings.paymentDue')} <a href="/app/settings">{t('settings.payNow')}</a>
+            </p>
+          ) : null}
         </div>
         <Mascot size={90} />
       </div>

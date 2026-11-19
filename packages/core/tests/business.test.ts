@@ -6,7 +6,8 @@ import {
   portalValidateMilestone, portalView, receivablesAging, recordPayment, revokeApiKey, revokePortalLink, reviewReport,
   submitReport, financeSummary, operationsSummary, recentActivity, listProjects, listMilestones, gantt, listExpenses,
   marginByProject, complianceByProject, listReports, listIncidents, listPayments, listClients, getSettings, getSubscription,
-  getConfiguration, listMembers, fieldSnapshot, listApiKeys, listPortalLinks, listMessages, reportAudioLocation, setReportTranscript, grantMcpCompany, actorFromMcpGrant, revokeMcpConnection, listMcpConnections, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
+  getConfiguration, listMembers, fieldSnapshot, listApiKeys, listPortalLinks, listMessages, reportAudioLocation, setReportTranscript, grantMcpCompany, actorFromMcpGrant, revokeMcpConnection, listMcpConnections,
+  startSubscriptionPayment, settleSubscriptionPayment, listSubscriptionPayments, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
 } from '../src/index.ts';
 import { addMember, createTestCompany, setupDatabase, today, type TestDb } from './helpers.ts';
 
@@ -223,5 +224,36 @@ describe('OAuth MCP clients (spec 016)', () => {
     expect((await listMcpConnections(db.app, owner)).map((c) => c.clientId)).toContain('client-claude');
     await revokeMcpConnection(db.app, owner, 'client-claude');
     expect(await actorFromMcpGrant(db.app, owner.userId, 'client-claude')).toBeNull();
+  });
+});
+
+describe('subscription payments (spec 017)', () => {
+  it('prices from the plan, applies the plan once, extends the paid period, and only the platform settles', async () => {
+    const company = await createTestCompany(db, 'Entreprise abonnée');
+    const siteLead = await addMember(db, company.orgId, 'site_lead');
+    await expect(startSubscriptionPayment(db.app, siteLead, { planCode: 'pro', months: 3, provider: 'simulator' })).rejects.toMatchObject({ code: 'forbidden' });
+    await expect(startSubscriptionPayment(db.app, company, { planCode: 'trial', months: 1, provider: 'simulator' })).rejects.toMatchObject({ code: 'plan_not_payable' });
+    const payment = await startSubscriptionPayment(db.app, company, { planCode: 'pro', months: 3, provider: 'simulator' });
+    expect(payment).toMatchObject({ amountMinor: 225_000, currencyCode: 'XOF' });
+    // The application role cannot mark a payment as paid by itself.
+    const raw = await db.app.connect();
+    try {
+      await raw.query('begin');
+      await raw.query(`select set_config('struo.user_id', $1, true)`, [company.userId]);
+      await expect(raw.query(`update subscription_payment set status = 'succeeded' where id = $1`, [payment.id])).rejects.toThrow(/permission denied/u);
+      await raw.query('rollback');
+    } finally {
+      raw.release();
+    }
+    const outcome = { id: payment.id, status: 'succeeded' as const, amountMinor: 225_000, currencyCode: 'XOF' };
+    expect(await settleSubscriptionPayment(db.owner, outcome)).toBe('applied');
+    expect(await settleSubscriptionPayment(db.owner, outcome)).toBe('ignored');
+    const subscription = await getSubscription(db.app, company);
+    expect(subscription.plan.code).toBe('pro');
+    expect(subscription.paymentDue).toBe(false);
+    const days = (new Date(subscription.paidUntil!).getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(85);
+    expect(days).toBeLessThan(95);
+    expect((await listSubscriptionPayments(db.app, company))[0]?.status).toBe('succeeded');
   });
 });
