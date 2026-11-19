@@ -6,7 +6,7 @@ import {
   portalValidateMilestone, portalView, receivablesAging, recordPayment, revokeApiKey, revokePortalLink, reviewReport,
   submitReport, financeSummary, operationsSummary, recentActivity, listProjects, listMilestones, gantt, listExpenses,
   marginByProject, complianceByProject, listReports, listIncidents, listPayments, listClients, getSettings, getSubscription,
-  getConfiguration, listMembers, fieldSnapshot, listApiKeys, listPortalLinks, listMessages, reportAudioLocation, setReportTranscript, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
+  getConfiguration, listMembers, fieldSnapshot, listApiKeys, listPortalLinks, listMessages, reportAudioLocation, setReportTranscript, grantMcpCompany, actorFromMcpGrant, revokeMcpConnection, listMcpConnections, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
 } from '../src/index.ts';
 import { addMember, createTestCompany, setupDatabase, today, type TestDb } from './helpers.ts';
 
@@ -209,5 +209,19 @@ describe('voice notes (spec 015)', () => {
     // Another company cannot reach the note.
     const other = await createTestCompany(db, 'Autre entreprise');
     expect(await reportAudioLocation(db.app, other, id)).toBeNull();
+  });
+});
+
+describe('OAuth MCP clients (spec 016)', () => {
+  it('acts in the company chosen at consent, never in another one, until revoked', async () => {
+    await grantMcpCompany(db.app, owner.userId, 'client-claude', owner.orgId);
+    expect(await actorFromMcpGrant(db.app, owner.userId, 'client-claude')).toMatchObject({ orgId: owner.orgId, role: 'owner', door: 'mcp' });
+    expect(await actorFromMcpGrant(db.app, owner.userId, 'unknown-client')).toBeNull();
+    // A company the person is not a member of cannot be granted.
+    const other = await createTestCompany(db, 'Entreprise tierce');
+    await expect(grantMcpCompany(db.app, owner.userId, 'client-claude', other.orgId)).rejects.toMatchObject({ code: 'forbidden' });
+    expect((await listMcpConnections(db.app, owner)).map((c) => c.clientId)).toContain('client-claude');
+    await revokeMcpConnection(db.app, owner, 'client-claude');
+    expect(await actorFromMcpGrant(db.app, owner.userId, 'client-claude')).toBeNull();
   });
 });

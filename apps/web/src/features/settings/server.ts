@@ -1,4 +1,5 @@
 import * as core from '@struo/core';
+import { verifyOAuthQueryParams } from '@better-auth/oauth-provider';
 import { createServerFn } from '@tanstack/react-start';
 import { translate } from '@/i18n/index.tsx';
 import { chooseCompany, guarded, loadViewer, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
@@ -48,7 +49,7 @@ export const acceptInvitation = createServerFn({ method: 'POST' })
 export const getSettingsPage = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { db, env } = runtime();
-    const [settings, configuration, members, invitations, provider, keys, subscription] = await Promise.all([
+    const [settings, configuration, members, invitations, provider, keys, subscription, connections] = await Promise.all([
       core.getSettings(db, actor),
       core.getConfiguration(db, actor),
       core.listMembers(db, actor),
@@ -56,9 +57,10 @@ export const getSettingsPage = createServerFn({ method: 'GET' }).handler(() =>
       core.getPaymentProvider(db, actor),
       core.can(actor.role, 'apikeys.manage') ? core.listApiKeys(db, actor) : Promise.resolve([]),
       core.getSubscription(db, actor),
+      core.listMcpConnections(db, actor),
     ]);
     return {
-      role: actor.role, userId: actor.userId, settings, configuration, members, invitations, provider, keys, subscription,
+      role: actor.role, userId: actor.userId, settings, configuration, members, invitations, provider, keys, subscription, connections,
       baseUrl: env.APP_BASE_URL, orgId: actor.orgId, simulatorAvailable: env.PAYMENTS_SIMULATOR,
     };
   }),
@@ -153,3 +155,35 @@ export const setCompanyPlan = createServerFn({ method: 'POST' })
       await core.setCompanyPlan(runtime().owner, data.orgId, data.planCode, viewer.userId);
     }),
   );
+
+// ---------------------------------------------------------------- OAuth consent (spec 016)
+
+/** The consent page: who asks, whether the signed request is genuine, the person's companies. */
+export const getConsent = createServerFn({ method: 'GET' })
+  .validator((input: { query: string }) => ({ query: String(input.query ?? '').slice(0, 4000) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const viewer = await loadViewer();
+      const params = new URLSearchParams(data.query);
+      const clientId = params.get('client_id') ?? '';
+      if (!viewer) return { signedIn: false as const, valid: false, clientId, clientName: clientId, companies: [] };
+      const { db, env } = runtime();
+      const valid = data.query.length > 0 && (await verifyOAuthQueryParams(data.query, env.BETTER_AUTH_SECRET).catch(() => false));
+      const { rows } = await db.query<{ name: string | null }>('select name from "oauthClient" where "clientId" = $1', [clientId]);
+      return { signedIn: true as const, valid: Boolean(valid), clientId, clientName: rows[0]?.name || clientId, companies: viewer.companies };
+    }),
+  );
+
+export const grantMcpCompany = createServerFn({ method: 'POST' })
+  .validator((input: { clientId: string; orgId: string }) => ({ clientId: String(input.clientId).slice(0, 200), orgId: String(input.orgId) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const viewer = await loadViewer();
+      if (!viewer) throw new core.DomainError('not_signed_in', 401);
+      await core.grantMcpCompany(runtime().db, viewer.userId, data.clientId, data.orgId);
+    }),
+  );
+
+export const revokeMcpConnection = createServerFn({ method: 'POST' })
+  .validator((input: { clientId: string }) => input)
+  .handler(({ data }) => act((actor) => core.revokeMcpConnection(runtime().db, actor, data.clientId)));

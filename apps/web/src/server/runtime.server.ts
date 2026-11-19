@@ -1,5 +1,7 @@
 import { createPool, type Db, type Drafter, type Mailer, type Messenger, type Storage, type Transcriber } from '@struo/core';
+import { mcp } from '@better-auth/mcp';
 import { betterAuth } from 'better-auth';
+import { jwt } from 'better-auth/plugins';
 import { tanstackStartCookies } from 'better-auth/tanstack-start';
 import { createDrafter, createMailer, createMessenger, createStorage, createTranscriber, secretBox } from './adapters.server.ts';
 import { env, type Env } from './env.server.ts';
@@ -27,7 +29,20 @@ function createAuth(environment: Env, db: Db) {
       customRules: { '/sign-in/email': { window: 60, max: 5 }, '/sign-up/email': { window: 60, max: 5 } },
     },
     advanced: { cookiePrefix: 'struo', useSecureCookies: environment.APP_BASE_URL.startsWith('https://') },
-    plugins: [tanstackStartCookies()],
+    plugins: [
+      jwt(),
+      // OAuth for MCP clients (spec 016): Claude.ai, ChatGPT or Claude Code register themselves, the
+      // person signs in, chooses the company on the consent page, and the client gets a token.
+      mcp({
+        resource: `${environment.APP_BASE_URL}/mcp`,
+        loginPage: '/login',
+        consentPage: '/oauth/consent',
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        clientRegistrationDefaultApplicationType: 'infer',
+      }),
+      tanstackStartCookies(),
+    ],
   });
 }
 

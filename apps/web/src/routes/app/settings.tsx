@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Badge, DateText, ErrorText, Field, formData, formatMoney, Tabs, useAction } from '@/components/ui.tsx';
 import {
   addConfigurationItem, createApiKey, getSettingsPage, inviteMember, removeConfigurationItem, removeMember, revokeApiKey,
-  revokeInvitation, setMemberRole, setPaymentProvider, updateSettings,
+  revokeInvitation, revokeMcpConnection, setMemberRole, setPaymentProvider, updateSettings,
 } from '@/features/settings/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
@@ -364,6 +364,27 @@ function IntegrationsTab({ data }: { data: Data }) {
         <div className="small muted">{t('settings.mcpHowTo')}</div>
         <div className="secret">{command}</div>
       </div>
+      <div>
+        <div className="small muted">{t('settings.mcpOauth')}</div>
+        <div className="secret">{`${data.baseUrl}/mcp`}</div>
+      </div>
+      {data.connections.length ? (
+        <>
+          <h3>{t('settings.connections')}</h3>
+          {data.connections.map((connection) => (
+            <div key={connection.clientId} className="alert-row">
+              <span className="grow">
+                <strong>{connection.clientName}</strong> · {connection.userName} · <DateText value={connection.createdAt} />
+              </span>
+              {connection.mine ? (
+                <button type="button" className="btn danger small" onClick={() => run(() => revokeMcpConnection({ data: { clientId: connection.clientId } }))}>
+                  {t('settings.revokeKey')}
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </>
+      ) : null}
       {data.keys.map((apiKey) => (
         <div key={apiKey.id} className="alert-row">
           <span className="grow">
