@@ -61,3 +61,9 @@ export interface Drafter {
   /** Writes a letter from facts. Never invents a figure: every figure is in `facts`. */
   draft(input: { kind: 'reminder' | 'formal_notice'; locale: 'fr' | 'en'; facts: Record<string, string> }): Promise<string>;
 }
+
+export interface Transcriber {
+  readonly configured: boolean;
+  /** Turns a recorded voice note into text, in the company's language. */
+  transcribe(audio: { body: Uint8Array; mediaType: string }, locale: 'fr' | 'en'): Promise<string>;
+}

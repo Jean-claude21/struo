@@ -435,6 +435,9 @@ export interface ReportView {
   longitude: number | null;
   takenAt: string;
   status: string;
+  hasAudio?: boolean;
+  transcript?: string | null;
+  transcriptStatus?: string;
   photos: { id: string }[];
 }
 
@@ -460,6 +463,18 @@ export function ReportCard({ report, canReview }: { report: ReportView; canRevie
       </div>
       {report.phaseName && report.progressPct !== null ? <div>{t('field.progressOn', { phase: report.phaseName, pct: report.progressPct })}</div> : null}
       {report.note ? <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{report.note}</p> : null}
+      {report.hasAudio ? (
+        <div className="stack" style={{ gap: '.4rem' }}>
+          <audio controls preload="none" src={`/api/files/audio/${report.id}`} style={{ width: '100%' }} />
+          {report.transcript ? (
+            <p className="small" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+              <span className="muted">{t('field.transcript')} :</span> {report.transcript}
+            </p>
+          ) : (
+            <span className="muted small">{t(`field.transcriptStatus.${(report.transcriptStatus ?? 'none') as 'none'}`)}</span>
+          )}
+        </div>
+      ) : null}
       {report.photos.length ? (
         <div className="thumbs">
           {report.photos.map((photo) => (

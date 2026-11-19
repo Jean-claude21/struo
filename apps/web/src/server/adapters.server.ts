@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
-  fromMinor, type CheckoutOutcome, type Drafter, type Mailer, type Messenger, type PaymentGateway, type Storage,
+  fromMinor, type CheckoutOutcome, type Drafter, type Transcriber, type Mailer, type Messenger, type PaymentGateway, type Storage,
 } from '@struo/core';
 import type { Env } from './env.server.ts';
 
@@ -231,5 +231,30 @@ export function simulatorGateway(baseUrl: string): PaymentGateway {
     },
     verifyWebhook: () => false,
     resolve: async () => null,
+  };
+}
+
+// ---------------------------------------------------------------- voice notes
+
+/** OpenAI speech-to-text when configured; without a key, notes stay audio-only (never invented). */
+export function createTranscriber(env: Env): Transcriber {
+  return {
+    configured: Boolean(env.OPENAI_API_KEY),
+    async transcribe(audio, locale) {
+      if (!env.OPENAI_API_KEY) throw new Error('transcriber not configured');
+      const extension = audio.mediaType.includes('mp4') || audio.mediaType.includes('m4a') ? 'm4a' : audio.mediaType.includes('ogg') ? 'ogg' : 'webm';
+      const form = new FormData();
+      form.append('file', new Blob([audio.body as unknown as BlobPart], { type: audio.mediaType }), `note.${extension}`);
+      form.append('model', env.OPENAI_TRANSCRIBE_MODEL);
+      form.append('language', locale);
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` },
+        body: form,
+      });
+      if (!response.ok) throw new Error(`transcription ${response.status}`);
+      const body = (await response.json()) as { text?: string };
+      return (body.text ?? '').trim();
+    },
   };
 }

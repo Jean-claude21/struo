@@ -267,6 +267,7 @@ function ReportWizard({ snapshot, onCancel, onSaved }: { snapshot: FieldSnapshot
   const [note, setNote] = useState('');
   const [gps, setGps] = useState<{ latitude: number; longitude: number } | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const [voice, setVoice] = useState<{ blob: Blob; mediaType: string; seconds: number } | null>(null);
 
   useEffect(() => {
     void currentPosition().then(setGps);
@@ -374,6 +375,7 @@ function ReportWizard({ snapshot, onCancel, onSaved }: { snapshot: FieldSnapshot
             <span>{t('fieldApp.observation')}</span>
             <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={t('fieldApp.observationPlaceholder')} maxLength={4000} />
           </label>
+          <VoiceRecorder voice={voice} onChange={setVoice} />
         </>
       ) : null}
       <div className="field-footer">
@@ -389,7 +391,7 @@ function ReportWizard({ snapshot, onCancel, onSaved }: { snapshot: FieldSnapshot
             <button
               type="button"
               className="btn"
-              disabled={busy || (!note.trim() && !photos.length && !phaseId)}
+              disabled={busy || (!note.trim() && !photos.length && !phaseId && !voice)}
               onClick={async () => {
                 setBusy(true);
                 const id = crypto.randomUUID();
@@ -404,6 +406,7 @@ function ReportWizard({ snapshot, onCancel, onSaved }: { snapshot: FieldSnapshot
                     latitude: gps?.latitude ?? null, longitude: gps?.longitude ?? null, takenAt: new Date().toISOString(),
                   },
                   photos: photos.map(({ url: _url, ...photo }) => photo),
+                  audio: voice,
                 });
                 setBusy(false);
                 await onSaved();
@@ -477,5 +480,85 @@ function IncidentForm({ snapshot, onCancel, onSaved }: { snapshot: FieldSnapshot
         </div>
       </div>
     </div>
+  );
+}
+
+/** Records a voice note on the phone (kept in the outbox, transcribed by the server later). */
+function VoiceRecorder({
+  voice,
+  onChange,
+}: {
+  voice: { blob: Blob; mediaType: string; seconds: number } | null;
+  onChange: (voice: { blob: Blob; mediaType: string; seconds: number } | null) => void;
+}) {
+  const { t } = useI18n();
+  const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
+  const [seconds, setSeconds] = useState(0);
+  const [unavailable, setUnavailable] = useState(false);
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!voice) return setUrl(null);
+    const next = URL.createObjectURL(voice.blob);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [voice]);
+
+  useEffect(() => {
+    if (!recorder) return;
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      const elapsed = Math.round((Date.now() - started) / 1000);
+      setSeconds(elapsed);
+      if (elapsed >= 180) recorder.stop(); // 3 minutes at most
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, [recorder]);
+
+  const start = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg'].find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? '';
+      const next = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined);
+      const chunks: Blob[] = [];
+      const began = Date.now();
+      next.ondataavailable = (event) => chunks.push(event.data);
+      next.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const mediaType = (next.mimeType || 'audio/webm').split(';')[0]!;
+        onChange({ blob: new Blob(chunks, { type: mediaType }), mediaType, seconds: Math.max(1, Math.round((Date.now() - began) / 1000)) });
+        setRecorder(null);
+      };
+      next.start();
+      setSeconds(0);
+      setRecorder(next);
+    } catch {
+      setUnavailable(true);
+    }
+  };
+
+  if (unavailable) return <p className="muted small">{t('fieldApp.micUnavailable')}</p>;
+  if (recorder) {
+    return (
+      <button type="button" className="btn block" onClick={() => recorder.stop()}>
+        ⏹ {t('fieldApp.stopRecording')} — {t('fieldApp.recording', { seconds })}
+      </button>
+    );
+  }
+  if (voice && url) {
+    return (
+      <div className="stack" style={{ gap: '.4rem' }}>
+        <span className="small">{t('fieldApp.voiceNote', { seconds: voice.seconds })}</span>
+        <audio controls src={url} style={{ width: '100%' }} />
+        <button type="button" className="btn ghost small" onClick={() => onChange(null)}>
+          {t('fieldApp.removeVoice')}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button type="button" className="btn secondary block" onClick={start}>
+      🎤 {t('fieldApp.record')}
+    </button>
   );
 }
