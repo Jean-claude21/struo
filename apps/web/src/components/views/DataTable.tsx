@@ -1,10 +1,12 @@
 // Data table (spec 021): resizable columns (remembered), sticky header and first column, sort by
-// clicking a header, collapsible groups with counts, multi-select with a bulk action bar, and a card
-// list on phones (a table is not shrunk, it is re-laid out).
-import { useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus, SearchX, X } from 'lucide-react';
+// clicking a header, collapsible groups with counts and « + » to add into a group, multi-select with a
+// bulk action bar (Escape clears it), cells edited in place (a picker opens on the cell), the first
+// cell renamed by double click, a menu per row (right click or « … »), an empty state that offers to
+// clear the filters, and a card list on phones (a table is not shrunk, it is re-laid out).
+import { useEffect, useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Ellipsis, Plus, SearchX, X } from 'lucide-react';
 import { useI18n } from '@/i18n/index.tsx';
-import { EmptyState } from '../kit.tsx';
+import { ContextMenu, EmptyState, menuAt, type MenuAt } from '../kit.tsx';
 import { groupRows, type FieldDef, type ViewState } from './engine.ts';
 import { useBucketLabels } from './Toolbar.tsx';
 
@@ -16,10 +18,12 @@ export interface Column<T> {
   cell: (row: T) => ReactNode;
   /** Shown in the phone card (defaults to true). */
   mobile?: boolean;
+  /** Edits the cell in place: the picker opens on the cell instead of opening the row. */
+  edit?: (row: T, close: () => void) => ReactNode;
 }
 
 export function DataTable<T>({
-  rows, columns, fields, state, update, rowId, onRowClick, bulkActions, onAdd, addLabel, empty, groupHeader,
+  rows, columns, fields, state, update, rowId, onRowClick, bulkActions, onAdd, addLabel, empty, groupHeader, rowMenu, onRename, renameOf, onAddInGroup,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -33,10 +37,27 @@ export function DataTable<T>({
   addLabel?: string;
   empty?: ReactNode;
   groupHeader?: (groupKey: string, rows: T[]) => ReactNode;
+  /** The menu of a row: right click, or the « … » at the end of the row. */
+  rowMenu?: (row: T, close: () => void) => ReactNode;
+  /** Renames from the first cell (double click, Enter saves, Escape cancels). */
+  onRename?: (row: T, name: string) => Promise<void> | void;
+  /** The current name the rename field starts from (defaults to the first field). */
+  renameOf?: (row: T) => string;
+  /** « + » in a group header adds an item already in that group. */
+  onAddInGroup?: (groupKey: string) => void;
 }) {
   const { t } = useI18n();
   const labels = useBucketLabels();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [menu, setMenu] = useState<{ row: T; at: MenuAt } | null>(null);
+  const [editing, setEditing] = useState<{ row: T; column: Column<T>; at: MenuAt } | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selected.size) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !document.querySelector('.pop, .modal')) setSelected(new Set()); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selected.size]);
   const visible = columns.filter((column, index) => index === 0 || !state.hidden.includes(column.key));
   const sortable = new Set(fields.filter((field) => field.sortable !== false).map((field) => field.key));
 
@@ -57,11 +78,17 @@ export function DataTable<T>({
   const someOn = ids.some((id) => selected.has(id));
   const toggle = (id: string) => setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const clear = () => setSelected(new Set());
-  const totalWidth = visible.reduce((sum, column) => sum + widthOf(column), 0) + (bulkActions ? 40 : 0);
+  const totalWidth = visible.reduce((sum, column) => sum + widthOf(column), 0) + (bulkActions ? 40 : 0) + (rowMenu ? 40 : 0);
 
+  const filtered = state.filters.length > 0 || state.q.trim() !== '';
   if (!rows.length) {
+    if (filtered) {
+      return <EmptyState icon={SearchX} title={t('ui.noResults')} text={t('views.noResultsFiltered')}
+        action={<button type="button" className="btn secondary" onClick={() => update({ filters: [], q: '' })}><X size={15} />{t('views.clearFilters')}</button>} />;
+    }
     return <>{empty ?? <EmptyState icon={SearchX} title={t('ui.noResults')} text={t('ui.noResultsText')} />}</>;
   }
+  const extraCols = (bulkActions ? 1 : 0) + (rowMenu ? 1 : 0);
 
   const sortIcon = (key: string) => (state.sort?.key === key ? (state.sort.dir === 1 ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : null);
   const headerClick = (key: string) => {
@@ -76,6 +103,7 @@ export function DataTable<T>({
           <colgroup>
             {bulkActions ? <col style={{ width: 40 }} /> : null}
             {visible.map((column) => <col key={column.key} style={{ width: widthOf(column) }} />)}
+            {rowMenu ? <col style={{ width: 40 }} /> : null}
           </colgroup>
           <thead>
             <tr>
@@ -98,6 +126,7 @@ export function DataTable<T>({
                   </th>
                 );
               })}
+              {rowMenu ? <th aria-label={t('views.actions')} /> : null}
             </tr>
           </thead>
           <tbody>
@@ -107,11 +136,15 @@ export function DataTable<T>({
                 state.group ? (
                   <tr key={`g-${group.key}`} className="group-row"
                     onClick={() => update({ collapsed: collapsed ? state.collapsed.filter((key) => key !== group.key) : [...state.collapsed, group.key] })}>
-                    <td colSpan={visible.length + (bulkActions ? 1 : 0)}>
+                    <td colSpan={visible.length + extraCols}>
                       <span className="row tight nowrap">
                         {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                         {group.color ? <span className="dot" style={{ ['--c' as string]: group.color }} /> : null}
                         {group.label}<span className="faint" style={{ fontWeight: 500 }}>{group.rows.length}</span>
+                        {onAddInGroup ? (
+                          <button type="button" className="icon-btn sm" aria-label={`${addLabel ?? t('views.add')} · ${group.label}`} title={addLabel}
+                            onClick={(event) => { event.stopPropagation(); onAddInGroup(group.key); }}><Plus size={13} /></button>
+                        ) : null}
                         {groupHeader ? <span className="sp" /> : null}
                         {groupHeader?.(group.key, group.rows)}
                       </span>
@@ -121,19 +154,32 @@ export function DataTable<T>({
                 ...(collapsed ? [] : group.rows.map((original) => {
                   const id = rowId(original);
                   return (
-                    <tr key={id} className={selected.has(id) ? 'sel' : ''}>
+                    <tr key={id} className={selected.has(id) ? 'sel' : ''} onContextMenu={rowMenu ? (event) => setMenu({ row: original, at: menuAt(event) }) : undefined}>
                       {bulkActions ? (
                         <td className="sticky-col" style={{ left: 0 }}>
                           <input type="checkbox" aria-label={t('views.selectRow')} checked={selected.has(id)} onChange={() => toggle(id)} />
                         </td>
                       ) : null}
                       {visible.map((column, index) => (
-                        <td key={column.key} className={`${index === 0 ? 'sticky-col' : ''} ${onRowClick ? 'clickable' : ''} ${column.align === 'right' ? 'num-cell' : ''}`}
+                        <td key={column.key}
+                          className={`${index === 0 ? 'sticky-col' : ''} ${onRowClick || column.edit ? 'clickable' : ''} ${column.edit ? 'editable' : ''} ${column.align === 'right' ? 'num-cell' : ''}`}
                           style={index === 0 ? { left: bulkActions ? 40 : 0, fontWeight: 550 } : undefined}
-                          onClick={() => onRowClick?.(original)}>
-                          {column.cell(original)}
+                          title={column.edit ? t('views.clickToEdit') : undefined}
+                          onDoubleClick={index === 0 && onRename ? (event) => { event.preventDefault(); setRenaming(id); } : undefined}
+                          onClick={(event) => {
+                            if (column.edit) { const rect = event.currentTarget.getBoundingClientRect(); setEditing({ row: original, column, at: { x: rect.left, y: rect.bottom + 2 } }); return; }
+                            if (renaming !== id) onRowClick?.(original);
+                          }}>
+                          {index === 0 && renaming === id && onRename ? (
+                            <RenameInput initial={renameOf ? renameOf(original) : String(fields[0]?.get(original) ?? '')} onDone={async (value) => { setRenaming(null); if (value !== null) await onRename(original, value); }} />
+                          ) : column.cell(original)}
                         </td>
                       ))}
+                      {rowMenu ? (
+                        <td className="row-menu">
+                          <button type="button" className="icon-btn sm" aria-label={t('views.actions')} onClick={(event) => setMenu({ row: original, at: menuAt(event) })}><Ellipsis size={15} /></button>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })),
@@ -141,7 +187,7 @@ export function DataTable<T>({
             })}
             {onAdd ? (
               <tr className="add-row" onClick={onAdd}>
-                <td colSpan={visible.length + (bulkActions ? 1 : 0)}><span className="row tight"><Plus size={14} />{addLabel}</span></td>
+                <td colSpan={visible.length + extraCols}><span className="row tight"><Plus size={14} />{addLabel}</span></td>
               </tr>
             ) : null}
           </tbody>
@@ -149,7 +195,7 @@ export function DataTable<T>({
       </div>
       <div className="dt-cards only-m">
         {rows.map((row) => (
-          <button key={rowId(row)} type="button" className="dt-card" style={{ textAlign: 'left', font: 'inherit', color: 'inherit', cursor: onRowClick ? 'pointer' : 'default' }} onClick={() => onRowClick?.(row)}>
+          <button key={rowId(row)} type="button" onContextMenu={rowMenu ? (event) => setMenu({ row, at: menuAt(event) }) : undefined} className="dt-card" style={{ textAlign: 'left', font: 'inherit', color: 'inherit', cursor: onRowClick ? 'pointer' : 'default' }} onClick={() => onRowClick?.(row)}>
             <div style={{ fontWeight: 600 }}>{columns[0]!.cell(row)}</div>
             {columns.slice(1).filter((column) => column.mobile !== false && !state.hidden.includes(column.key)).slice(0, 4).map((column) => (
               <div key={column.key} className="dc-row"><span>{column.label}</span><span>{column.cell(row)}</span></div>
@@ -158,6 +204,10 @@ export function DataTable<T>({
         ))}
         {onAdd ? <button type="button" className="btn secondary" onClick={onAdd}><Plus size={15} />{addLabel}</button> : null}
       </div>
+      <ContextMenu at={menu?.at ?? null} onClose={() => setMenu(null)}>{menu && rowMenu ? rowMenu(menu.row, () => setMenu(null)) : null}</ContextMenu>
+      <ContextMenu at={editing?.at ?? null} onClose={() => setEditing(null)} width={240}>
+        {editing?.column.edit ? editing.column.edit(editing.row, () => setEditing(null)) : null}
+      </ContextMenu>
       {bulkActions && selected.size ? (
         <div className="bulkbar" role="toolbar" aria-label={t('ui.selected', { count: selected.size })}>
           <b style={{ fontWeight: 600 }}>{t('ui.selected', { count: selected.size })}</b>
@@ -166,5 +216,17 @@ export function DataTable<T>({
         </div>
       ) : null}
     </>
+  );
+}
+
+/** The first cell turned into a field: Enter or leaving saves, Escape cancels. */
+function RenameInput({ initial, onDone }: { initial: string; onDone: (value: string | null) => void }) {
+  const [value, setValue] = useState(initial);
+  let done = false;
+  const finish = (next: string | null) => { if (done) return; done = true; onDone(next === null || next.trim() === '' || next.trim() === initial ? null : next.trim()); };
+  return (
+    <input className="cell-input" value={value} autoFocus onChange={(event) => setValue(event.target.value)} onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => { if (event.key === 'Enter') finish(value); if (event.key === 'Escape') { event.stopPropagation(); finish(null); } }}
+      onBlur={() => finish(value)} maxLength={200} />
   );
 }

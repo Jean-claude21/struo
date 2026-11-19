@@ -324,6 +324,8 @@ const phaseInput = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   budgetMinor: z.number().int().min(0).optional(),
   progressPct: z.number().int().min(0).max(100).optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullable().optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullable().optional(),
 });
 
 export async function updatePhase(db: Db, actor: Actor, phaseId: string, input: unknown): Promise<void> {
@@ -334,8 +336,12 @@ export async function updatePhase(db: Db, actor: Actor, phaseId: string, input: 
     if (!before) throw notFound();
     await tx.query(
       `update project_phase set name = coalesce($3, name), budget_minor = coalesce($4, budget_minor),
-              progress_pct = coalesce($5, progress_pct), updated_at = now() where id = $1 and org_id = $2`,
-      [phaseId, actor.orgId, data.name ?? null, data.budgetMinor ?? null, data.progressPct ?? null],
+              progress_pct = coalesce($5, progress_pct),
+              start_date = case when $6 then $7::date else start_date end,
+              end_date = case when $8 then $9::date else end_date end,
+              updated_at = now() where id = $1 and org_id = $2`,
+      [phaseId, actor.orgId, data.name ?? null, data.budgetMinor ?? null, data.progressPct ?? null,
+        data.startDate !== undefined, data.startDate ?? null, data.endDate !== undefined, data.endDate ?? null],
     );
     await journal(tx, actor, 'phase.update', phaseId, before, data);
   });

@@ -42,10 +42,12 @@ export const Route = createFileRoute('/api/field/snapshot')({
               templates,
               rainLimit: RAIN_LIMIT,
               scanAvailable: reader.configured,
-              toFix: reports.filter((report) => report.authorId === actor.userId).map((report) => ({
+              // What to redo: this person's reports rejected in the last 14 days, the 3 latest.
+              toFix: reports.filter((report) => report.authorId === actor.userId && Date.now() - new Date(report.takenAt).getTime() < 14 * 86_400_000)
+                .slice(0, 3).map((report) => ({
                 id: report.id, projectCode: report.projectCode, note: report.note, reviewNote: report.reviewNote, takenAt: report.takenAt,
               })),
-              user: { name: user.rows[0]?.name ?? '', role: actor.role, canReport: can(actor.role, 'field.report') },
+              user: { id: actor.userId, name: user.rows[0]?.name ?? '', role: actor.role, canReport: can(actor.role, 'field.report') },
               company: { name: settings.name },
             },
             { headers: { 'cache-control': 'no-store' } },

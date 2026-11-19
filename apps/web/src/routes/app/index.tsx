@@ -5,7 +5,7 @@ import { createFileRoute, getRouteApi, Link } from '@tanstack/react-router';
 import {
   Camera, CloudRain, FileText, FolderKanban, HardHat, Receipt, Sun, TriangleAlert, Users, Wallet, ClipboardCheck, CalendarClock,
 } from 'lucide-react';
-import { AlertList } from '@/components/AlertList.tsx';
+import { AlertList, alertsFor } from '@/components/AlertList.tsx';
 import { AssistantPanel } from '@/components/Assistant.tsx';
 import { AreaChart, Legend } from '@/components/charts.tsx';
 import { EmptyState, KpiTile, Panel, Progress, StatusChip, useRelative, type Shape } from '@/components/kit.tsx';
@@ -53,9 +53,10 @@ function Today() {
 
 function ActionCards({ data }: { data: Data }) {
   const { t } = useI18n();
+  const mine = alertsFor(data.alerts, data.role);
   return (
-    <Panel title={t('today.toHandle')} sub={data.alerts.length ? String(data.alerts.length) : undefined}>
-      <AlertList alerts={data.alerts} limit={5} />
+    <Panel title={t('today.toHandle')} sub={mine.length ? String(mine.length) : undefined}>
+      <AlertList alerts={mine} limit={5} />
     </Panel>
   );
 }
@@ -170,9 +171,11 @@ function Manager({ data }: { data: Data }) {
       {data.finance ? (
         <div className="grid">
           <KpiTile icon={Wallet} label={t('dashboard.receivable')} value={money(data.finance.receivableMinor)} tone="brand" sub={`${t('dashboard.overdue')} ${money(data.finance.overdueMinor)}`} subTone={data.finance.overdueMinor ? 'bad' : undefined} />
-          <KpiTile label={t('dashboard.collected')} value={`${data.finance.collectedPct} %`} sub={money(data.finance.collectedMinor)} />
-          <KpiTile label={t('dashboard.cash')} value={money(data.finance.cashMinor)} tone={data.finance.cashMinor < 0 ? 'bad' : undefined} />
-          <KpiTile label={t('dashboard.margin')} value={data.finance.marginPct === null ? '—' : `${data.finance.marginPct} %`} sub={t('dashboard.averageProgress') + ` ${data.operations.averageProgress} %`} />
+          <KpiTile label={t('today.dueSoon')} value={money(data.finance.dueSoonMinor)} sub={t('today.collectedRate', { pct: data.finance.collectedPct })} />
+          <KpiTile label={t('dashboard.cash')} value={money(data.finance.cashMinor)} tone={data.finance.cashMinor < 0 ? 'bad' : undefined} sub={t('today.cashHint')} />
+          <KpiTile label={t('today.projectedMargin')} value={data.finance.projectedMarginPct === null ? '—' : `${data.finance.projectedMarginPct} %`}
+            tone={data.finance.projectedMarginPct !== null && data.finance.projectedMarginPct < 10 ? 'bad' : undefined}
+            sub={t('today.currentMargin', { pct: data.finance.marginPct ?? 0 })} />
         </div>
       ) : null}
       <div className="grid-main">
@@ -220,8 +223,8 @@ function Engineer({ data }: { data: Data }) {
     <>
       <div className="grid">
         <KpiTile icon={ClipboardCheck} label={t('desk.inbox')} value={ops.reportsToReview} tone={ops.reportsToReview ? 'brand' : undefined} onClick={() => { window.location.href = '/app/field'; }} />
-        <KpiTile icon={TriangleAlert} label={t('dashboard.openIncidents')} value={ops.openIncidents} tone={ops.openIncidents ? 'bad' : undefined} />
-        <KpiTile icon={CalendarClock} label={t('planning.late')} value={late} tone={late ? 'bad' : undefined} />
+        <KpiTile icon={TriangleAlert} label={t('dashboard.openIncidents')} value={ops.openIncidents} tone={ops.openIncidents ? 'bad' : undefined} onClick={() => { window.location.href = '/app/field?tab=incidents'; }} />
+        <KpiTile icon={CalendarClock} label={t('planning.late')} value={late} tone={late ? 'bad' : undefined} onClick={() => { window.location.href = '/app/planning'; }} />
         <KpiTile icon={Camera} label={t('dashboard.photosWeek')} value={ops.photosWeek} sub={`${t('dashboard.reportsWeek')} ${ops.reportsWeek}`} />
       </div>
       <Weather data={data} />
@@ -270,7 +273,7 @@ function Accountant({ data }: { data: Data }) {
   return (
     <>
       <div className="grid">
-        <KpiTile icon={Wallet} label={t('today.collected')} value={money(thisMonth)} tone="brand" />
+        <KpiTile icon={Wallet} label={t('today.collectedMonth')} value={money(thisMonth)} tone="brand" onClick={() => { window.location.href = '/app/finance'; }} />
         <KpiTile icon={Receipt} label={t('dashboard.receivable')} value={data.finance ? money(data.finance.receivableMinor) : '—'} />
         <KpiTile icon={TriangleAlert} label={t('dashboard.overdue')} value={data.finance ? money(data.finance.overdueMinor) : '—'} tone={data.finance?.overdueMinor ? 'bad' : undefined} />
         <KpiTile icon={FileText} label={t('docs.toFix')} value={docs} tone={docs ? 'bad' : undefined} />

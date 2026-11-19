@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { asActor, ensure, journal, parse } from './access.ts';
-import type { Actor, Db } from './db.ts';
-import { notFound } from './errors.ts';
+import type { Actor, Db, Tx } from './db.ts';
+import { DomainError, notFound } from './errors.ts';
 
 export const MILESTONE_CATEGORIES = ['admin', 'studies', 'technical', 'finishing', 'delivery'] as const;
 
@@ -115,16 +115,136 @@ export async function gantt(db: Db, actor: Actor) {
                                                           'delayDays', ms.delay_days, 'category', m.category)
                                         order by m.planned_on)
                           from milestone m join milestone_status ms on ms.milestone_id = m.id
-                         where m.project_id = p.id), '[]') as milestones
+                         where m.project_id = p.id), '[]') as milestones,
+              coalesce((select json_agg(json_build_object('id', x.id, 'name', x.name, 'startDate', x.start_date, 'endDate', x.end_date,
+                                                          'progress', x.progress_pct) order by x.position)
+                          from project_phase x where x.project_id = p.id), '[]') as phases
          from project p join project_progress pp on pp.project_id = p.id
         where p.org_id = $1 and p.archived_at is null and p.status <> 'done'
         order by p.start_date nulls last, p.code`,
       [actor.orgId],
     );
-    return rows as {
-      id: string; code: string; name: string; status: string; startDate: string | null; endDate: string | null;
-      progressPct: number;
-      milestones: { id: string; name: string; plannedOn: string; actualOn: string | null; status: string; delayDays: number; category: string }[];
-    }[];
+    const deps = await tx.query<MilestoneDependency>(
+      `select d.milestone_id as "milestoneId", d.depends_on_id as "dependsOnId", d.lag_days as "lagDays"
+         from milestone_dependency d where d.org_id = $1`,
+      [actor.orgId],
+    );
+    return {
+      sites: rows as {
+        id: string; code: string; name: string; status: string; startDate: string | null; endDate: string | null;
+        progressPct: number;
+        milestones: { id: string; name: string; plannedOn: string; actualOn: string | null; status: string; delayDays: number; category: string }[];
+        phases: { id: string; name: string; startDate: string | null; endDate: string | null; progress: number }[];
+      }[],
+      dependencies: deps.rows,
+    };
   });
 }
+
+// ---------------------------------------------------------------- dependencies (spec 031)
+
+export interface MilestoneDependency { milestoneId: string; dependsOnId: string; lagDays: number }
+
+const dependenciesInput = z.object({
+  dependsOn: z.array(z.object({ id: z.string().uuid(), lagDays: z.number().int().min(0).max(365).default(0) })).max(20),
+});
+
+/**
+ * Says which milestones this one waits for (replaces the list). A predecessor may belong to another
+ * site of the company. A loop (A waits for B which waits for A, at any depth) is refused.
+ */
+export async function setMilestoneDependencies(db: Db, actor: Actor, milestoneId: string, input: unknown): Promise<void> {
+  ensure(actor, 'planning.write');
+  const data = parse(dependenciesInput, input);
+  const unique = data.dependsOn.filter((entry, index, all) => all.findIndex((other) => other.id === entry.id) === index);
+  const ids = unique.map((item) => item.id);
+  if (ids.includes(milestoneId)) throw new DomainError('dependency_cycle', 422);
+  await asActor(db, actor, async (tx) => {
+    const found = await tx.query('select id from milestone where org_id = $1 and id = any($2::uuid[])', [actor.orgId, [milestoneId, ...ids]]);
+    if (found.rowCount !== ids.length + 1) throw notFound();
+    if (ids.length) {
+      // Does any chosen predecessor already wait, directly or not, for this milestone?
+      const loop = await tx.query(
+        `with recursive up(id) as (
+           select unnest($2::uuid[])
+           union
+           select d.depends_on_id from milestone_dependency d join up on d.milestone_id = up.id where d.org_id = $1)
+         select 1 from up where id = $3 limit 1`,
+        [actor.orgId, ids, milestoneId],
+      );
+      if (loop.rowCount) throw new DomainError('dependency_cycle', 422);
+    }
+    const before = (await tx.query('select depends_on_id, lag_days from milestone_dependency where milestone_id = $1 and org_id = $2', [milestoneId, actor.orgId])).rows;
+    await tx.query('delete from milestone_dependency where milestone_id = $1 and org_id = $2', [milestoneId, actor.orgId]);
+    for (const item of unique) {
+      await tx.query('insert into milestone_dependency (org_id, milestone_id, depends_on_id, lag_days) values ($1, $2, $3, $4)',
+        [actor.orgId, milestoneId, item.id, item.lagDays]);
+    }
+    await journal(tx, actor, 'milestone.dependencies', milestoneId, before, data);
+  });
+}
+
+export interface ShiftedMilestone { id: string; name: string; from: string; to: string }
+
+/**
+ * Pushes the milestones that wait for `startId` (and those that wait for them…) so each stays after all
+ * its predecessors plus their lag. Only later: a milestone already further away keeps its date, and a
+ * milestone already reached never moves. Returns what moved, with former dates, for « undo ».
+ */
+async function pushSuccessors(tx: Tx, orgId: string, startId: string): Promise<ShiftedMilestone[]> {
+  const shifted: ShiftedMilestone[] = [];
+  const queue = [startId];
+  for (let guard = 0; queue.length && guard < 500; guard += 1) {
+    const current = queue.shift()!;
+    const { rows } = await tx.query<{ id: string; name: string; planned: string; required: string }>(
+      `select m.id, m.name, to_char(m.planned_on, 'YYYY-MM-DD') as planned,
+              to_char(max(coalesce(p.actual_on, p.planned_on) + d2.lag_days), 'YYYY-MM-DD') as required
+         from milestone_dependency d
+         join milestone m on m.id = d.milestone_id
+         join milestone_dependency d2 on d2.milestone_id = m.id
+         join milestone p on p.id = d2.depends_on_id
+        where d.org_id = $1 and d.depends_on_id = $2 and m.actual_on is null
+        group by m.id, m.name, m.planned_on`,
+      [orgId, current],
+    );
+    for (const row of rows) {
+      if (row.required <= row.planned) continue;
+      await tx.query('update milestone set planned_on = $3 where id = $1 and org_id = $2', [row.id, orgId, row.required]);
+      const known = shifted.find((item) => item.id === row.id);
+      if (known) known.to = row.required; else shifted.push({ id: row.id, name: row.name, from: row.planned, to: row.required });
+      queue.push(row.id);
+    }
+  }
+  return shifted;
+}
+
+/**
+ * Moves a milestone to a new planned date and pushes what waits for it (spec 031). The answer lists
+ * the milestones moved in cascade, with their former dates.
+ */
+export async function moveMilestone(db: Db, actor: Actor, id: string, input: unknown): Promise<{ shifted: ShiftedMilestone[] }> {
+  ensure(actor, 'planning.write');
+  const data = parse(z.object({ plannedOn: dateString }), input);
+  return asActor(db, actor, async (tx) => {
+    const before = (await tx.query('select * from milestone where id = $1 and org_id = $2 for update', [id, actor.orgId])).rows[0];
+    if (!before) throw notFound();
+    if (before.actual_on) throw new DomainError('already_validated', 409);
+    await tx.query('update milestone set planned_on = $3 where id = $1 and org_id = $2', [id, actor.orgId, data.plannedOn]);
+    const shifted = await pushSuccessors(tx, actor.orgId, id);
+    await journal(tx, actor, 'milestone.move', id, before, { ...data, shifted: shifted.length });
+    return { shifted };
+  });
+}
+
+/** Puts milestones back on given dates without pushing anything (the « undo » of a move). */
+export async function restoreMilestoneDates(db: Db, actor: Actor, input: unknown): Promise<void> {
+  ensure(actor, 'planning.write');
+  const data = parse(z.object({ items: z.array(z.object({ id: z.string().uuid(), plannedOn: dateString })).min(1).max(500) }), input);
+  await asActor(db, actor, async (tx) => {
+    for (const item of data.items) {
+      await tx.query('update milestone set planned_on = $3 where id = $1 and org_id = $2', [item.id, actor.orgId, item.plannedOn]);
+    }
+    await journal(tx, actor, 'milestone.restore', actor.orgId, null, { count: data.items.length });
+  });
+}
+

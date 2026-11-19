@@ -161,7 +161,7 @@ function SpaceView({ data }: { data: Space }) {
             </div>
             <div className="steps-v">
               {view.phases.map((phase, index) => {
-                const state = phase.progress >= 100 ? 'done' : index === currentPhase ? 'current' : 'todo';
+                const state = phase.progress >= 100 ? 'done' : index === currentPhase || phase.progress > 0 ? 'current' : 'todo';
                 return (
                   <div key={phase.name} className={`step-v ${state}`}>
                     <span className="sv-dot">{state === 'done' ? <Check size={15} /> : state === 'current' ? <HardHat size={14} /> : null}</span>

@@ -304,11 +304,13 @@ export function DocumentDialog({
   );
 }
 
-export function MilestoneDialog({ projects, projectId }: { projects?: ProjectOption[]; projectId?: string }) {
+export function MilestoneDialog({ projects, projectId, date, open, onOpenChange, hideTrigger, defaultOpen }: {
+  projects?: ProjectOption[]; projectId?: string; date?: string; open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean; defaultOpen?: boolean;
+}) {
   const { t } = useI18n();
   const { run, error, busy } = useAction();
   return (
-    <DialogButton label={t('planning.add')} title={t('planning.add')}>
+    <DialogButton label={t('planning.add')} title={t('planning.add')} open={open} onOpenChange={onOpenChange} hideTrigger={hideTrigger} defaultOpen={defaultOpen}>
       {(close) => (
         <form
           className="stack"
@@ -341,7 +343,7 @@ export function MilestoneDialog({ projects, projectId }: { projects?: ProjectOpt
               </select>
             </Field>
             <Field label={t('planning.plannedOn')}>
-              <input name="plannedOn" type="date" defaultValue={todayIso(14)} required />
+              <input name="plannedOn" type="date" defaultValue={date ?? todayIso(14)} required key={date ?? 'default'} />
             </Field>
             <Field label={t('planning.priority')}>
               <select name="priority" defaultValue="normal">

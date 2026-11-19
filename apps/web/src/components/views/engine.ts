@@ -73,11 +73,15 @@ export function useViewState(key: string, defaults: Partial<ViewState> = {}) {
     const next = [...saved, { id: crypto.randomUUID(), name, state }];
     setSaved(next); write(`${STORE + key}.saved`, { list: next });
   };
+  const renameView = (id: string, name: string) => {
+    const next = saved.map((view) => (view.id === id ? { ...view, name } : view));
+    setSaved(next); write(`${STORE + key}.saved`, { list: next });
+  };
   const removeView = (id: string) => {
     const next = saved.filter((view) => view.id !== id);
     setSaved(next); write(`${STORE + key}.saved`, { list: next });
   };
-  return { state, update, saved, saveView, removeView, reset: () => setState(emptyView(defaults)) };
+  return { state, update, saved, saveView, removeView, renameView, reset: () => setState(emptyView(defaults)) };
 }
 
 const today = () => { const date = new Date(); date.setHours(12, 0, 0, 0); return date; };

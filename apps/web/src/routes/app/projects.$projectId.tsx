@@ -11,7 +11,8 @@ import { DocumentRows, InvoiceTable, MilestoneRows } from '@/components/tables.t
 import { ClientTab } from '@/components/ClientInvite.tsx';
 import { Donut, HBars } from '@/components/charts.tsx';
 import { KpiTile, Panel, Progress as Bar, StatusChip } from '@/components/kit.tsx';
-import { useI18n } from '@/i18n/index.tsx';
+import { EndHint } from '@/components/SiteBits.tsx';
+import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 
 export const Route = createFileRoute('/app/projects/$projectId')({
   loader: ({ params }) => getProjectPage({ data: { id: params.projectId } }),
@@ -46,6 +47,13 @@ function ProjectPage() {
                 <Badge tone={project.health}>{t(`status.${project.health}`)}</Badge>
                 {project.clientName ? <span className="small" style={{ opacity: .9 }}>{project.clientName}</span> : null}
               </div>
+              {project.startDate && project.endDate ? (
+                <div className="small" style={{ opacity: .9, marginTop: '.3rem' }}>
+                  <DateText value={project.startDate} /> → <DateText value={project.endDate} />
+                  {project.status !== 'done' ? <> · <EndHint row={project} /></> : null}
+                  {project.managerName ? ` · ${t('cards.lead')} ${project.managerName}` : ''}
+                </div>
+              ) : null}
             </div>
             <div style={{ minWidth: 200 }} className="hide-m">
               <div className="small" style={{ opacity: .85 }}>{t('projects.progress')}</div>
@@ -54,7 +62,7 @@ function ProjectPage() {
           </div>
         </div>
       </div>
-      <div className="grid">
+      <div className="grid kpi5">
         <KpiTile label={t('projects.budget')} value={money(project.budgetMinor)} sub={project.managerName ?? undefined} />
         {can(data.role, 'finance.read') ? (
           <>
@@ -88,6 +96,9 @@ function Overview({ data }: { data: Data }) {
   const { run, error, busy, setError } = useAction();
   const money = (minor: number) => formatMoney(locale, minor, project.currencyCode);
   const journal = data.reports.slice(0, 6);
+  const upcoming = data.milestones.filter((milestone) => milestone.status !== 'done').slice(0, 5);
+  const openIncidents = data.incidents.filter((incident) => incident.status !== 'resolved');
+  const photos = data.reports.flatMap((report) => report.photos);
   return (
     <div className="stack">
       <div className="grid-3">
@@ -141,18 +152,42 @@ function Overview({ data }: { data: Data }) {
           </div>
         </Panel>
       ) : null}
-      <div className="grid" style={{ display: 'none' }}>
-        <Kpi label={t('projects.budget')} value={money(project.budgetMinor)} />
-        {can(data.role, 'finance.read') ? (
-          <>
-            <Kpi label={t('dashboard.invoiced')} value={`${money(project.finance.invoicedMinor)} · ${project.finance.invoicedPct} %`} />
-            <Kpi label={t('dashboard.collected')} value={`${money(project.finance.collectedMinor)} · ${project.collectedPct} %`} />
-            <Kpi label={t('dashboard.overdue')} value={money(project.finance.overdueMinor)} bad={project.finance.overdueMinor > 0} />
-            <Kpi label={t('expenses.spent')} value={money(project.finance.spentMinor)} />
-            <Kpi label={t('dashboard.cash')} value={money(project.finance.cashMinor)} bad={project.finance.cashMinor < 0} />
-          </>
-        ) : null}
-        <Kpi label={t('projects.compliance')} value={project.compliancePct === null ? '—' : `${project.compliancePct} %`} bad={(project.compliancePct ?? 100) < 75} />
+      <div className="grid-3">
+        <Panel title={t('site.nextSteps')} sub={t('site.nextStepsSub')}>
+          {upcoming.length ? (
+            <div className="stack" style={{ gap: '.5rem' }}>
+              {upcoming.map((milestone) => (
+                <div key={milestone.id} className="row nowrap small">
+                  <span className={`gx-ms-mini ${milestone.status === 'late' ? 'late' : 'pending'}`} aria-hidden />
+                  <span className="grow trunc">{milestone.name}</span>
+                  {milestone.status === 'late' ? <span className="badge bad">+{milestone.delayDays} j</span> : <span className="faint xsmall"><DateText value={milestone.plannedOn} /></span>}
+                </div>
+              ))}
+            </div>
+          ) : <p className="muted small" style={{ margin: 0 }}>{t('site.noNextSteps')}</p>}
+        </Panel>
+        <Panel title={t('field.incidents')} sub={t('site.openIncidents', { n: openIncidents.length })}>
+          {openIncidents.length ? (
+            <div className="stack" style={{ gap: '.5rem' }}>
+              {openIncidents.slice(0, 4).map((incident) => (
+                <div key={incident.id} className="stack" style={{ gap: 2 }}>
+                  <span className="row tight small"><span className={`badge ${incident.priority === 'critical' ? 'bad' : incident.priority === 'important' ? 'warn' : ''}`}>{t(`field.priorities.${incident.priority}` as MessageKey)}</span>
+                    <span className="faint xsmall"><DateText value={incident.createdAt} /></span></span>
+                  <span className="small trunc">{incident.description}</span>
+                </div>
+              ))}
+            </div>
+          ) : <p className="muted small" style={{ margin: 0 }}>{t('site.noIncidents')}</p>}
+        </Panel>
+        <Panel title={t('site.photos')} sub={t('site.photosSub', { n: photos.length })}>
+          {photos.length ? (
+            <div className="site-gallery">
+              {photos.slice(0, 6).map((photo) => (
+                <a key={photo.id} href={`/api/files/photo/${photo.id}`} target="_blank" rel="noreferrer"><img src={`/api/files/photo/${photo.id}`} alt="" loading="lazy" /></a>
+              ))}
+            </div>
+          ) : <p className="muted small" style={{ margin: 0 }}>{t('site.noPhotos')}</p>}
+        </Panel>
       </div>
       <section className="card">
         <h2>{t('projects.phases')}</h2>
