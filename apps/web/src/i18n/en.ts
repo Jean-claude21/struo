@@ -1,7 +1,9 @@
 import type { Catalog } from './fr.ts';
 
 // English catalog — same keys as fr.ts (the compiler refuses a missing or extra key).
+import { uxEn } from './ux.en.ts';
 export const en: Catalog = {
+  ...uxEn,
   app: {
     name: 'Struo',
     tagline: 'Run every site, even without network.',

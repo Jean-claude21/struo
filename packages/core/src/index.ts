@@ -17,3 +17,4 @@ export * from './portal.ts';
 export * from './apikeys.ts';
 export * from './ports.ts';
 export * from './money.ts';
+export * from './search.ts';

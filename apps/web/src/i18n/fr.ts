@@ -1,6 +1,8 @@
 // French catalog — the reference: every key here must exist in en.ts (checked by the compiler and
 // by i18n.test.ts). Placeholders: {name}.
+import { uxFr } from './ux.fr.ts';
 export const fr = {
+  ...uxFr,
   app: {
     name: 'Struo',
     tagline: 'Pilotez tous vos chantiers, même sans réseau.',
