@@ -108,7 +108,7 @@ function Finance() {
           <>
             <StatementDialog projects={data.projects} currency={currency} />
             <PaymentDialog projects={data.projects} currency={currency} invoices={data.invoices} />
-            <InvoiceDialog projects={data.projects} currency={currency} />
+            <InvoiceDialog projects={data.projects} currency={currency} defaultOpen={search.new === '1'} />
           </>
         ) : null}
       </PageHeader>

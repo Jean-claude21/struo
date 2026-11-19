@@ -46,6 +46,20 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(() =>
   }),
 );
 
+/** The manager's assistant (spec 029): a question answered from the company's facts only. */
+export const askAssistant = createServerFn({ method: 'POST' })
+  .validator((input: { question: string }) => ({ question: String(input?.question ?? '').trim().slice(0, 500) }))
+  .handler(({ data }) =>
+    act(async (actor) => {
+      const { db, answerer } = runtime();
+      if (!answerer.configured) throw new core.DomainError('assistant_unavailable', 422);
+      if (data.question.length < 3) throw new core.DomainError('invalid_input', 422, { field: 'question', detail: '' });
+      const [facts, settings] = await Promise.all([core.assistantFacts(db, actor), core.getSettings(db, actor)]);
+      const answer = await answerer.answer({ locale: settings.locale, question: data.question, facts });
+      return { answer };
+    }),
+  );
+
 // ---------------------------------------------------------------- projects and clients
 
 export const getProjects = createServerFn({ method: 'GET' })
@@ -124,7 +138,23 @@ export const importProjects = createServerFn({ method: 'POST' })
   .handler(({ data }) => act((actor) => core.importProjectsCsv(runtime().db, actor, data.csv)));
 
 export const getClients = createServerFn({ method: 'GET' }).handler(() =>
-  act(async (actor) => ({ role: actor.role, clients: await core.listClients(runtime().db, actor) })),
+  act(async (actor) => {
+    const { db } = runtime();
+    const canFinance = core.can(actor.role, 'finance.read');
+    const [clients, projects, insights, invoices, settings] = await Promise.all([
+      core.listClients(db, actor),
+      core.listProjects(db, actor),
+      canFinance ? core.dashboardInsights(db, actor) : Promise.resolve(null),
+      canFinance ? core.listInvoices(db, actor) : Promise.resolve([]),
+      core.getSettings(db, actor),
+    ]);
+    return {
+      role: actor.role, clients, currency: settings.currencyCode, risk: insights?.risk ?? [],
+      projects: projects.map((project) => ({ id: project.id, code: project.code, name: project.name, clientId: project.clientId, status: project.status, progressPct: project.progressPct })),
+      invoices: invoices.filter((invoice) => invoice.status === 'issued' && invoice.balanceMinor > 0)
+        .map((invoice) => ({ id: invoice.id, number: invoice.number, projectId: invoice.projectId, balanceMinor: invoice.balanceMinor, overdueDays: invoice.overdueDays })),
+    };
+  }),
 );
 
 export const createClient = createServerFn({ method: 'POST' })

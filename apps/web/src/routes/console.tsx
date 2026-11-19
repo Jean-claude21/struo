@@ -51,7 +51,7 @@ function Console() {
         <table>
           <thead>
             <tr>
-              <th>{t('app.name')}</th>
+              <th>{t('clientInvite.contactName')}</th>
               <th>{t('console.created')}</th>
               <th>{t('console.plan')}</th>
               <th>{t('console.users')}</th>

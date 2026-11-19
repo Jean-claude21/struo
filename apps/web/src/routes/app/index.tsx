@@ -6,6 +6,7 @@ import {
   Camera, CloudRain, FileText, FolderKanban, HardHat, Receipt, Sun, TriangleAlert, Users, Wallet, ClipboardCheck, CalendarClock,
 } from 'lucide-react';
 import { AlertList } from '@/components/AlertList.tsx';
+import { AssistantPanel } from '@/components/Assistant.tsx';
 import { AreaChart, Legend } from '@/components/charts.tsx';
 import { EmptyState, KpiTile, Panel, Progress, StatusChip, useRelative, type Shape } from '@/components/kit.tsx';
 import { DateText, formatMoney, Money } from '@/components/ui.tsx';
@@ -13,6 +14,7 @@ import { getDashboard } from '@/features/office/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 
 export const Route = createFileRoute('/app/')({
+  validateSearch: (search: Record<string, unknown>): { ask?: string } => (typeof search.ask === 'string' ? { ask: search.ask } : {}),
   loader: () => getDashboard(),
   component: Today,
 });
@@ -156,6 +158,7 @@ function Clients({ data }: { data: Data }) {
 
 function Manager({ data }: { data: Data }) {
   const { t, locale } = useI18n();
+  const { ask } = Route.useSearch();
   const money = (minor: number) => formatMoney(locale, minor, data.settings.currencyCode);
   const cash = data.insights.cash;
   const monthLabel = (month: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { month: 'short' }).format(new Date(`${month}-15T12:00:00`));
@@ -176,6 +179,7 @@ function Manager({ data }: { data: Data }) {
         <ActionCards data={data} />
         <Clients data={data} />
       </div>
+      <AssistantPanel initial={ask} />
       <div className="grid-main">
         {cash.length ? (
           <Panel title={t('today.cashTitle')} sub={t('today.cashSub', { amount: money(collected.at(-1) ?? 0) })}>

@@ -158,6 +158,7 @@ export function DialogButton({
   onOpenChange,
   hideTrigger,
   wide,
+  defaultOpen,
 }: {
   label: string;
   title: string;
@@ -168,8 +169,9 @@ export function DialogButton({
   onOpenChange?: (open: boolean) => void;
   hideTrigger?: boolean;
   wide?: boolean;
+  defaultOpen?: boolean;
 }) {
-  const [own, setOwn] = useState(false);
+  const [own, setOwn] = useState(Boolean(defaultOpen));
   const open = controlled ?? own;
   const setOpen = (value: boolean) => { if (controlled === undefined) setOwn(value); onOpenChange?.(value); };
   return (

@@ -73,6 +73,39 @@ export async function dashboardInsights(db: Db, actor: Actor, months = 6) {
   });
 }
 
+/**
+ * The facts the assistant may use (spec 029): sites with progress, dates, money and health; open
+ * invoices; late milestones; open incidents; documents to fix; client risk. Only what the member's
+ * role may read; figures in minor units with their currency.
+ */
+export async function assistantFacts(db: Db, actor: Actor) {
+  const canFinance = actor.role === 'owner' || actor.role === 'admin' || actor.role === 'accountant' || actor.role === 'engineer';
+  return asActor(db, actor, async (tx) => {
+    const sites = await tx.query(
+      `select p.code, p.name, p.status, t.name as type, c.name as client, p.start_date as start, p.end_date as "end", f.progress_pct as progress,
+              ${canFinance ? 'p.budget_minor as budget, f.invoiced_net_minor as invoiced, f.collected_minor as collected, f.spent_minor as spent, f.overdue_minor as overdue,' : ''}
+              f.health, p.currency_code as currency
+         from project p join project_finance f on f.project_id = p.id left join project_type t on t.id = p.type_id left join client c on c.id = p.client_id
+        where p.org_id = $1 and p.archived_at is null order by p.code`, [actor.orgId]);
+    const invoices = canFinance ? (await tx.query(
+      `select b.number, p.code as site, b.due_on as due, b.balance_minor as balance, b.overdue_days as "overdueDays"
+         from invoice_balance b join project p on p.id = b.project_id join invoice i on i.id = b.invoice_id
+        where b.org_id = $1 and i.status = 'issued' and b.balance_minor > 0 order by b.overdue_days desc limit 40`, [actor.orgId])).rows : [];
+    const milestones = await tx.query(
+      `select p.code as site, m.name, m.planned_on as planned, ms.delay_days as "delayDays"
+         from milestone m join milestone_status ms on ms.milestone_id = m.id join project p on p.id = m.project_id
+        where m.org_id = $1 and ms.status <> 'done' order by m.planned_on limit 40`, [actor.orgId]);
+    const incidents = await tx.query(
+      `select p.code as site, i.kind, i.priority, i.status, i.description from incident i join project p on p.id = i.project_id
+        where i.org_id = $1 and i.status <> 'resolved' order by i.created_at desc limit 20`, [actor.orgId]);
+    const documents = await tx.query(
+      `select p.code as site, d.title, ds.status, ds.days_left as "daysLeft" from project_document d join document_status ds on ds.document_id = d.id
+         join project p on p.id = d.project_id
+        where d.org_id = $1 and (ds.status in ('missing', 'to_fix', 'expired') or (ds.days_left is not null and ds.days_left <= 30))`, [actor.orgId]);
+    return { today: new Date().toISOString().slice(0, 10), sites: sites.rows, openInvoices: invoices, upcomingMilestones: milestones.rows, openIncidents: incidents.rows, documentsToWatch: documents.rows };
+  });
+}
+
 /** The latest photo of each site (its cover in lists). */
 export async function projectCovers(db: Db, actor: Actor): Promise<Record<string, string>> {
   return asActor(db, actor, async (tx) => {

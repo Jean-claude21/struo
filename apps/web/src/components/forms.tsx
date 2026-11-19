@@ -29,11 +29,11 @@ const CATEGORIES = ['materials', 'labour', 'subcontracting', 'equipment', 'trans
 const DOC_STATUSES = ['missing', 'pending', 'valid', 'to_fix'] as const;
 const MILESTONE_CATEGORIES = ['admin', 'studies', 'technical', 'finishing', 'delivery'] as const;
 
-export function InvoiceDialog({ projects, projectId, currency }: { projects?: ProjectOption[]; projectId?: string; currency: string }) {
+export function InvoiceDialog({ projects, projectId, currency, defaultOpen }: { projects?: ProjectOption[]; projectId?: string; currency: string; defaultOpen?: boolean }) {
   const { t } = useI18n();
   const { run, error, busy, setError } = useAction();
   return (
-    <DialogButton label={t('finance.newInvoice')} title={t('finance.newInvoice')}>
+    <DialogButton label={t('finance.newInvoice')} title={t('finance.newInvoice')} defaultOpen={defaultOpen}>
       {(close) => (
         <form
           className="stack"
