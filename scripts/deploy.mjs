@@ -8,6 +8,7 @@
 //   STRUO_SECRETS (default ../.secrets/struo.env): generated values of this project (written by this script)
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -119,6 +120,45 @@ const appUrl = (() => {
 })();
 console.log(`Neon: branch « ${branch.name} » ready`);
 
+// ---------------------------------------------------------------- Neon object storage (files)
+// The branch's own storage, a scoped credential and a `files` bucket (pattern of Jarvis' provision).
+const storageState = await neon(`/projects/${projectId}/branches/${branch.id}/storage`).catch(() => null);
+let storageVariables = {};
+if (storageState?.s3_endpoint) {
+  if (!own[`S3_ACCESS_KEY_ID_${ENV}`] || !own[`S3_SECRET_ACCESS_KEY_${ENV}`]) {
+    const credential = await neon(`/projects/${projectId}/branches/${branch.id}/credentials`, {
+      method: 'POST',
+      body: JSON.stringify({ scopes: ['storage:read', 'storage:write'], principal_type: 'user', name: `struo-${args.env}` }),
+    });
+    remember(`S3_ACCESS_KEY_ID_${ENV}`, credential.token_id);
+    remember(`S3_SECRET_ACCESS_KEY_${ENV}`, credential.s3_secret_access_key);
+    console.log(`Neon storage: credential created for ${args.env}`);
+  }
+  const require = createRequire(path.join(ROOT, 'apps/web/package.json'));
+  const { S3Client, HeadBucketCommand, CreateBucketCommand } = require('@aws-sdk/client-s3');
+  const s3 = new S3Client({
+    region: storageState.region,
+    endpoint: storageState.s3_endpoint,
+    forcePathStyle: true,
+    credentials: { accessKeyId: own[`S3_ACCESS_KEY_ID_${ENV}`], secretAccessKey: own[`S3_SECRET_ACCESS_KEY_${ENV}`] },
+  });
+  try {
+    await s3.send(new HeadBucketCommand({ Bucket: 'files' }));
+  } catch {
+    await s3.send(new CreateBucketCommand({ Bucket: 'files' }));
+    console.log('Neon storage: bucket « files » created');
+  }
+  storageVariables = {
+    S3_ENDPOINT: storageState.s3_endpoint,
+    S3_REGION: storageState.region,
+    S3_BUCKET: 'files',
+    S3_ACCESS_KEY_ID: own[`S3_ACCESS_KEY_ID_${ENV}`],
+    S3_SECRET_ACCESS_KEY: own[`S3_SECRET_ACCESS_KEY_${ENV}`],
+  };
+} else {
+  console.log('Neon storage: not available on this branch — files stay on the container volume.');
+}
+
 // ---------------------------------------------------------------- Coolify
 const projects = await coolify('/projects');
 let project = projects.find((p) => p.name === 'Struo');
@@ -179,6 +219,7 @@ const variables = {
   JOBS_ENABLED: 'true',
   // The staging instance is a demo: the payment simulator is allowed there, never in production.
   PAYMENTS_SIMULATOR: args.env === 'staging' ? 'true' : 'false',
+  ...storageVariables,
   ...(admin.RESEND_API_KEY ? { RESEND_API_KEY: admin.RESEND_API_KEY } : {}),
   ...(own.MAIL_FROM ? { MAIL_FROM: own.MAIL_FROM } : {}),
   ...(admin.OPENAI_API_KEY ? { OPENAI_API_KEY: admin.OPENAI_API_KEY } : {}),
