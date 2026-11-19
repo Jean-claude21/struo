@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, notFound } from '@tanstack/react-router';
 import { useState } from 'react';
 import { ErrorText, formatMoney, useAction } from '@/components/ui.tsx';
 import { getSimulatedPayment, settleSimulatedPayment } from '@/features/portal/server.ts';
@@ -6,7 +6,14 @@ import { useI18n } from '@/i18n/index.tsx';
 
 /** The simulator's checkout (test environments only): no money moves. */
 export const Route = createFileRoute('/pay/simulate/$intentId')({
-  loader: ({ params }) => getSimulatedPayment({ data: { intentId: params.intentId } }),
+  // Outside test environments (or an unknown intent) the page does not exist: a real 404, not an error.
+  loader: async ({ params }) => {
+    try {
+      return await getSimulatedPayment({ data: { intentId: params.intentId } });
+    } catch {
+      throw notFound();
+    }
+  },
   head: () => ({ meta: [{ name: 'robots', content: 'noindex' }] }),
   component: SimulatedPayment,
 });
