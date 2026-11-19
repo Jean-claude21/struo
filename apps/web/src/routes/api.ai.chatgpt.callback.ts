@@ -26,7 +26,7 @@ export const Route = createFileRoute('/api/ai/chatgpt/callback')({
           const models = (await tryOpenAi(tokens.access)) ?? [];
           const box = secretBox(rt.env);
           await core.saveMyAiConnection(rt.db, actor, {
-            kind: 'plan', provider: 'chatgpt', model: pickModel(models, 'gpt-5-mini'), hint: tokens.email ?? 'ChatGPT',
+            kind: 'plan', provider: 'chatgpt', model: pickModel(models, 'gpt-6-luna'), hint: tokens.email ?? 'ChatGPT',
             secretSealed: box.seal(tokens.access), refreshSealed: tokens.refresh ? box.seal(tokens.refresh) : null, expiresAt: tokens.expiresAt,
           });
           return back('connected');

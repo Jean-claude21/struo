@@ -63,7 +63,7 @@ export function env(): Env {
     OPENAI_API_KEY: read('OPENAI_API_KEY'),
     OPENAI_MODEL: read('OPENAI_MODEL', 'gpt-4o-mini'),
     OPENAI_TRANSCRIBE_MODEL: read('OPENAI_TRANSCRIBE_MODEL', 'whisper-1'),
-    OPENAI_AGENT_MODEL: read('OPENAI_AGENT_MODEL', 'gpt-4.1-mini'),
+    OPENAI_AGENT_MODEL: read('OPENAI_AGENT_MODEL', 'gpt-6-luna'),
     OPENAI_SIWC_CLIENT_ID: read('OPENAI_SIWC_CLIENT_ID'),
     OPENAI_SIWC_CLIENT_SECRET: read('OPENAI_SIWC_CLIENT_SECRET'),
     JOBS_ENABLED: read('JOBS_ENABLED', 'true') !== 'false',

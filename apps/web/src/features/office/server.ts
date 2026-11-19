@@ -222,6 +222,40 @@ export const createInvoice = createServerFn({ method: 'POST' })
   .validator(any)
   .handler(({ data }) => act((actor) => core.createInvoice(runtime().db, actor, data)));
 
+// ---------------------------------------------------------------- invoice drafts (spec 035)
+
+export const createDraftInvoice = createServerFn({ method: 'POST' })
+  .validator((input: { projectId: string; kind: string; fromProgress?: boolean; label?: string }) => input)
+  .handler(({ data }) => act((actor) => core.createDraftInvoice(runtime().db, actor, data)));
+
+export const getInvoiceEditor = createServerFn({ method: 'GET' })
+  .validator(idOf)
+  .handler(({ data }) =>
+    act(async (actor) => {
+      const { db } = runtime();
+      const [invoice, settings] = await Promise.all([core.getInvoiceForEdit(db, actor, data.id), core.getInvoiceSettings(db, actor)]);
+      return { invoice, settings, role: actor.role };
+    }),
+  );
+
+export const saveDraftInvoice = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; patch: Record<string, unknown> }) => input)
+  .handler(({ data }) => act((actor) => core.saveDraftInvoice(runtime().db, actor, data.id, data.patch)));
+
+export const issueInvoice = createServerFn({ method: 'POST' })
+  .validator(idOf)
+  .handler(({ data }) => act((actor) => core.issueInvoice(runtime().db, actor, data.id)));
+
+export const deleteDraftInvoice = createServerFn({ method: 'POST' })
+  .validator(idOf)
+  .handler(({ data }) => act((actor) => core.deleteDraftInvoice(runtime().db, actor, data.id)));
+
+export const getInvoiceSettings = createServerFn({ method: 'GET' }).handler(() => act((actor) => core.getInvoiceSettings(runtime().db, actor)));
+
+export const updateInvoiceSettings = createServerFn({ method: 'POST' })
+  .validator((input: Record<string, unknown>) => input)
+  .handler(({ data }) => act((actor) => core.updateInvoiceSettings(runtime().db, actor, data)));
+
 export const getProgressStatement = createServerFn({ method: 'GET' })
   .validator(idOf)
   .handler(({ data }) => act((actor) => core.progressStatement(runtime().db, actor, data.id)));

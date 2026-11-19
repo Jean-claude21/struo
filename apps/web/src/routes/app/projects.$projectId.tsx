@@ -440,7 +440,7 @@ function FinanceTab({ data }: { data: Data }) {
     <div className="stack">
       {canWrite ? (
         <div className="row">
-          <InvoiceDialog projectId={project.id} currency={project.currencyCode} />
+          <InvoiceDialog projectId={project.id} />
           <PaymentDialog projectId={project.id} currency={project.currencyCode} invoices={data.invoices} />
         </div>
       ) : null}

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { asActor, ensure, journal, parse } from './access.ts';
 import type { Actor, Db } from './db.ts';
 import { DomainError, notFound } from './errors.ts';
+import { nextInvoiceNumber } from './invoicing.ts';
 
 export const PAYMENT_METHODS = ['mobile_money', 'transfer', 'cheque', 'cash', 'card', 'other'] as const;
 export const INVOICE_KINDS = ['advance', 'progress', 'final'] as const;
@@ -35,9 +36,7 @@ export async function createInvoice(db: Db, actor: Actor, input: unknown): Promi
     if (!project) throw notFound();
     const issuedOn = data.issuedOn ?? new Date().toISOString().slice(0, 10);
     if (data.dueOn < issuedOn) throw new DomainError('due_before_issue', 422);
-    const year = issuedOn.slice(0, 4);
-    const { rows: counter } = await tx.query<{ n: number }>('select struo_next_number($1, $2) as n', [actor.orgId, `invoice-${year}`]);
-    const number = `F-${year}-${String(counter[0]!.n).padStart(4, '0')}`;
+    const number = await nextInvoiceNumber(tx, actor.orgId, issuedOn);
     try {
       const { rows } = await tx.query<{ id: string }>(
         `insert into invoice (org_id, project_id, number, kind, label, issued_on, due_on, currency_code, amount_minor,
@@ -227,7 +226,12 @@ export async function invoiceDocument(db: Db, actor: Actor, id: string) {
     );
     const row = rows[0];
     if (!row) throw notFound();
-    return row as InvoiceDocument;
+    const lines = (await tx.query(
+      `select kind, section, designation, unit, quantity_milli, unit_price_minor, contract_minor, cumulative_bps, previous_minor, amount_minor
+         from invoice_line where invoice_id = $1 order by position`, [id])).rows;
+    const adjustments = (await tx.query('select label, rate_bps, base, amount_minor from invoice_adjustment where invoice_id = $1 order by position', [id])).rows;
+    const settings = (await tx.query('select * from invoice_settings where org_id = $1', [actor.orgId])).rows[0] ?? null;
+    return { ...row, lines, adjustments, settings } as InvoiceDocument;
   });
 }
 
@@ -239,6 +243,12 @@ export interface InvoiceDocument {
       balance_minor: number | null; project_code: string; project_name: string; location: string | null;
       client_name: string | null; client_address: string | null; client_email: string | null; client_phone: string | null;
       company_name: string; status: string; country_code: string;
+      contract_ref: string | null; order_ref: string | null; notes: string | null; terms: string | null; vat_exempt_reason: string | null;
+      other_deductions_minor: number;
+      lines: { kind: string; section: string | null; designation: string; unit: string | null; quantity_milli: number; unit_price_minor: number;
+        contract_minor: number; cumulative_bps: number; previous_minor: number; amount_minor: number }[];
+      adjustments: { label: string; rate_bps: number | null; base: string; amount_minor: number }[];
+      settings: Record<string, string | number | boolean | null> | null;
 }
 
 /** The company's money at a glance (dashboard). */
