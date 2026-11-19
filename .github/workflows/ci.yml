@@ -107,7 +107,7 @@ jobs:
             echo "Coolify not configured for this environment: image published, no redeploy."
             exit 0
           fi
-          curl --fail --silent --show-error -H "Authorization: Bearer $COOLIFY_TOKEN" \
+          curl --fail --silent --show-error -X POST -H "Authorization: Bearer $COOLIFY_TOKEN" \
             "${COOLIFY_URL%/}/api/v1/deploy?uuid=$APP_UUID&force=false" > /dev/null
           echo "Deployment requested."
           if [ -n "$HEALTH_URL" ]; then

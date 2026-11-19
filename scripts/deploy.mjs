@@ -202,7 +202,7 @@ try {
 }
 
 if (!args['no-deploy']) {
-  await coolify(`/deploy?uuid=${application.uuid}&force=false`);
+  await coolify(`/deploy?uuid=${application.uuid}&force=false`, { method: 'POST' });
   console.log(`Coolify: deployment requested → ${domain}`);
   for (let i = 0; i < 60; i += 1) {
     await sleep(10_000);
