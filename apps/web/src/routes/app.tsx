@@ -172,6 +172,7 @@ function OfficeLayout() {
           <button type="button" className="top-search" onClick={() => setPalette(true)} style={{ minWidth: 0 }}>
             <Search size={14} /><span className="grow" style={{ textAlign: 'left' }}>{t('ui.search')}</span><span className="kbd">Ctrl K</span>
           </button>
+          <button type="button" className="btn ghost small" style={{ justifyContent: 'flex-start' }} onClick={() => void signOut()}><LogOut size={15} />{t('shell.signOut')}</button>
         </div>
       </nav>
       <div className="main-wrap">
