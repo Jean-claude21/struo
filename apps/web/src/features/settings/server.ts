@@ -3,6 +3,7 @@ import { verifyOAuthQueryParams } from '@better-auth/oauth-provider';
 import { createServerFn } from '@tanstack/react-start';
 import { translate } from '@/i18n/index.tsx';
 import { monerooGateway, simulatorGateway } from '@/server/adapters.server.ts';
+import { createChariow } from '@/server/chariow.server.ts';
 import { chooseCompany, guarded, loadViewer, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 
@@ -169,9 +170,11 @@ export const getPlans = createServerFn({ method: 'GET' }).handler(() =>
 export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
   guarded(async () => {
     await requirePlatformAdmin();
-    const { owner, db } = runtime();
-    const [companies, plans, revenue] = await Promise.all([core.platformOverview(owner), core.listPlans(db), core.platformRevenue(owner)]);
-    return { companies, plans, revenue };
+    const { owner, db, env } = runtime();
+    const [companies, plans, revenue, products, redemptions, journal] = await Promise.all([
+      core.platformOverview(owner), core.listPlans(db), core.platformRevenue(owner), core.listLicenseProducts(owner),
+      core.listAllRedemptions(owner), core.platformJournalList(owner)]);
+    return { companies, plans, revenue, products, redemptions, journal, chariowConfigured: Boolean(env.CHARIOW_API_KEY) };
   }),
 );
 
@@ -181,8 +184,62 @@ export const setCompanyPlan = createServerFn({ method: 'POST' })
     guarded(async () => {
       const viewer = await requirePlatformAdmin();
       await core.setCompanyPlan(runtime().owner, data.orgId, data.planCode, viewer.userId);
+      await core.recordPlatformGesture(runtime().owner, viewer.userId, 'plan.set', data.orgId, { planCode: data.planCode });
     }),
   );
+
+// ---------------------------------------------------------------- console (spec 038)
+
+export const getConsoleCompany = createServerFn({ method: 'GET' })
+  .validator((input: { orgId: string }) => input)
+  .handler(({ data }) => guarded(async () => { await requirePlatformAdmin(); return core.platformCompany(runtime().owner, data.orgId); }));
+
+export const consoleCompanyAction = createServerFn({ method: 'POST' })
+  .validator((input: { orgId: string; action: 'suspend' | 'reactivate' | 'trial' | 'paid'; reason?: string; days?: number; months?: number }) => input)
+  .handler(({ data }) =>
+    guarded(async () => {
+      const viewer = await requirePlatformAdmin();
+      const { owner } = runtime();
+      if (data.action === 'suspend' || data.action === 'reactivate') await core.setCompanySuspended(owner, viewer.userId, data.orgId, data.action === 'suspend', data.reason ?? null);
+      if (data.action === 'trial') await core.extendTrial(owner, viewer.userId, data.orgId, data.days ?? 14);
+      if (data.action === 'paid') await core.extendPaidPeriod(owner, viewer.userId, data.orgId, data.months ?? 1);
+      return { ok: true };
+    }),
+  );
+
+export const saveLicenseProduct = createServerFn({ method: 'POST' })
+  .validator((input: Record<string, unknown>) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.saveLicenseProduct(runtime().owner, viewer.userId, data); }));
+
+export const removeLicenseProduct = createServerFn({ method: 'POST' })
+  .validator((input: { productId: string }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.removeLicenseProduct(runtime().owner, viewer.userId, data.productId); }));
+
+/** A company pastes the licence key it bought on the store: checked, activated, applied (spec 038). */
+export const redeemLicense = createServerFn({ method: 'POST' })
+  .validator((input: { key: string }) => ({ key: String(input.key ?? '').trim() }))
+  .handler(({ data }) =>
+    act(async (actor) => {
+      const { owner, env } = runtime();
+      if (data.key.length < 6 || data.key.length > 200) throw new core.DomainError('license_invalid', 422);
+      const store = createChariow(env.CHARIOW_API_KEY);
+      const license = await store.license(data.key);
+      if (license.status === 'revoked') throw new core.DomainError('license_revoked', 422);
+      if (license.isExpired || license.status === 'expired') throw new core.DomainError('license_expired', 422);
+      await core.licenseProductFor(owner, license.productId);
+      if (await core.licenseAlreadyUsed(owner, data.key)) throw new core.DomainError('license_already_used', 409);
+      const activated = license.status === 'pending_activation' || license.canActivate ? await store.activate(data.key, `struo:${actor.orgId}`) : license;
+      return core.redeemLicense(owner, actor, { key: data.key, maskedKey: activated.maskedKey || license.maskedKey, productId: license.productId, customerEmail: license.customerEmail });
+    }, 'org.manage'),
+  );
+
+export const getLicenseOffer = createServerFn({ method: 'GET' }).handler(() =>
+  act(async (actor) => {
+    const { owner, db, env } = runtime();
+    const [products, redemptions] = await Promise.all([core.listLicenseProducts(owner, true), core.myRedemptions(db, actor)]);
+    return { products: products.filter((product) => product.buyUrl), redemptions, storeConfigured: Boolean(env.CHARIOW_API_KEY) };
+  }),
+);
 
 // ---------------------------------------------------------------- OAuth consent (spec 016)
 
