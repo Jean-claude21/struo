@@ -17,6 +17,17 @@ and an MCP server so that Claude or ChatGPT can work on a company's real figures
 | REST, webhooks | `/api` | Integrations, payment providers |
 | MCP | `/mcp` | Claude, ChatGPT, agents |
 
+## Environments
+
+| Environment | Address | Branch | Database |
+|---|---|---|---|
+| Production | https://struo.kete.digital | `main` | Neon `main` (Frankfurt) |
+| Staging (payment simulator on) | https://struo-staging.kete.digital | `dev` | Neon `dev` |
+
+Each merge into `dev` or `main` builds the image, publishes it to GHCR and redeploys on Coolify
+(`.github/workflows/ci.yml`); `node scripts/deploy.mjs --env staging|production` provisions an
+environment (Neon branch, object storage, Coolify app, variables).
+
 ## Stack
 
 Node 22 · pnpm · TypeScript strict · TanStack Start (React 19, Vite, Nitro) · PostgreSQL 17 (Neon)
