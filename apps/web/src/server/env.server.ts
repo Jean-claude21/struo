@@ -21,6 +21,8 @@ export interface Env {
   /** Sign in with ChatGPT (OpenAI partner programme): empty until OpenAI issues the client. */
   OPENAI_SIWC_CLIENT_ID: string;
   OPENAI_SIWC_CLIENT_SECRET: string;
+  /** The platform's Chariow store (subscriptions sold as licences, spec 038). */
+  CHARIOW_API_KEY: string;
   JOBS_ENABLED: boolean;
   PLATFORM_MONEROO_SECRET_KEY: string;
   PLATFORM_MONEROO_WEBHOOK_SECRET: string;
@@ -66,6 +68,7 @@ export function env(): Env {
     OPENAI_AGENT_MODEL: read('OPENAI_AGENT_MODEL', 'gpt-6-luna'),
     OPENAI_SIWC_CLIENT_ID: read('OPENAI_SIWC_CLIENT_ID'),
     OPENAI_SIWC_CLIENT_SECRET: read('OPENAI_SIWC_CLIENT_SECRET'),
+    CHARIOW_API_KEY: read('CHARIOW_API_KEY'),
     JOBS_ENABLED: read('JOBS_ENABLED', 'true') !== 'false',
     PLATFORM_MONEROO_SECRET_KEY: read('PLATFORM_MONEROO_SECRET_KEY'),
     PLATFORM_MONEROO_WEBHOOK_SECRET: read('PLATFORM_MONEROO_WEBHOOK_SECRET'),

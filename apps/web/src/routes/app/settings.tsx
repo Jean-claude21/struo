@@ -1,6 +1,6 @@
 import { can, ROLES } from '@struo/core/permissions';
 import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge, DateText, ErrorText, Field, formData, formatMoney, Tabs, useAction } from '@/components/ui.tsx';
 import { Check, Minus } from 'lucide-react';
 import { PERMISSIONS, type Permission } from '@struo/core/permissions';
@@ -10,6 +10,7 @@ import {
   eraseCompany, paySubscription, revokeInvitation, revokeMcpConnection, setMemberRole, setPaymentProvider, updateSettings,
 } from '@/features/settings/server.ts';
 import { InvoiceLookSettings } from '@/components/InvoiceLookSettings.tsx';
+import { getLicenseOffer, redeemLicense } from '@/features/settings/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
 export const Route = createFileRoute('/app/settings')({
@@ -445,6 +446,7 @@ function SubscriptionTab({ data }: { data: Data }) {
         {paidUntil ? <p>{t('settings.paidUntil', { date: date(paidUntil) })}</p> : null}
         {paymentDue ? <p className="error">{t('settings.paymentDue')}</p> : null}
       </section>
+      {manage ? <LicenseSection /> : null}
       {manage && data.platformPayment && payable.length ? (
         <section className="card stack">
           <h2>{t('settings.payPlan')}</h2>
@@ -626,5 +628,44 @@ function JournalTab({ data }: { data: Data }) {
         ))}</tbody>
       </table></div>
     </Panel>
+  );
+}
+
+/** Pay with a licence bought on the store, then paste its key here (spec 038). */
+function LicenseSection() {
+  const { t, locale, errorText } = useI18n();
+  const [offer, setOffer] = useState<Awaited<ReturnType<typeof getLicenseOffer>> | null>(null);
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const load = () => getLicenseOffer().then(setOffer).catch(() => setOffer(null));
+  useEffect(() => { void load(); }, []);
+  const date = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'long' }).format(new Date(value));
+  return (
+    <section className="card stack">
+      <h2>{t('lic.title')}</h2>
+      <p className="muted small" style={{ margin: 0 }}>{t('lic.how')}</p>
+      {offer?.products.length ? (
+        <div className="row tight">{offer.products.map((product) => <a key={product.productId} className="btn secondary small" href={product.buyUrl!} target="_blank" rel="noreferrer">{product.label}</a>)}</div>
+      ) : null}
+      {offer && !offer.storeConfigured ? <p className="notice warn small" style={{ margin: 0 }}>{t('lic.storeOff')}</p> : null}
+      <form className="row tight nowrap" onSubmit={async (event) => {
+        event.preventDefault(); setBusy(true); setMessage(null);
+        try {
+          const result = await redeemLicense({ data: { key } });
+          setMessage({ ok: true, text: t('lic.applied', { date: date(result.paidUntil) }) }); setKey(''); await load();
+        } catch (caught) { setMessage({ ok: false, text: errorText(caught) }); } finally { setBusy(false); }
+      }}>
+        <input value={key} onChange={(event) => setKey(event.target.value)} placeholder={t('lic.placeholder')} autoComplete="off" style={{ flex: 1, minWidth: 0, fontFamily: 'monospace' }} />
+        <button type="submit" className="btn" disabled={busy || key.trim().length < 6}>{t('lic.activate')}</button>
+      </form>
+      {message ? <p className={message.ok ? 'notice ok small' : 'error small'} style={{ margin: 0 }}>{message.text}</p> : null}
+      {offer?.redemptions.length ? (
+        <div className="stack" style={{ gap: '.3rem' }}>
+          <b className="small">{t('lic.history')}</b>
+          {offer.redemptions.map((item) => <div key={item.maskedKey + item.redeemedAt} className="small muted"><code>{item.maskedKey}</code> · {item.planCode} · {item.months} {t('console2.months')} · {date(item.redeemedAt)} → {date(item.paidUntil)}</div>)}
+        </div>
+      ) : null}
+    </section>
   );
 }
