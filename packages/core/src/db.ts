@@ -15,7 +15,7 @@ export function createPool(connectionString: string, max = 10): Db {
 }
 
 /** Where an action comes from (journal). */
-export type Door = 'web' | 'field' | 'api' | 'mcp' | 'portal' | 'job' | 'system';
+export type Door = 'web' | 'field' | 'api' | 'mcp' | 'portal' | 'job' | 'system' | 'ai';
 
 /** The acting member of a company. Built by `resolveActor`, never from client input. */
 export interface Actor {

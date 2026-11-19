@@ -2,8 +2,10 @@ import type { Catalog } from './fr.ts';
 
 // English catalog — same keys as fr.ts (the compiler refuses a missing or extra key).
 import { uxEn } from './ux.en.ts';
+import { aiEn } from './ai.en.ts';
 export const en: Catalog = {
   ...uxEn,
+  ...aiEn,
   app: {
     name: 'Struo',
     tagline: 'Run every site, even without network.',
@@ -66,6 +68,13 @@ export const en: Catalog = {
     accountant: 'Accountant',
   },
   errors: {
+    ai_personal_off: "The company does not allow personal AI connections.",
+    ai_connection_required: "The company asks everyone to use their own AI connection: connect one in Intelligence & MCP.",
+    ai_budget_spent: "The company's AI budget is spent for this month: use your own connection or ask for more.",
+    ai_reconnect: "Your AI connection expired: reconnect it in Intelligence & MCP.",
+    ai_key_invalid: "OpenAI does not accept this key.",
+    ai_rate_limited: "The model is busy or your quota is reached: try again in a moment.",
+    assistant_failed: "The assistant could not answer. Try again.",
     generic: 'Something went wrong. Please try again.',
     forbidden: 'Your role does not allow this action.',
     not_found: 'Not found.',

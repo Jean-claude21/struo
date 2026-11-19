@@ -745,3 +745,36 @@ input[type='range'] { accent-color: var(--brand); min-height: 32px; padding: 0; 
 .gx-bar.late { border-color: var(--bad); box-shadow: inset 0 0 0 1px var(--bad); }
 .grid.kpi5 { grid-template-columns: repeat(5, minmax(0, 1fr)); } @media (max-width: 1100px) { .grid.kpi5 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); } }
 .site-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; } .site-gallery img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; display: block; }
+/* Struo Intelligence (spec 034) */
+.ai-btn { background: linear-gradient(135deg, #7048c8, #e8590c); border: 0; color: #fff; gap: .35rem; }
+.ai-btn .kbd { background: rgba(255,255,255,.18); color: #fff; border-color: transparent; }
+.ai-btn.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px #7048c8; }
+.ai-mark { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #7048c8, #e8590c); flex: none; }
+.ai-panel { position: fixed; z-index: 65; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); background: var(--surface); border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-pop); display: flex; flex-direction: column; animation: slide-in .22s cubic-bezier(.32, .72, 0, 1); }
+.ai-panel.wide { width: min(720px, 100vw); }
+.ai-head { display: flex; align-items: center; gap: .5rem; padding: .7rem .8rem; border-bottom: 1px solid var(--divider); }
+.ai-body { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 1.1rem; }
+.ai-foot { border-top: 1px solid var(--divider); padding: .7rem .8rem .8rem; }
+.ai-field { display: flex; align-items: flex-end; gap: .4rem; border: 1px solid var(--line); border-radius: 12px; padding: .35rem .35rem .35rem .65rem; background: var(--surface); }
+.ai-field:focus-within { border-color: #7048c8; box-shadow: 0 0 0 3px color-mix(in srgb, #7048c8 18%, transparent); }
+.ai-field textarea { flex: 1; border: 0; outline: 0; resize: none; font: inherit; background: transparent; min-height: 24px; max-height: 160px; padding: .3rem 0; color: var(--ink); }
+.ai-turn { display: flex; flex-direction: column; gap: .5rem; }
+.ai-q { align-self: flex-end; max-width: 88%; background: var(--brand-soft); padding: .55rem .8rem; border-radius: 14px 14px 4px 14px; white-space: pre-wrap; }
+.ai-a { white-space: pre-wrap; line-height: 1.55; }
+.ai-status { display: flex; align-items: center; gap: .4rem; color: var(--ink-soft); font-size: .88rem; }
+.ai-tools { display: flex; flex-wrap: wrap; gap: .3rem; }
+.ai-tool { display: inline-flex; align-items: center; gap: .3rem; font-size: .76rem; padding: .15rem .45rem; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2, var(--bg)); }
+.ai-tool.ok svg { color: var(--ok); } .ai-tool.failed svg { color: var(--bad); } .ai-tool code { font-size: .74rem; }
+.lvl { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; font-size: .68rem; font-weight: 700; color: #fff; }
+.lvl.l1 { background: #2f9e44; } .lvl.l2 { background: #1c6dd0; } .lvl.l3 { background: #b26a00; } .lvl.l4 { background: #c92a2a; }
+.ai-draft { border: 1px solid var(--line); border-radius: 12px; padding: .7rem .8rem; background: var(--surface); box-shadow: var(--shadow-sm, none); }
+.ai-draft.waiting { border-color: #b26a00; } .ai-draft.done { border-color: var(--ok); opacity: .85; } .ai-draft.dismissed { opacity: .6; }
+.ai-sources { display: flex; flex-wrap: wrap; gap: .35rem; }
+.ai-sources a { display: inline-flex; align-items: center; gap: .25rem; font-size: .8rem; padding: .15rem .5rem; border-radius: 6px; background: var(--surface-2, var(--bg)); border: 1px solid var(--line); text-decoration: none; }
+.ai-card { padding: 1rem; }
+.spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+.cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .75rem; }
+.cap-card { border: 1px solid var(--line); border-radius: 12px; padding: .8rem .9rem; background: var(--surface); }
+.chip.small { font-size: .8rem; padding: .2rem .55rem; }
+@media (max-width: 640px) { .ai-panel { width: 100vw; } }

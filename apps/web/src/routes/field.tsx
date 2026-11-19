@@ -10,6 +10,7 @@ import {
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { SignaturePad, type SignaturePadHandle } from '@/components/SignaturePad.tsx';
 import { authClient } from '@/features/auth/client.ts';
+import { AssistantButton, IntelligenceProvider } from '@/components/Intelligence.tsx';
 import {
   compressPhoto, currentPosition, enqueue, fetchSnapshot, outbox, persist, readSnapshot, syncOutbox, type FieldProject, type FieldSnapshot,
   type OutboxItem, type OutboxPhoto,
@@ -126,13 +127,14 @@ function FieldApp() {
   }
 
   return (
+    <IntelligenceProvider>
     <div className="field-app">
       <header className="field-header">
         <div>
           <div className="muted small">{snapshot?.company.name ?? 'Struo'}</div>
           <strong style={{ fontSize: '1.35rem' }}>{t('fieldApp.hello', { name: snapshot?.user.name.split(' ')[0] ?? '' })}</strong>
         </div>
-        {pill}
+        <span className="row tight">{online && snapshot ? <AssistantButton /> : null}{pill}</span>
       </header>
       <div className="field-body" style={{ paddingBottom: '9.5rem' }}>
         {!snapshot ? <p className="notice">{t('fieldApp.neverSynced')}</p> : null}
@@ -199,6 +201,7 @@ function FieldApp() {
         ))}
       </nav>
     </div>
+    </IntelligenceProvider>
   );
 }
 
