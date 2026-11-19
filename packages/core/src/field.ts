@@ -10,7 +10,7 @@ export const PRIORITIES = ['critical', 'important', 'info'] as const;
 export async function fieldSnapshot(db: Db, actor: Actor) {
   return asActor(db, actor, async (tx) => {
     const { rows } = await tx.query(
-      `select p.id, p.code, p.name, p.location, p.status, pp.progress_pct as "progressPct",
+      `select p.id, p.code, p.name, p.location, p.status, pp.progress_pct as "progressPct", p.latitude, p.longitude,
               coalesce((select json_agg(json_build_object('id', ph.id, 'name', ph.name, 'progressPct', ph.progress_pct)
                                         order by ph.position)
                           from project_phase ph where ph.project_id = p.id), '[]') as phases
@@ -23,7 +23,7 @@ export async function fieldSnapshot(db: Db, actor: Actor) {
       at: new Date().toISOString(),
       projects: rows as {
         id: string; code: string; name: string; location: string | null; status: string; progressPct: number;
-        phases: { id: string; name: string; progressPct: number }[];
+        latitude: number | null; longitude: number | null; phases: { id: string; name: string; progressPct: number }[];
       }[],
     };
   });
@@ -128,6 +128,7 @@ export interface ReportRow {
   /** The phase's current (validated) progress, to show the step a report proposes. */
   phaseProgressPct: number | null;
   reviewedAt: string | null;
+  authorId: string;
   authorName: string;
   progressPct: number | null;
   note: string | null;
@@ -150,7 +151,7 @@ export async function listReports(
   return asActor(db, actor, async (tx) => {
     const { rows } = await tx.query<ReportRow>(
       `select r.id, r.project_id as "projectId", p.code as "projectCode", p.name as "projectName", ph.name as "phaseName",
-              ph.progress_pct as "phaseProgressPct", r.phase_id as "phaseId", u.name as "authorName", r.reviewed_at as "reviewedAt",
+              ph.progress_pct as "phaseProgressPct", r.phase_id as "phaseId", u.name as "authorName", r.author_id as "authorId", r.reviewed_at as "reviewedAt",
               r.progress_pct as "progressPct", r.note, r.latitude, r.longitude, r.taken_at as "takenAt", r.status,
               r.review_note as "reviewNote", r.audio_key is not null as "hasAudio", r.transcript,
               r.transcript_status as "transcriptStatus",
