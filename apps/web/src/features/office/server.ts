@@ -69,14 +69,15 @@ export const getProjectPage = createServerFn({ method: 'GET' })
           core.listMilestones(db, actor, { projectId: data.id }),
           core.listExpenses(db, actor, { projectId: data.id }),
           core.listMessages(db, actor, data.id),
-          core.listPortalLinks(db, actor, data.id),
+          core.listPortalLinksFull(db, actor, data.id),
           core.getConfiguration(db, actor),
           core.listClients(db, actor),
           core.listMembers(db, actor),
         ]);
+      const settings = await core.getSettings(db, actor);
       return {
         role: actor.role, userId: actor.userId, project, reports, incidents, invoices, payments, documents, milestones,
-        expenses, messages, links, configuration, clients, members,
+        expenses, messages, links, configuration, clients, members, companyName: settings.name,
       };
     }),
   );
@@ -349,6 +350,43 @@ export const createPortalLink = createServerFn({ method: 'POST' })
       const link = await core.createPortalLink(runtime().db, actor, data.projectId, data.label);
       return { ...link, url: `${runtime().env.APP_BASE_URL}/portal/${link.token}` };
     }),
+  );
+
+/**
+ * Invites the project's client (spec 022): a fresh link (older ones are revoked), who it is for, what
+ * the client sees, then the e-mail is sent here; WhatsApp opens on the sender's phone with the
+ * message ready (no SMS).
+ */
+export const inviteClient = createServerFn({ method: 'POST' })
+  .validator((input: {
+    projectId: string; channel: 'whatsapp' | 'email' | 'link'; contactName?: string; contactEmail?: string; contactPhone?: string;
+    show: { photos: boolean; planning: boolean; finance: boolean; documents: boolean; messages: boolean };
+  }) => input)
+  .handler(({ data }) =>
+    act(async (actor) => {
+      const { db, env, mailer } = runtime();
+      const locale = requestLocale();
+      const project = await core.getProject(db, actor, data.projectId);
+      const settings = await core.getSettings(db, actor);
+      for (const old of await core.listPortalLinksFull(db, actor, data.projectId)) {
+        if (!old.revokedAt) await core.revokePortalLink(db, actor, old.id);
+      }
+      const link = await core.createPortalLink(db, actor, data.projectId, data.contactName || undefined);
+      await core.updatePortalLink(db, actor, link.id, {
+        contactName: data.contactName || null, contactEmail: data.contactEmail || null, contactPhone: data.contactPhone || null, requireCode: true,
+        showPhotos: data.show.photos, showPlanning: data.show.planning, showFinance: data.show.finance, showDocuments: data.show.documents,
+        showMessages: data.show.messages, invited: true,
+      });
+      const url = `${env.APP_BASE_URL}/portal/${link.token}`;
+      const message = translate(locale, 'clientInvite.message', { name: data.contactName || '', project: project.name, company: settings.name, url });
+      if (data.channel === 'email') {
+        if (!data.contactEmail) throw new core.DomainError('invalid_input', 422, { field: 'contactEmail', detail: '' });
+        await mailer.send({ to: data.contactEmail, subject: translate(locale, 'clientInvite.subject', { project: project.name, company: settings.name }), text: message });
+      }
+      const phone = (data.contactPhone ?? '').replace(/[^\d]/gu, '');
+      const whatsappUrl = data.channel === 'whatsapp' && phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null;
+      return { url, message, whatsappUrl, mailSent: data.channel === 'email' && mailer.configured };
+    }, 'portal.manage'),
   );
 
 export const revokePortalLink = createServerFn({ method: 'POST' })

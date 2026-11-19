@@ -8,6 +8,9 @@ import {
   updateDocument, updateMilestone, updatePhase, updateProject,
 } from '@/features/office/server.ts';
 import { DocumentRows, InvoiceTable, MilestoneRows } from '@/components/tables.tsx';
+import { ClientTab } from '@/components/ClientInvite.tsx';
+import { Donut, HBars } from '@/components/charts.tsx';
+import { KpiTile, Panel, Progress as Bar, StatusChip } from '@/components/kit.tsx';
 import { useI18n } from '@/i18n/index.tsx';
 
 export const Route = createFileRoute('/app/projects/$projectId')({
@@ -19,38 +22,60 @@ type Tab = 'overview' | 'field' | 'finance' | 'expenses' | 'documents' | 'planni
 type Data = Awaited<ReturnType<typeof getProjectPage>>;
 
 function ProjectPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const data = Route.useLoaderData();
-  const [tab, setTab] = useState<Tab>('overview');
   const { project } = data;
+  const [tab, setTab] = useState<Tab>('overview');
   const tabs: Tab[] = ['overview', 'field', ...(can(data.role, 'finance.read') ? (['finance'] as Tab[]) : []), 'expenses', 'documents', 'planning', 'portal', 'messages'];
+  const cover = data.reports.flatMap((report) => report.photos)[0];
+  const client = data.clients.find((candidate) => candidate.id === project.clientId) ?? null;
+  const money = (minor: number) => formatMoney(locale, minor, project.currencyCode);
+  const statusShape = project.status === 'done' ? 'done' : project.status === 'suspended' ? 'blocked' : project.status === 'active' ? 'progress' : 'todo';
   return (
     <div className="stack">
-      <div className="topbar">
-        <div>
-          <div className="muted small">{project.code}</div>
-          <h1>{project.name}</h1>
-          <div className="row">
-            <Badge tone={project.status}>{t(`status.${project.status}`)}</Badge>
-            {project.typeName ? <Badge>{project.typeName}</Badge> : null}
-            <Badge tone={project.health}>{t(`status.${project.health}`)}</Badge>
-            {project.clientName ? <span className="muted">{project.clientName}</span> : null}
-            {project.location ? <span className="muted">· {project.location}</span> : null}
+      <div className={`cover ${cover ? '' : 'plain'}`} style={cover ? { height: 210 } : undefined}>
+        {cover ? <img src={`/api/files/photo/${cover.id}`} alt="" /> : null}
+        <div className="c-over">
+          <div className="row" style={{ alignItems: 'flex-end' }}>
+            <div className="grow" style={{ minWidth: 0 }}>
+              <div className="small" style={{ opacity: .85 }}>{project.code}{project.location ? ` · ${project.location}` : ''}</div>
+              <h1 className="trunc">{project.name}</h1>
+              <div className="row tight" style={{ marginTop: '.35rem' }}>
+                <span className="badge" style={cover ? { background: 'rgba(255,255,255,.9)', color: '#2b2b2b' } : undefined}><StatusChip shape={statusShape} label={t(`status.${project.status}`)} /></span>
+                {project.typeName ? <span className="badge" style={cover ? { background: 'rgba(255,255,255,.9)', color: '#2b2b2b' } : undefined}>{project.typeName}</span> : null}
+                <Badge tone={project.health}>{t(`status.${project.health}`)}</Badge>
+                {project.clientName ? <span className="small" style={{ opacity: .9 }}>{project.clientName}</span> : null}
+              </div>
+            </div>
+            <div style={{ minWidth: 200 }} className="hide-m">
+              <div className="small" style={{ opacity: .85 }}>{t('projects.progress')}</div>
+              <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{project.progressPct} %</div>
+            </div>
           </div>
         </div>
-        <div style={{ minWidth: 220 }}>
-          <div className="muted small">{t('projects.progress')}</div>
-          <Progress value={project.progressPct} />
-        </div>
       </div>
-      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: t(`projects.tabs.${value}`) }))} />
+      <div className="grid">
+        <KpiTile label={t('projects.budget')} value={money(project.budgetMinor)} sub={project.managerName ?? undefined} />
+        {can(data.role, 'finance.read') ? (
+          <>
+            <KpiTile label={t('dashboard.collected')} value={money(project.finance.collectedMinor)} sub={`${project.collectedPct} % · ${t('dashboard.invoiced')} ${project.finance.invoicedPct} %`} />
+            <KpiTile label={t('expenses.spent')} value={money(project.finance.spentMinor)} sub={`${project.budgetMinor ? Math.round((project.finance.spentMinor / project.budgetMinor) * 100) : 0} % ${t('projects.budget').toLowerCase()}`} />
+            <KpiTile label={t('dashboard.overdue')} value={money(project.finance.overdueMinor)} tone={project.finance.overdueMinor > 0 ? 'bad' : undefined} />
+          </>
+        ) : null}
+        <KpiTile label={t('projects.compliance')} value={project.compliancePct === null ? '—' : `${project.compliancePct} %`} tone={(project.compliancePct ?? 100) < 75 ? 'bad' : undefined} />
+      </div>
+      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'portal' ? t('clientInvite.tab') : t(`projects.tabs.${value}`) }))} />
       {tab === 'overview' ? <Overview data={data} /> : null}
       {tab === 'field' ? <FieldTab data={data} /> : null}
       {tab === 'finance' ? <FinanceTab data={data} /> : null}
       {tab === 'expenses' ? <ExpensesTab data={data} /> : null}
       {tab === 'documents' ? <DocumentsTab data={data} /> : null}
       {tab === 'planning' ? <PlanningTab data={data} /> : null}
-      {tab === 'portal' ? <PortalTab data={data} /> : null}
+      {tab === 'portal' ? (
+        <ClientTab projectId={project.id} projectName={project.name} companyName={data.companyName} links={data.links} canManage={can(data.role, 'portal.manage')}
+          client={client ? { name: client.name, email: client.email, phone: client.phone } : null} />
+      ) : null}
       {tab === 'messages' ? <MessagesTab data={data} /> : null}
     </div>
   );
@@ -62,9 +87,61 @@ function Overview({ data }: { data: Data }) {
   const canWrite = can(data.role, 'projects.write');
   const { run, error, busy, setError } = useAction();
   const money = (minor: number) => formatMoney(locale, minor, project.currencyCode);
+  const journal = data.reports.slice(0, 6);
   return (
     <div className="stack">
-      <div className="grid">
+      <div className="grid-3">
+        <Panel title={t('projects.progress')}>
+          <div className="row nowrap" style={{ gap: '1rem' }}>
+            <Donut size={130} thickness={14} label={`${project.progressPct} %`} segments={[{ value: project.progressPct, color: 'var(--brand)' }, { value: 100 - project.progressPct, color: 'transparent' }]}
+              center={<b>{project.progressPct} %</b>} />
+            <div className="stack grow" style={{ gap: '.45rem' }}>
+              {project.phases.map((phase) => (
+                <div key={phase.id} className="stack" style={{ gap: 2 }}>
+                  <span className="xsmall muted">{phase.name}</span><Progress value={phase.progressPct} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </Panel>
+        {can(data.role, 'finance.read') ? (
+          <Panel title={t('projects.budget')}>
+            <HBars format={money} items={[
+              { label: t('projects.budget'), value: project.budgetMinor, color: 'var(--ink-faint)' },
+              { label: t('expenses.spent'), value: project.finance.spentMinor, color: 'var(--warn)' },
+              { label: t('dashboard.invoiced'), value: project.finance.invoicedNetMinor, color: 'var(--info)' },
+              { label: t('dashboard.collected'), value: project.finance.collectedMinor, color: 'var(--ok)' },
+            ]} />
+          </Panel>
+        ) : null}
+        <Panel title={t('projects.compliance')} sub={project.compliancePct === null ? '' : `${project.compliancePct} %`}>
+          <div className="stack" style={{ gap: '.45rem' }}>
+            {data.documents.filter((document) => document.required).map((document) => (
+              <div key={document.id} className="row nowrap small"><span className="grow trunc">{document.title}</span>
+                <StatusChip shape={document.status === 'valid' ? 'done' : document.status === 'pending' ? 'progress' : document.status === 'missing' ? 'todo' : 'late'} label={t(`documents.statuses.${document.status}`)} /></div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+      {journal.length ? (
+        <Panel title={t('field.reports')}>
+          <div className="timeline-v">
+            {journal.map((report) => (
+              <div key={report.id} className="tv-item" style={{ ['--c' as string]: report.status === 'validated' ? 'var(--ok)' : report.status === 'rejected' ? 'var(--bad)' : 'var(--brand)' }}>
+                <div className="row tight small"><b>{report.authorName}</b><span className="faint"><DateText value={report.takenAt} time /></span>
+                  {report.phaseName && report.progressPct !== null ? <span className="badge brand">{report.phaseName} {report.progressPct} %</span> : null}</div>
+                {report.note ? <p style={{ margin: '.25rem 0' }}>{report.note}</p> : null}
+                {report.photos.length ? (
+                  <div className="row tight">{report.photos.slice(0, 4).map((photo) => (
+                    <a key={photo.id} href={`/api/files/photo/${photo.id}`} target="_blank" rel="noreferrer"><img src={`/api/files/photo/${photo.id}`} alt="" style={{ width: 84, height: 64, objectFit: 'cover', borderRadius: 6 }} loading="lazy" /></a>
+                  ))}</div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+      <div className="grid" style={{ display: 'none' }}>
         <Kpi label={t('projects.budget')} value={money(project.budgetMinor)} />
         {can(data.role, 'finance.read') ? (
           <>
