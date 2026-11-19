@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
+import { Modal } from './kit.tsx';
 
 // ---------------------------------------------------------------- formatting
 
@@ -143,32 +144,46 @@ export function ErrorText({ error }: { error: string | null }) {
   ) : null;
 }
 
-/** A form in a native <dialog>, opened by a button. */
+/**
+ * A form in a modal, opened by its button — or driven from outside (`open` / `onOpenChange`, e.g. a
+ * card dropped on « Paid » opens the payment form), in which case `hideTrigger` hides the button.
+ */
 export function DialogButton({
   label,
   title,
   secondary,
   small,
   children,
+  open: controlled,
+  onOpenChange,
+  hideTrigger,
+  wide,
+  defaultOpen,
 }: {
   label: string;
   title: string;
   secondary?: boolean;
   small?: boolean;
   children: (close: () => void) => ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+  wide?: boolean;
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [own, setOwn] = useState(Boolean(defaultOpen));
+  const open = controlled ?? own;
+  const setOpen = (value: boolean) => { if (controlled === undefined) setOwn(value); onOpenChange?.(value); };
   return (
     <>
-      <button type="button" className={`btn ${secondary ? 'secondary' : ''} ${small ? 'small' : ''}`} onClick={() => setOpen(true)}>
-        {label}
-      </button>
-      {open ? (
-        <dialog open aria-label={title} style={{ position: 'fixed', top: '8vh', zIndex: 50, maxHeight: '84vh', overflowY: 'auto' }}>
-          <h2>{title}</h2>
-          {children(() => setOpen(false))}
-        </dialog>
-      ) : null}
+      {hideTrigger ? null : (
+        <button type="button" className={`btn ${secondary ? 'secondary' : ''} ${small ? 'small' : ''}`} onClick={() => setOpen(true)}>
+          {label}
+        </button>
+      )}
+      <Modal open={open} onClose={() => setOpen(false)} title={title} wide={wide}>
+        {open ? children(() => setOpen(false)) : null}
+      </Modal>
     </>
   );
 }

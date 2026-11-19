@@ -1,9 +1,9 @@
-import { createPool, type Db, type Drafter, type Mailer, type Messenger, type Storage, type Transcriber } from '@struo/core';
+import { createPool, type Db, type Drafter, type Mailer, type Messenger, type Storage, type Transcriber, type DocumentReader, type Answerer } from '@struo/core';
 import { mcp } from '@better-auth/mcp';
 import { betterAuth } from 'better-auth';
 import { jwt } from 'better-auth/plugins';
 import { tanstackStartCookies } from 'better-auth/tanstack-start';
-import { createDrafter, createMailer, createMessenger, createStorage, createTranscriber, secretBox } from './adapters.server.ts';
+import { createDrafter, createMailer, createMessenger, createStorage, createTranscriber, createDocumentReader, createAnswerer, secretBox } from './adapters.server.ts';
 import { env, type Env } from './env.server.ts';
 import { startJobs } from './jobs.server.ts';
 
@@ -60,6 +60,8 @@ export interface Runtime {
   messenger: Messenger;
   drafter: Drafter;
   transcriber: Transcriber;
+  reader: DocumentReader;
+  answerer: Answerer;
   secrets: ReturnType<typeof secretBox>;
 }
 
@@ -80,6 +82,8 @@ export function runtime(): Runtime {
     messenger: createMessenger(environment),
     drafter: createDrafter(environment),
     transcriber: createTranscriber(environment),
+    reader: createDocumentReader(environment),
+    answerer: createAnswerer(environment),
     secrets: secretBox(environment),
   };
   if (environment.JOBS_ENABLED && environment.APP_ENV !== 'test') startJobs(current);

@@ -11,10 +11,12 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { values: args } = parseArgs({ options: { env: { type: 'string', default: 'staging' }, 'no-deploy': { type: 'boolean' } } });
+const { values: args } = parseArgs({ options: { env: { type: 'string', default: 'staging' }, 'no-deploy': { type: 'boolean' }, seed: { type: 'boolean' } } });
+if (args.seed && args.env !== 'staging') throw new Error('--seed only fills staging with fictional demo data');
 const TARGETS = {
   staging: { branch: 'dev', tag: 'dev', app: 'struo-staging', environment: 'staging' },
   production: { branch: 'main', tag: 'latest', app: 'struo', environment: 'production' },
@@ -220,7 +222,7 @@ const variables = {
   // The staging instance is a demo: the payment simulator is allowed there, never in production.
   PAYMENTS_SIMULATOR: args.env === 'staging' ? 'true' : 'false',
   ...storageVariables,
-  ...(admin.RESEND_API_KEY ? { RESEND_API_KEY: admin.RESEND_API_KEY } : {}),
+  ...((admin.RESEND_API_KEY ?? own.RESEND_API_KEY) ? { RESEND_API_KEY: admin.RESEND_API_KEY ?? own.RESEND_API_KEY } : {}),
   ...(own.MAIL_FROM ? { MAIL_FROM: own.MAIL_FROM } : {}),
   ...(admin.OPENAI_API_KEY ? { OPENAI_API_KEY: admin.OPENAI_API_KEY } : {}),
 };
@@ -251,6 +253,7 @@ if (!args['no-deploy']) {
       const response = await fetch(`${domain}/api/health`);
       if (response.ok) {
         console.log(`Healthy: ${domain}/api/health`);
+        if (args.seed) seedDemo();
         process.exit(0);
       }
     } catch {
@@ -259,4 +262,14 @@ if (!args['no-deploy']) {
   }
   console.log('Not healthy after 10 minutes: check the Coolify logs.');
   process.exit(1);
+}
+
+/** Fictional demo company on staging (apps/web/scripts/seed.ts), password kept in the project secrets. */
+function seedDemo() {
+  const password = secret('DEMO_PASSWORD_STAGING', () => `demo-${randomBytes(6).toString('hex')}`);
+  const result = spawnSync('pnpm', ['exec', 'tsx', 'scripts/seed.ts'], {
+    cwd: path.join(ROOT, 'apps/web'), stdio: 'inherit', shell: process.platform === 'win32',
+    env: { ...process.env, DATABASE_URL: appUrl, DATABASE_OWNER_URL: ownerUrl, SEED_PASSWORD: password, NODE_ENV: 'staging' },
+  });
+  console.log(result.status === 0 ? 'Demo data seeded (accounts: demo@, jean@, komi@, akossiwa@struo.test; password DEMO_PASSWORD_STAGING)' : 'Demo seed failed');
 }

@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
-  fromMinor, type CheckoutOutcome, type Drafter, type Transcriber, type Mailer, type Messenger, type PaymentGateway, type Storage,
+  fromMinor, type CheckoutOutcome, type Drafter, type Transcriber, type DocumentReader, type Answerer, type Mailer, type Messenger, type PaymentGateway, type Storage,
 } from '@struo/core';
 import type { Env } from './env.server.ts';
 
@@ -268,6 +268,72 @@ export function createTranscriber(env: Env): Transcriber {
       if (!response.ok) throw new Error(`transcription ${response.status}`);
       const body = (await response.json()) as { text?: string };
       return (body.text ?? '').trim();
+    },
+  };
+}
+
+// ---------------------------------------------------------------- assistant (questions on the data)
+
+/** OpenAI answers from the company's facts only; without a key the assistant is simply unavailable. */
+export function createAnswerer(env: Env): Answerer {
+  return {
+    configured: Boolean(env.OPENAI_API_KEY),
+    async answer({ locale, question, facts }) {
+      if (!env.OPENAI_API_KEY) throw new Error('answerer not configured');
+      const system = locale === 'en'
+        ? 'You are the assistant of a construction company. Answer the question using ONLY the JSON facts given (amounts are in minor units of their currency; XOF has no decimals). Be short and concrete: a sentence, then at most 5 lines starting with « - » naming sites by their code. Plain text only, no Markdown or asterisks. Write amounts with spaces between thousands and the currency (15 133 500 FCFA for XOF) and dates in words (21 August 2026). Never invent a figure, a date or a name. If the facts do not answer, say so plainly and suggest where to look in the app.'
+        : 'Tu es l’assistant d’une entreprise du BTP. Réponds à la question en utilisant UNIQUEMENT les faits JSON fournis (montants en unités mineures de leur devise ; le XOF n’a pas de décimales). Sois court et concret : une phrase, puis 5 lignes au plus commençant par « - », en nommant les chantiers par leur code. Texte simple uniquement, sans Markdown ni astérisques. Écris les montants avec des espaces entre les milliers et la devise (15 133 500 FCFA pour le XOF) et les dates en toutes lettres (21 août 2026). N’invente jamais un chiffre, une date ou un nom. Si les faits ne répondent pas, dis-le simplement et indique où regarder dans l’application.';
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: env.OPENAI_MODEL,
+          temperature: 0.1,
+          messages: [{ role: 'system', content: system }, { role: 'user', content: `FACTS:\n${JSON.stringify(facts)}\n\nQUESTION: ${question}` }],
+        }),
+      });
+      if (!response.ok) throw new Error(`answerer ${response.status}`);
+      const body = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+      return (body.choices?.[0]?.message?.content ?? '').trim();
+    },
+  };
+}
+
+// ---------------------------------------------------------------- delivery notes (OCR)
+
+/** Reads a delivery note photo with OpenAI vision; returns only what is printed (null otherwise). */
+export function createDocumentReader(env: Env): DocumentReader {
+  const clean = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, 300) : null);
+  return {
+    configured: Boolean(env.OPENAI_API_KEY),
+    async readDeliveryNote(image, locale) {
+      if (!env.OPENAI_API_KEY) throw new Error('reader not configured');
+      const dataUrl = `data:${image.mediaType};base64,${Buffer.from(image.body).toString('base64')}`;
+      const instructions = locale === 'en'
+        ? 'You read a photographed delivery note from a building site. Answer JSON only with keys supplier, item, quantity (number), unit, date (YYYY-MM-DD), reference. Use null for anything not clearly printed. Never guess.'
+        : 'Tu lis la photo d’un bon de livraison de chantier. Réponds uniquement en JSON avec les clés supplier, item, quantity (nombre), unit, date (AAAA-MM-JJ), reference. Mets null pour tout ce qui n’est pas clairement imprimé. Ne devine jamais.';
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: env.OPENAI_MODEL,
+          temperature: 0,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: instructions },
+            { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }] },
+          ],
+        }),
+      });
+      if (!response.ok) throw new Error(`reader ${response.status}`);
+      const body = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+      const parsed = JSON.parse(body.choices?.[0]?.message?.content ?? '{}') as Record<string, unknown>;
+      const quantity = typeof parsed.quantity === 'number' ? parsed.quantity : Number.parseFloat(String(parsed.quantity ?? '').replace(',', '.'));
+      const date = clean(parsed.date);
+      return {
+        supplier: clean(parsed.supplier), item: clean(parsed.item), quantity: Number.isFinite(quantity) ? quantity : null, unit: clean(parsed.unit),
+        date: date && /^\d{4}-\d{2}-\d{2}$/u.test(date) ? date : null, reference: clean(parsed.reference),
+      };
     },
   };
 }

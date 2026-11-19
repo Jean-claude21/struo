@@ -2,11 +2,27 @@
 // of what was written offline. Every item carries its own id: sending it twice changes nothing on
 // the server (idempotency), so a network that drops after the server saved it is harmless.
 
+export interface FieldWeatherDay { date: string; code: number; max: number; rain: number }
+
+export interface FieldProject {
+  id: string; code: string; name: string; location: string | null; status: string; progressPct: number;
+  latitude?: number | null; longitude?: number | null;
+  phases: { id: string; name: string; progressPct: number }[];
+  weather?: FieldWeatherDay[];
+  plans?: { id: string; title: string }[];
+  openIncidents?: number;
+  checklistsToday?: { name: string; completed: boolean }[];
+}
+
 export interface FieldSnapshot {
   at: string;
   user: { name: string; role: string; canReport: boolean };
   company: { name: string };
-  projects: { id: string; code: string; name: string; location: string | null; status: string; progressPct: number; phases: { id: string; name: string; progressPct: number }[] }[];
+  projects: FieldProject[];
+  templates?: { id: string; name: string; items: string[]; required: boolean }[];
+  rainLimit?: number;
+  scanAvailable?: boolean;
+  toFix?: { id: string; projectCode: string; note: string | null; reviewNote: string | null; takenAt: string }[];
 }
 
 export interface OutboxPhoto {
@@ -36,6 +52,41 @@ export type OutboxItem =
       attempts: number;
       lastError: string | null;
       payload: { id: string; projectId: string; kind: string; priority: string; description: string };
+      photos: [];
+    }
+  | {
+      id: string;
+      type: 'checklist';
+      createdAt: string;
+      attempts: number;
+      lastError: string | null;
+      payload: { id: string; projectId: string; templateId: string | null; name: string; items: { label: string; done: boolean }[]; doneAt: string };
+      photos: [];
+    }
+  | {
+      id: string;
+      type: 'delivery';
+      createdAt: string;
+      attempts: number;
+      lastError: string | null;
+      payload: {
+        id: string; projectId: string; supplier: string | null; item: string; quantity: number | null; unit: string | null;
+        deliveredOn: string; reference: string | null; verdict: 'conform' | 'reserve'; note: string | null; extracted: Record<string, unknown> | null;
+      };
+      photo: Blob | null;
+      photos: [];
+    }
+  | {
+      id: string;
+      type: 'signature';
+      createdAt: string;
+      attempts: number;
+      lastError: string | null;
+      payload: {
+        id: string; projectId: string; subjectKind: 'delivery' | 'pv' | 'checklist' | 'milestone'; subjectId: string | null; title: string;
+        signerName: string; signerRole: string | null; verdict: 'conform' | 'reserve'; reserveNote: string | null;
+      };
+      image: Blob;
       photos: [];
     };
 
@@ -115,6 +166,20 @@ export function syncOutbox(): Promise<{ sent: number; failed: number }> {
             for (const photo of item.photos) body.append(`photo:${photo.id}`, photo.blob, `${photo.id}.jpg`);
             if (item.audio) body.append('audio', new Blob([item.audio.blob], { type: item.audio.mediaType }), 'note');
             response = await fetch('/api/field/reports', { method: 'POST', body, credentials: 'same-origin' });
+          } else if (item.type === 'checklist') {
+            response = await fetch('/api/field/checklists', {
+              method: 'POST', body: JSON.stringify(item.payload), headers: { 'content-type': 'application/json' }, credentials: 'same-origin',
+            });
+          } else if (item.type === 'delivery') {
+            const body = new FormData();
+            body.append('delivery', JSON.stringify(item.payload));
+            if (item.photo) body.append('photo', item.photo, 'delivery.jpg');
+            response = await fetch('/api/field/deliveries', { method: 'POST', body, credentials: 'same-origin' });
+          } else if (item.type === 'signature') {
+            const body = new FormData();
+            body.append('signature', JSON.stringify(item.payload));
+            body.append('image', new File([item.image], 'signature.png', { type: 'image/png' }));
+            response = await fetch('/api/field/signatures', { method: 'POST', body, credentials: 'same-origin' });
           } else {
             response = await fetch('/api/field/incidents', {
               method: 'POST',

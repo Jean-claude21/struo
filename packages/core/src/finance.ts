@@ -268,3 +268,54 @@ export async function financeSummary(db: Db, actor: Actor) {
     };
   });
 }
+
+export interface ProgressStatement {
+  projectId: string;
+  currencyCode: string;
+  phases: { name: string; budgetMinor: number; progressPct: number; earnedMinor: number }[];
+  earnedMinor: number;
+  invoicedMinor: number;
+  /** Excl. tax: what the validated progress allows to invoice now. */
+  suggestedMinor: number;
+  advanceMinor: number;
+  advanceDeductedMinor: number;
+  /** Share of the remaining advance to deduct, in proportion of this statement to the budget. */
+  suggestedDeductionMinor: number;
+  nextNumber: number;
+}
+
+/**
+ * The next progress statement of a site (spec 026): each phase's budget times its validated
+ * progress, minus what progress and final invoices already billed (excl. tax). The advance is
+ * deducted in proportion. Figures only from the database: nothing typed by hand.
+ */
+export async function progressStatement(db: Db, actor: Actor, projectId: string): Promise<ProgressStatement> {
+  ensure(actor, 'finance.write');
+  return asActor(db, actor, async (tx) => {
+    const project = (await tx.query<{ budget_minor: number; currency_code: string }>(
+      'select budget_minor, currency_code from project where id = $1 and org_id = $2', [projectId, actor.orgId])).rows[0];
+    if (!project) throw notFound();
+    const phases = (await tx.query<{ name: string; budget: number; progress: number }>(
+      'select name, budget_minor as budget, progress_pct as progress from project_phase where project_id = $1 order by position, name', [projectId])).rows;
+    const totals = (await tx.query<{ invoiced: number; advance: number; deducted: number; statements: number }>(
+      `select coalesce(sum(amount_minor) filter (where kind in ('progress', 'final')), 0)::bigint as invoiced,
+              coalesce(sum(amount_minor) filter (where kind = 'advance'), 0)::bigint as advance,
+              coalesce(sum(deduction_minor), 0)::bigint as deducted,
+              count(*) filter (where kind = 'progress')::int as statements
+         from invoice where project_id = $1 and org_id = $2 and status = 'issued'`, [projectId, actor.orgId])).rows[0]!;
+    const rows = phases.map((phase) => ({
+      name: phase.name, budgetMinor: Number(phase.budget), progressPct: phase.progress, earnedMinor: Math.round((Number(phase.budget) * phase.progress) / 100),
+    }));
+    const earned = rows.reduce((sum, row) => sum + row.earnedMinor, 0);
+    const invoiced = Number(totals.invoiced);
+    const suggested = Math.max(0, earned - invoiced);
+    const advance = Number(totals.advance);
+    const deducted = Number(totals.deducted);
+    const budget = Number(project.budget_minor) || earned || 1;
+    const deduction = Math.min(Math.max(0, advance - deducted), Math.round((advance * suggested) / budget));
+    return {
+      projectId, currencyCode: project.currency_code, phases: rows, earnedMinor: earned, invoicedMinor: invoiced, suggestedMinor: suggested,
+      advanceMinor: advance, advanceDeductedMinor: deducted, suggestedDeductionMinor: deduction, nextNumber: Number(totals.statements) + 1,
+    };
+  });
+}

@@ -64,6 +64,27 @@ export interface Drafter {
   draft(input: { kind: 'reminder' | 'formal_notice'; locale: 'fr' | 'en'; facts: Record<string, string> }): Promise<string>;
 }
 
+export interface DeliveryNoteFields {
+  supplier: string | null;
+  item: string | null;
+  quantity: number | null;
+  unit: string | null;
+  date: string | null;
+  reference: string | null;
+}
+
+export interface DocumentReader {
+  readonly configured: boolean;
+  /** Reads a photographed delivery note. Unknown fields stay null: nothing is guessed. */
+  readDeliveryNote(image: { body: Uint8Array; mediaType: string }, locale: 'fr' | 'en'): Promise<DeliveryNoteFields>;
+}
+
+export interface Answerer {
+  readonly configured: boolean;
+  /** Answers a question about the company from the given facts only; says so when they do not tell. */
+  answer(input: { locale: 'fr' | 'en'; question: string; facts: unknown }): Promise<string>;
+}
+
 export interface Transcriber {
   readonly configured: boolean;
   /** Turns a recorded voice note into text, in the company's language. */

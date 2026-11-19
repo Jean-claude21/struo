@@ -1,16 +1,23 @@
 import { can } from '@struo/core/permissions';
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router';
+import { HardHat, Kanban, LayoutGrid, Table2 } from 'lucide-react';
+import { PageHeader, Progress as Bar, StatusChip, useToast, type Shape } from '@/components/kit.tsx';
+import { Board } from '@/components/views/Board.tsx';
+import { DataTable, type Column } from '@/components/views/DataTable.tsx';
+import { applyView, useViewState, type FieldDef } from '@/components/views/engine.ts';
+import { ViewToolbar } from '@/components/views/Toolbar.tsx';
 import { useState } from 'react';
-import { Badge, DialogButton, Empty, ErrorText, Field, FormButtons, formData, orNull, parseMoney, Progress, useAction } from '@/components/ui.tsx';
-import { createClient, createProject, getProjects, importProjects } from '@/features/office/server.ts';
+import { Badge, DateText, DialogButton, Empty, ErrorText, Field, FormButtons, formData, formatMoney, orNull, parseMoney, useAction } from '@/components/ui.tsx';
+import { createClient, createProject, getProjects, importProjects, updateProject } from '@/features/office/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
-type Search = { q?: string; status?: string };
+type Search = { q?: string; status?: string; new?: string };
 
 export const Route = createFileRoute('/app/projects/')({
   validateSearch: (search: Record<string, unknown>): Search => ({
     q: typeof search.q === 'string' ? search.q : undefined,
     status: typeof search.status === 'string' ? search.status : undefined,
+    ...(typeof search.new === 'string' ? { new: search.new } : {}),
   }),
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => getProjects({ data: deps }),
@@ -22,107 +29,100 @@ const STATUSES = ['pending', 'active', 'suspended', 'done'] as const;
 function Projects() {
   const { t, locale } = useI18n();
   const data = Route.useLoaderData();
-  const search = Route.useSearch();
-  const navigate = useNavigate({ from: '/app/projects/' });
+  const router = useRouter();
+  const toast = useToast();
   const canWrite = can(data.role, 'projects.write');
+  const search = Route.useSearch();
+  const view = useViewState('projects', { mode: 'grid' });
+  const money = (minor: number, currency: string) => formatMoney(locale, minor, currency);
+  const statusShape: Record<string, Shape> = { pending: 'todo', active: 'progress', suspended: 'blocked', done: 'done' };
+  type Row = (typeof data.projects)[number];
+  const fields: FieldDef<Row>[] = [
+    { key: 'name', label: t('projects.name'), type: 'text', get: (row) => `${row.code} ${row.name}` },
+    { key: 'status', label: t('app.status'), type: 'enum', groupable: true, get: (row) => row.status, options: STATUSES.map((status) => ({ value: status, label: t(`status.${status}`) })) },
+    { key: 'type', label: t('projects.type'), type: 'enum', groupable: true, get: (row) => row.typeName ?? '' },
+    { key: 'client', label: t('projects.client'), type: 'enum', groupable: true, get: (row) => row.clientName ?? '' },
+    { key: 'health', label: t('projects.health'), type: 'enum', groupable: true, get: (row) => row.health, options: (['healthy', 'weak', 'critical'] as const).map((value) => ({ value, label: t(`status.${value}`) })) },
+    { key: 'progress', label: t('projects.progress'), type: 'number', get: (row) => row.progressPct },
+    { key: 'budget', label: t('projects.budget'), type: 'money', get: (row) => row.budgetMinor },
+    { key: 'end', label: t('projects.end'), type: 'date', get: (row) => row.endDate, filterable: false },
+  ];
+  const rows = applyView(data.projects, fields, view.state);
+  const open = (row: Row) => void router.navigate({ to: '/app/projects/$projectId', params: { projectId: row.id } });
+  const columns: Column<Row>[] = [
+    { key: 'name', label: t('projects.name'), width: 280, cell: (row) => <span><b>{row.code}</b> {row.name}</span> },
+    { key: 'status', label: t('app.status'), width: 140, cell: (row) => <StatusChip shape={statusShape[row.status] ?? 'todo'} label={t(`status.${row.status}`)} /> },
+    { key: 'type', label: t('projects.type'), width: 140, cell: (row) => row.typeName ?? '—' },
+    { key: 'client', label: t('projects.client'), width: 180, cell: (row) => row.clientName ?? '—' },
+    { key: 'progress', label: t('projects.progress'), width: 170, cell: (row) => <Bar value={row.progressPct} /> },
+    { key: 'health', label: t('projects.health'), width: 120, cell: (row) => <Badge tone={row.health}>{t(`status.${row.health}`)}</Badge> },
+    { key: 'budget', label: t('projects.budget'), width: 160, align: 'right', cell: (row) => money(row.budgetMinor, row.currencyCode) },
+    { key: 'end', label: t('projects.end'), width: 130, cell: (row) => <DateText value={row.endDate} /> },
+  ];
   return (
-    <div className="stack">
-      <div className="topbar">
-        <h1>{t('projects.title')}</h1>
-        {canWrite ? (
-          <div className="row">
-            <ImportDialog />
-            <NewProjectDialog data={data} />
+    <div className="stack loose">
+      <PageHeader title={t('projects.title')} text={t('views.count', { n: data.projects.length })}>
+        {canWrite ? (<><ImportDialog /><NewProjectDialog data={data} defaultOpen={search.new === '1'} /></>) : null}
+      </PageHeader>
+      <div>
+        <ViewToolbar rows={data.projects} fields={fields} state={view.state} update={view.update} columns={view.state.mode === 'table'} group={view.state.mode === 'table'}
+          saved={view.saved} onSave={view.saveView} onRemoveSaved={view.removeView}
+          modes={[{ value: 'grid', label: t('views.grid'), icon: LayoutGrid }, { value: 'table', label: t('views.table'), icon: Table2 }, { value: 'board', label: t('views.board'), icon: Kanban }]} />
+        {view.state.mode === 'table' ? (
+          <DataTable rows={rows} columns={columns} fields={fields} state={view.state} update={view.update} rowId={(row) => row.id} onRowClick={open} />
+        ) : view.state.mode === 'board' ? (
+          <Board rows={rows} rowId={(row) => row.id} columnOf={(row) => row.status} onOpen={open}
+            columns={STATUSES.map((status) => ({ key: status, label: t(`status.${status}`), icon: <StatusChip shape={statusShape[status]!} label="" /> }))}
+            collapsed={view.state.collapsed} onCollapsedChange={(keys) => view.update({ collapsed: keys })} canDrag={() => canWrite}
+            onMove={async (row, to) => {
+              try {
+                await updateProject({ data: { id: row.id, patch: { status: to } } });
+                toast({ text: t('views.moved', { name: row.code, column: t(`status.${to as 'active'}`) }) });
+                await router.invalidate();
+              } catch { toast({ text: t('errors.generic'), kind: 'err' }); }
+            }}
+            renderCard={(row) => (
+              <>
+                {data.covers[row.id] ? <img className="k-thumb" src={`/api/files/photo/${data.covers[row.id]}`} alt="" loading="lazy" /> : null}
+                <span className="k-key">{row.code}</span>
+                <div className="k-title">{row.name}</div>
+                <Bar value={row.progressPct} />
+                <div className="k-meta"><span className="trunc">{row.clientName ?? ''}</span><Badge tone={row.health}>{t(`status.${row.health}`)}</Badge></div>
+              </>
+            )} />
+        ) : rows.length ? (
+          <div className="grid-3">
+            {rows.map((row) => (
+              <Link key={row.id} to="/app/projects/$projectId" params={{ projectId: row.id }} className="panel" style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ height: 150, background: 'linear-gradient(135deg, var(--brand-soft), var(--surface-2))', display: 'grid', placeItems: 'center', position: 'relative' }}>
+                  {data.covers[row.id] ? <img src={`/api/files/photo/${data.covers[row.id]}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" /> : <HardHat size={40} style={{ color: 'var(--brand)' }} />}
+                  <span className="badge" style={{ position: 'absolute', top: 10, left: 10, background: 'var(--surface)' }}><StatusChip shape={statusShape[row.status] ?? 'todo'} label={t(`status.${row.status}`)} /></span>
+                </div>
+                <div className="stack" style={{ padding: '.85rem 1rem', gap: '.4rem' }}>
+                  <span className="k-key">{row.code}{row.typeName ? ` · ${row.typeName}` : ''}</span>
+                  <b className="trunc">{row.name}</b>
+                  <span className="muted small trunc">{row.clientName ?? '—'}{row.location ? ` · ${row.location}` : ''}</span>
+                  <Bar value={row.progressPct} />
+                  <div className="row nowrap small"><span className="muted grow">{money(row.budgetMinor, row.currencyCode)}</span><Badge tone={row.health}>{t(`status.${row.health}`)}</Badge></div>
+                </div>
+              </Link>
+            ))}
           </div>
-        ) : null}
+        ) : <div className="card"><Empty text={t('projects.noProjects')} /></div>}
       </div>
-      <form
-        className="row"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const v = formData(event.currentTarget);
-          void navigate({ search: { q: v.q || undefined, status: v.status || undefined } });
-        }}
-      >
-        <input name="q" defaultValue={search.q ?? ''} placeholder={t('app.search')} style={{ maxWidth: 320 }} />
-        <select name="status" defaultValue={search.status ?? ''} style={{ maxWidth: 200 }}>
-          <option value="">{t('app.all')}</option>
-          {STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {t(`status.${status}`)}
-            </option>
-          ))}
-        </select>
-        <button className="btn secondary">{t('app.search').replace('…', '')}</button>
-      </form>
-      {data.projects.length ? (
-        <div className="card table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('projects.code')}</th>
-                <th>{t('projects.name')}</th>
-                <th>{t('projects.type')}</th>
-                <th>{t('projects.client')}</th>
-                <th>{t('app.status')}</th>
-                <th>{t('projects.progress')}</th>
-                <th>{t('projects.collected')}</th>
-                <th>{t('projects.health')}</th>
-                <th className="right">{t('projects.budget')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.projects.map((project) => (
-                <tr key={project.id}>
-                  <td>
-                    <Link to="/app/projects/$projectId" params={{ projectId: project.id }}>
-                      <strong>{project.code}</strong>
-                    </Link>
-                  </td>
-                  <td>
-                    <Link to="/app/projects/$projectId" params={{ projectId: project.id }}>
-                      {project.name}
-                    </Link>
-                    {project.location ? <div className="muted small">{project.location}</div> : null}
-                  </td>
-                  <td>{project.typeName ?? '—'}</td>
-                  <td>{project.clientName ?? '—'}</td>
-                  <td>
-                    <Badge tone={project.status}>{t(`status.${project.status}`)}</Badge>
-                  </td>
-                  <td style={{ minWidth: 120 }}>
-                    <Progress value={project.progressPct} />
-                  </td>
-                  <td>{project.collectedPct} %</td>
-                  <td>
-                    <Badge tone={project.health}>{t(`status.${project.health}`)}</Badge>
-                  </td>
-                  <td className="right nowrap">
-                    {new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { style: 'currency', currency: project.currencyCode, maximumFractionDigits: 0 }).format(project.budgetMinor)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="card">
-          <Empty text={t('projects.noProjects')} />
-        </div>
-      )}
     </div>
   );
 }
 
 type ProjectsData = Awaited<ReturnType<typeof getProjects>>;
 
-function NewProjectDialog({ data }: { data: ProjectsData }) {
+function NewProjectDialog({ data, defaultOpen }: { data: ProjectsData; defaultOpen?: boolean }) {
   const { t } = useI18n();
   const { run, error, busy, setError } = useAction();
   const navigate = useNavigate();
   const [clientId, setClientId] = useState('');
   return (
-    <DialogButton label={t('projects.new')} title={t('projects.new')}>
+    <DialogButton label={t('projects.new')} title={t('projects.new')} defaultOpen={defaultOpen}>
       {(close) => (
         <form
           className="stack"

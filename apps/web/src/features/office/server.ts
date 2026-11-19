@@ -6,6 +6,7 @@ import { translate } from '@/i18n/index.tsx';
 import { guarded, requestLocale, requireActor } from '@/server/context.server.ts';
 import { alertText } from '@/server/jobs.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
+import { forecast, RAIN_LIMIT } from '@/server/weather.server.ts';
 
 const any = (input: unknown) => input as Record<string, unknown>;
 const idOf = (input: unknown) => {
@@ -21,18 +22,43 @@ const act = <T>(work: (actor: core.Actor) => Promise<T>, permission?: core.Permi
 export const getDashboard = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { db } = runtime();
-    const [settings, finance, operations, alerts, projects, activity, subscription] = await Promise.all([
+    const canFinance = core.can(actor.role, 'finance.read');
+    const [settings, finance, operations, alerts, projects, activity, subscription, insights, aging, payments, members] = await Promise.all([
       core.getSettings(db, actor),
-      core.can(actor.role, 'finance.read') ? core.financeSummary(db, actor) : Promise.resolve(null),
+      canFinance ? core.financeSummary(db, actor) : Promise.resolve(null),
       core.operationsSummary(db, actor),
       core.listAlerts(db, actor),
       core.listProjects(db, actor),
       core.recentActivity(db, actor, 15),
       core.getSubscription(db, actor),
+      core.dashboardInsights(db, actor),
+      canFinance ? core.receivablesAging(db, actor) : Promise.resolve(null),
+      canFinance ? core.listPayments(db, actor, { limit: 6 }) : Promise.resolve([]),
+      core.listMembers(db, actor),
     ]);
-    return { role: actor.role, settings, finance, operations, alerts, projects, activity, subscription };
+    const me = members.find((member) => member.userId === actor.userId);
+    const weather = await Promise.all(insights.sites.filter((site) => site.status === 'active' && site.latitude !== null && site.longitude !== null)
+      .map(async (site) => ({ projectId: site.id, code: site.code, location: site.location, days: await forecast(site.latitude!, site.longitude!) })));
+    return {
+      role: actor.role, name: me?.name ?? '', settings, finance, operations, alerts, projects, activity, subscription,
+      insights: canFinance ? insights : { ...insights, cash: [], risk: [] }, aging, payments, weather, rainLimit: RAIN_LIMIT,
+    };
   }),
 );
+
+/** The manager's assistant (spec 029): a question answered from the company's facts only. */
+export const askAssistant = createServerFn({ method: 'POST' })
+  .validator((input: { question: string }) => ({ question: String(input?.question ?? '').trim().slice(0, 500) }))
+  .handler(({ data }) =>
+    act(async (actor) => {
+      const { db, answerer } = runtime();
+      if (!answerer.configured) throw new core.DomainError('assistant_unavailable', 422);
+      if (data.question.length < 3) throw new core.DomainError('invalid_input', 422, { field: 'question', detail: '' });
+      const [facts, settings] = await Promise.all([core.assistantFacts(db, actor), core.getSettings(db, actor)]);
+      const answer = await answerer.answer({ locale: settings.locale, question: data.question, facts });
+      return { answer };
+    }),
+  );
 
 // ---------------------------------------------------------------- projects and clients
 
@@ -41,14 +67,15 @@ export const getProjects = createServerFn({ method: 'GET' })
   .handler(({ data }) =>
     act(async (actor) => {
       const { db } = runtime();
-      const [projects, configuration, clients, members, settings] = await Promise.all([
+      const [projects, configuration, clients, members, settings, covers] = await Promise.all([
         core.listProjects(db, actor, data),
         core.getConfiguration(db, actor),
         core.listClients(db, actor),
         core.listMembers(db, actor),
         core.getSettings(db, actor),
+        core.projectCovers(db, actor),
       ]);
-      return { role: actor.role, projects, configuration, clients, members, currency: settings.currencyCode };
+      return { role: actor.role, projects, configuration, clients, members, currency: settings.currencyCode, covers };
     }),
   );
 
@@ -69,14 +96,15 @@ export const getProjectPage = createServerFn({ method: 'GET' })
           core.listMilestones(db, actor, { projectId: data.id }),
           core.listExpenses(db, actor, { projectId: data.id }),
           core.listMessages(db, actor, data.id),
-          core.listPortalLinks(db, actor, data.id),
+          core.listPortalLinksFull(db, actor, data.id),
           core.getConfiguration(db, actor),
           core.listClients(db, actor),
           core.listMembers(db, actor),
         ]);
+      const settings = await core.getSettings(db, actor);
       return {
         role: actor.role, userId: actor.userId, project, reports, incidents, invoices, payments, documents, milestones,
-        expenses, messages, links, configuration, clients, members,
+        expenses, messages, links, configuration, clients, members, companyName: settings.name,
       };
     }),
   );
@@ -110,7 +138,23 @@ export const importProjects = createServerFn({ method: 'POST' })
   .handler(({ data }) => act((actor) => core.importProjectsCsv(runtime().db, actor, data.csv)));
 
 export const getClients = createServerFn({ method: 'GET' }).handler(() =>
-  act(async (actor) => ({ role: actor.role, clients: await core.listClients(runtime().db, actor) })),
+  act(async (actor) => {
+    const { db } = runtime();
+    const canFinance = core.can(actor.role, 'finance.read');
+    const [clients, projects, insights, invoices, settings] = await Promise.all([
+      core.listClients(db, actor),
+      core.listProjects(db, actor),
+      canFinance ? core.dashboardInsights(db, actor) : Promise.resolve(null),
+      canFinance ? core.listInvoices(db, actor) : Promise.resolve([]),
+      core.getSettings(db, actor),
+    ]);
+    return {
+      role: actor.role, clients, currency: settings.currencyCode, risk: insights?.risk ?? [],
+      projects: projects.map((project) => ({ id: project.id, code: project.code, name: project.name, clientId: project.clientId, status: project.status, progressPct: project.progressPct })),
+      invoices: invoices.filter((invoice) => invoice.status === 'issued' && invoice.balanceMinor > 0)
+        .map((invoice) => ({ id: invoice.id, number: invoice.number, projectId: invoice.projectId, balanceMinor: invoice.balanceMinor, overdueDays: invoice.overdueDays })),
+    };
+  }),
 );
 
 export const createClient = createServerFn({ method: 'POST' })
@@ -144,6 +188,29 @@ export const resolveIncident = createServerFn({ method: 'POST' })
   .validator(idOf)
   .handler(({ data }) => act((actor) => core.resolveIncident(runtime().db, actor, data.id)));
 
+export const updateIncident = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; patch: Record<string, unknown> }) => input)
+  .handler(({ data }) => act((actor) => core.updateIncident(runtime().db, actor, data.id, data.patch)));
+
+/** The engineer's field desk: reports, incidents, checklists, deliveries and signatures. */
+export const getFieldDesk = createServerFn({ method: 'GET' }).handler(() =>
+  act(async (actor) => {
+    const { db } = runtime();
+    const [reports, incidents, checklists, deliveries, signatures, members] = await Promise.all([
+      core.listReports(db, actor, { limit: 150 }),
+      core.listIncidents(db, actor, {}),
+      core.listChecklistRuns(db, actor, { limit: 80 }),
+      core.listDeliveries(db, actor),
+      core.listSignatures(db, actor),
+      core.listMembers(db, actor),
+    ]);
+    return {
+      role: actor.role, userId: actor.userId, reports, incidents, checklists, deliveries, signatures,
+      members: members.map((member) => ({ userId: member.userId, name: member.name, role: member.role })),
+    };
+  }),
+);
+
 // ---------------------------------------------------------------- finance
 
 export const getFinance = createServerFn({ method: 'GET' }).handler(() =>
@@ -168,6 +235,10 @@ export const getFinance = createServerFn({ method: 'GET' }).handler(() =>
 export const createInvoice = createServerFn({ method: 'POST' })
   .validator(any)
   .handler(({ data }) => act((actor) => core.createInvoice(runtime().db, actor, data)));
+
+export const getProgressStatement = createServerFn({ method: 'GET' })
+  .validator(idOf)
+  .handler(({ data }) => act((actor) => core.progressStatement(runtime().db, actor, data.id)));
 
 export const cancelInvoice = createServerFn({ method: 'POST' })
   .validator(idOf)
@@ -265,14 +336,15 @@ export const removeExpense = createServerFn({ method: 'POST' })
 export const getDocuments = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { db } = runtime();
-    const [documents, compliance, configuration, projects] = await Promise.all([
+    const [documents, compliance, configuration, projects, files] = await Promise.all([
       core.listDocuments(db, actor),
       core.complianceByProject(db, actor),
       core.getConfiguration(db, actor),
       core.listProjects(db, actor),
+      core.fileLibrary(db, actor),
     ]);
     return {
-      role: actor.role, documents, compliance, docTypes: configuration.docTypes,
+      role: actor.role, documents, compliance, docTypes: configuration.docTypes, files,
       projects: projects.map((project) => ({ id: project.id, code: project.code, name: project.name })),
     };
   }),
@@ -325,6 +397,43 @@ export const createPortalLink = createServerFn({ method: 'POST' })
       const link = await core.createPortalLink(runtime().db, actor, data.projectId, data.label);
       return { ...link, url: `${runtime().env.APP_BASE_URL}/portal/${link.token}` };
     }),
+  );
+
+/**
+ * Invites the project's client (spec 022): a fresh link (older ones are revoked), who it is for, what
+ * the client sees, then the e-mail is sent here; WhatsApp opens on the sender's phone with the
+ * message ready (no SMS).
+ */
+export const inviteClient = createServerFn({ method: 'POST' })
+  .validator((input: {
+    projectId: string; channel: 'whatsapp' | 'email' | 'link'; contactName?: string; contactEmail?: string; contactPhone?: string;
+    show: { photos: boolean; planning: boolean; finance: boolean; documents: boolean; messages: boolean };
+  }) => input)
+  .handler(({ data }) =>
+    act(async (actor) => {
+      const { db, env, mailer } = runtime();
+      const locale = requestLocale();
+      const project = await core.getProject(db, actor, data.projectId);
+      const settings = await core.getSettings(db, actor);
+      for (const old of await core.listPortalLinksFull(db, actor, data.projectId)) {
+        if (!old.revokedAt) await core.revokePortalLink(db, actor, old.id);
+      }
+      const link = await core.createPortalLink(db, actor, data.projectId, data.contactName || undefined);
+      await core.updatePortalLink(db, actor, link.id, {
+        contactName: data.contactName || null, contactEmail: data.contactEmail || null, contactPhone: data.contactPhone || null, requireCode: true,
+        showPhotos: data.show.photos, showPlanning: data.show.planning, showFinance: data.show.finance, showDocuments: data.show.documents,
+        showMessages: data.show.messages, invited: true,
+      });
+      const url = `${env.APP_BASE_URL}/portal/${link.token}`;
+      const message = translate(locale, 'clientInvite.message', { name: data.contactName || '', project: project.name, company: settings.name, url });
+      if (data.channel === 'email') {
+        if (!data.contactEmail) throw new core.DomainError('invalid_input', 422, { field: 'contactEmail', detail: '' });
+        await mailer.send({ to: data.contactEmail, subject: translate(locale, 'clientInvite.subject', { project: project.name, company: settings.name }), text: message });
+      }
+      const phone = (data.contactPhone ?? '').replace(/[^\d]/gu, '');
+      const whatsappUrl = data.channel === 'whatsapp' && phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null;
+      return { url, message, whatsappUrl, mailSent: data.channel === 'email' && mailer.configured };
+    }, 'portal.manage'),
   );
 
 export const revokePortalLink = createServerFn({ method: 'POST' })

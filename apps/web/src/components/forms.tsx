@@ -29,11 +29,11 @@ const CATEGORIES = ['materials', 'labour', 'subcontracting', 'equipment', 'trans
 const DOC_STATUSES = ['missing', 'pending', 'valid', 'to_fix'] as const;
 const MILESTONE_CATEGORIES = ['admin', 'studies', 'technical', 'finishing', 'delivery'] as const;
 
-export function InvoiceDialog({ projects, projectId, currency }: { projects?: ProjectOption[]; projectId?: string; currency: string }) {
+export function InvoiceDialog({ projects, projectId, currency, defaultOpen }: { projects?: ProjectOption[]; projectId?: string; currency: string; defaultOpen?: boolean }) {
   const { t } = useI18n();
   const { run, error, busy, setError } = useAction();
   return (
-    <DialogButton label={t('finance.newInvoice')} title={t('finance.newInvoice')}>
+    <DialogButton label={t('finance.newInvoice')} title={t('finance.newInvoice')} defaultOpen={defaultOpen}>
       {(close) => (
         <form
           className="stack"
@@ -89,18 +89,29 @@ export function PaymentDialog({
   projectId,
   currency,
   invoices,
+  open: controlled,
+  onOpenChange,
+  presetInvoiceId,
+  onDone,
 }: {
   projects?: ProjectOption[];
   projectId?: string;
   currency: string;
   invoices: { id: string; number: string; projectId: string; balanceMinor: number; status: string }[];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  presetInvoiceId?: string;
+  onDone?: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { run, error, busy, setError } = useAction();
-  const [selectedProject, setSelectedProject] = useState(projectId ?? projects?.[0]?.id ?? '');
-  const open = invoices.filter((invoice) => invoice.projectId === selectedProject && invoice.status === 'issued' && invoice.balanceMinor > 0);
+  const preset = invoices.find((invoice) => invoice.id === presetInvoiceId);
+  const [selectedProject, setSelectedProject] = useState(projectId ?? preset?.projectId ?? projects?.[0]?.id ?? '');
+  const project = preset?.projectId ?? selectedProject;
+  const open = invoices.filter((invoice) => invoice.projectId === project && invoice.status === 'issued' && invoice.balanceMinor > 0);
+  const presetAmount = preset ? (preset.balanceMinor / 10 ** (currency === 'XOF' || currency === 'XAF' ? 0 : 2)).toLocaleString(locale === 'en' ? 'en-GB' : 'fr-FR', { useGrouping: false }) : undefined;
   return (
-    <DialogButton label={t('finance.newPayment')} title={t('finance.newPayment')} secondary>
+    <DialogButton label={t('finance.newPayment')} title={t('finance.newPayment')} secondary open={controlled} onOpenChange={onOpenChange} hideTrigger={controlled !== undefined}>
       {(close) => (
         <form
           className="stack"
@@ -112,11 +123,11 @@ export function PaymentDialog({
             const done = await run(() =>
               recordPayment({ data: { projectId: v.projectId, invoiceId: orNull(v.invoiceId), amountMinor, method: v.method, receivedOn: v.receivedOn, reference: orNull(v.reference) } }),
             );
-            if (done) close();
+            if (done) { close(); onDone?.(); }
           }}
         >
-          {projectId ? (
-            <input type="hidden" name="projectId" value={projectId} />
+          {projectId || preset ? (
+            <input type="hidden" name="projectId" value={project} />
           ) : (
             <Field label={t('app.project')}>
               <select name="projectId" value={selectedProject} onChange={(event) => setSelectedProject(event.target.value)}>
@@ -129,7 +140,7 @@ export function PaymentDialog({
             </Field>
           )}
           <Field label={t('finance.invoice')}>
-            <select name="invoiceId" defaultValue={open[0]?.id ?? ''}>
+            <select name="invoiceId" defaultValue={preset?.id ?? open[0]?.id ?? ''}>
               <option value="">{t('finance.noInvoice')}</option>
               {open.map((invoice) => (
                 <option key={invoice.id} value={invoice.id}>
@@ -140,7 +151,7 @@ export function PaymentDialog({
           </Field>
           <div className="form-grid">
             <Field label={`${t('app.amount')} (${currency})`}>
-              <input name="amount" inputMode="decimal" required />
+              <input name="amount" inputMode="decimal" required defaultValue={presetAmount} />
             </Field>
             <Field label={t('finance.method')}>
               <select name="method" defaultValue="mobile_money">

@@ -58,6 +58,7 @@ export async function createCompany(db: Db, userId: string, input: unknown): Pro
       [orgId, data.countryCode, data.currencyCode, data.vatBps, data.retentionBps, data.locale],
     );
     await tx.query('select struo_seed_org_defaults($1, $2)', [orgId, data.locale]);
+    await tx.query('select struo_seed_checklists($1, $2)', [orgId, data.locale]);
     await journal(tx, { orgId, userId, door: 'web' }, 'company.create', orgId, null, data);
     return { orgId };
   });

@@ -1,6 +1,8 @@
 // French catalog — the reference: every key here must exist in en.ts (checked by the compiler and
 // by i18n.test.ts). Placeholders: {name}.
+import { uxFr } from './ux.fr.ts';
 export const fr = {
+  ...uxFr,
   app: {
     name: 'Struo',
     tagline: 'Pilotez tous vos chantiers, même sans réseau.',
@@ -95,6 +97,12 @@ export const fr = {
     sign_up_failed: 'Inscription impossible (adresse déjà utilisée ?).',
     file_too_large: 'Fichier trop volumineux.',
     unsupported_file: 'Type de fichier non accepté.',
+    already_validated: 'Cette étape a déjà été validée.',
+    assistant_unavailable: 'L’assistant n’est pas disponible pour le moment.',
+    reader_unavailable: 'La lecture automatique n’est pas disponible : remplissez les champs à la main.',
+    portal_no_email: 'Aucune adresse e-mail n’est enregistrée pour ce lien. Demandez à l’entreprise de l’ajouter.',
+    portal_too_many_codes: 'Trop de codes demandés. Réessayez dans un quart d’heure.',
+    portal_code_invalid: 'Code incorrect ou expiré.',
   },
   auth: {
     signIn: 'Se connecter',

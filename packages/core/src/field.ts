@@ -10,7 +10,7 @@ export const PRIORITIES = ['critical', 'important', 'info'] as const;
 export async function fieldSnapshot(db: Db, actor: Actor) {
   return asActor(db, actor, async (tx) => {
     const { rows } = await tx.query(
-      `select p.id, p.code, p.name, p.location, p.status, pp.progress_pct as "progressPct",
+      `select p.id, p.code, p.name, p.location, p.status, pp.progress_pct as "progressPct", p.latitude, p.longitude,
               coalesce((select json_agg(json_build_object('id', ph.id, 'name', ph.name, 'progressPct', ph.progress_pct)
                                         order by ph.position)
                           from project_phase ph where ph.project_id = p.id), '[]') as phases
@@ -23,7 +23,7 @@ export async function fieldSnapshot(db: Db, actor: Actor) {
       at: new Date().toISOString(),
       projects: rows as {
         id: string; code: string; name: string; location: string | null; status: string; progressPct: number;
-        phases: { id: string; name: string; progressPct: number }[];
+        latitude: number | null; longitude: number | null; phases: { id: string; name: string; progressPct: number }[];
       }[],
     };
   });
@@ -121,8 +121,14 @@ export async function reportIncident(db: Db, actor: Actor, input: unknown): Prom
 export interface ReportRow {
   id: string;
   projectId: string;
+  projectCode: string;
   projectName: string;
+  phaseId: string | null;
   phaseName: string | null;
+  /** The phase's current (validated) progress, to show the step a report proposes. */
+  phaseProgressPct: number | null;
+  reviewedAt: string | null;
+  authorId: string;
   authorName: string;
   progressPct: number | null;
   note: string | null;
@@ -144,7 +150,8 @@ export async function listReports(
 ): Promise<ReportRow[]> {
   return asActor(db, actor, async (tx) => {
     const { rows } = await tx.query<ReportRow>(
-      `select r.id, r.project_id as "projectId", p.name as "projectName", ph.name as "phaseName", u.name as "authorName",
+      `select r.id, r.project_id as "projectId", p.code as "projectCode", p.name as "projectName", ph.name as "phaseName",
+              ph.progress_pct as "phaseProgressPct", r.phase_id as "phaseId", u.name as "authorName", r.author_id as "authorId", r.reviewed_at as "reviewedAt",
               r.progress_pct as "progressPct", r.note, r.latitude, r.longitude, r.taken_at as "takenAt", r.status,
               r.review_note as "reviewNote", r.audio_key is not null as "hasAudio", r.transcript,
               r.transcript_status as "transcriptStatus",
@@ -197,17 +204,22 @@ export async function reviewReport(
 export async function listIncidents(db: Db, actor: Actor, filters: { projectId?: string; status?: string } = {}) {
   return asActor(db, actor, async (tx) => {
     const { rows } = await tx.query(
-      `select i.id, i.project_id as "projectId", p.name as "projectName", i.kind, i.priority, i.description, i.status,
-              u.name as "authorName", i.created_at as "createdAt", i.resolved_at as "resolvedAt"
+      `select i.id, i.project_id as "projectId", p.code as "projectCode", p.name as "projectName", i.kind, i.priority, i.description, i.status,
+              u.name as "authorName", i.created_at as "createdAt", i.resolved_at as "resolvedAt", i.decision, i.action,
+              i.assignee_id as "assigneeId", a.name as "assigneeName", i.due_on as "dueOn", i.impact_days as "impactDays",
+              i.resolution_note as "resolutionNote", i.report_id as "reportId"
          from incident i join project p on p.id = i.project_id join "user" u on u.id = i.created_by
+         left join "user" a on a.id = i.assignee_id
         where i.org_id = $1 and ($2::uuid is null or i.project_id = $2) and ($3::text is null or i.status = $3)
-        order by i.status, case i.priority when 'critical' then 0 when 'important' then 1 else 2 end, i.created_at desc
+        order by case i.status when 'open' then 0 when 'in_progress' then 1 else 2 end, case i.priority when 'critical' then 0 when 'important' then 1 else 2 end, i.created_at desc
         limit 200`,
       [actor.orgId, filters.projectId || null, filters.status || null],
     );
     return rows as {
       id: string; projectId: string; projectName: string; kind: string; priority: string; description: string;
-      status: string; authorName: string; createdAt: string; resolvedAt: string | null;
+      status: string; authorName: string; createdAt: string; resolvedAt: string | null; projectCode: string;
+      decision: string | null; action: string | null; assigneeId: string | null; assigneeName: string | null;
+      dueOn: string | null; impactDays: number | null; resolutionNote: string | null; reportId: string | null;
     }[];
   });
 }
@@ -260,5 +272,42 @@ export async function setReportTranscript(
       [reportId, actor.orgId, outcome.text?.slice(0, 20000) ?? null, outcome.status],
     );
     await journal(tx, actor, 'report.transcript', reportId, null, { status: outcome.status });
+  });
+}
+
+const incidentPatch = z.object({
+  status: z.enum(['open', 'in_progress', 'resolved']).optional(),
+  priority: z.enum(PRIORITIES).optional(),
+  decision: z.string().trim().max(200).nullable().optional(),
+  action: z.string().trim().max(1000).nullable().optional(),
+  assigneeId: z.string().max(64).nullable().optional(),
+  dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullable().optional(),
+  impactDays: z.number().int().min(0).max(365).nullable().optional(),
+  resolutionNote: z.string().trim().max(2000).nullable().optional(),
+});
+
+/** The engineer follows an incident: decision, who acts, by when, its impact, then its resolution. */
+export async function updateIncident(db: Db, actor: Actor, id: string, input: unknown): Promise<void> {
+  ensure(actor, 'field.review');
+  const data = parse(incidentPatch, input);
+  const columns: Record<string, string> = {
+    status: 'status', priority: 'priority', decision: 'decision', action: 'action', assigneeId: 'assignee_id', dueOn: 'due_on',
+    impactDays: 'impact_days', resolutionNote: 'resolution_note',
+  };
+  const entries = Object.entries(data).filter(([, value]) => value !== undefined);
+  await asActor(db, actor, async (tx) => {
+    const before = (await tx.query('select * from incident where id = $1 and org_id = $2 for update', [id, actor.orgId])).rows[0];
+    if (!before) throw notFound();
+    if (data.assigneeId) {
+      const member = await tx.query('select 1 from member where "organizationId" = $1 and "userId" = $2', [actor.orgId, data.assigneeId]);
+      if (!member.rowCount) throw new DomainError('invalid_input', 422, { field: 'assigneeId', detail: '' });
+    }
+    if (entries.length) {
+      const sets = entries.map(([key], index) => `${columns[key]} = $${index + 3}`);
+      if (data.status === 'resolved') sets.push('resolved_at = now()');
+      else if (data.status) sets.push('resolved_at = null');
+      await tx.query(`update incident set ${sets.join(', ')} where id = $1 and org_id = $2`, [id, actor.orgId, ...entries.map(([, value]) => value)]);
+    }
+    await journal(tx, actor, 'incident.update', id, before, data);
   });
 }

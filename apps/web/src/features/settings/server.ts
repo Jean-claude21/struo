@@ -62,8 +62,9 @@ export const getSettingsPage = createServerFn({ method: 'GET' }).handler(() =>
       core.listSubscriptionPayments(db, actor),
       core.listPlans(db),
     ]);
+    const journal = core.can(actor.role, 'org.manage') ? await core.recentActivity(db, actor, 200) : [];
     return {
-      role: actor.role, userId: actor.userId, settings, configuration, members, invitations, provider, keys, subscription, connections, subscriptionPayments, plans,
+      role: actor.role, userId: actor.userId, settings, configuration, members, invitations, provider, keys, subscription, connections, subscriptionPayments, plans, journal,
       platformPayment: platformGatewayCode(),
       baseUrl: env.APP_BASE_URL, orgId: actor.orgId, simulatorAvailable: env.PAYMENTS_SIMULATOR,
     };
@@ -77,6 +78,11 @@ export const updateSettings = createServerFn({ method: 'POST' })
 export const addConfigurationItem = createServerFn({ method: 'POST' })
   .validator((input: Record<string, unknown>) => input)
   .handler(({ data }) => act((actor) => core.addConfigurationItem(runtime().db, actor, data)));
+
+/** The trade configuration of the company just created (onboarding step 2). */
+export const getConfiguration = createServerFn({ method: 'GET' }).handler(() =>
+  act(async (actor) => core.getConfiguration(runtime().db, actor)),
+);
 
 export const removeConfigurationItem = createServerFn({ method: 'POST' })
   .validator((input: { kind: 'projectType' | 'phase' | 'docType'; id: string }) => input)
@@ -101,6 +107,23 @@ export const inviteMember = createServerFn({ method: 'POST' })
       return { url };
     }),
   );
+
+/** The team page (spec 024): members with their last activity, pending invitations. */
+export const getTeamPage = createServerFn({ method: 'GET' }).handler(() =>
+  act(async (actor) => {
+    const { db, env } = runtime();
+    const [members, invitations, settings, last] = await Promise.all([
+      core.listMembers(db, actor),
+      core.can(actor.role, 'members.manage') ? core.listInvitations(db, actor) : Promise.resolve([]),
+      core.getSettings(db, actor),
+      core.memberActivity(db, actor),
+    ]);
+    return {
+      role: actor.role, userId: actor.userId, companyName: settings.name, baseUrl: env.APP_BASE_URL, invitations,
+      members: members.map((member) => ({ ...member, lastActivity: last.get(member.userId) ?? null })),
+    };
+  }),
+);
 
 export const revokeInvitation = createServerFn({ method: 'POST' })
   .validator((input: { id: string }) => input)
@@ -147,7 +170,8 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
   guarded(async () => {
     await requirePlatformAdmin();
     const { owner, db } = runtime();
-    return { companies: await core.platformOverview(owner), plans: await core.listPlans(db) };
+    const [companies, plans, revenue] = await Promise.all([core.platformOverview(owner), core.listPlans(db), core.platformRevenue(owner)]);
+    return { companies, plans, revenue };
   }),
 );
 

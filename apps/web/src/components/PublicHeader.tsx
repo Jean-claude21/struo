@@ -1,3 +1,4 @@
+import { HardHat } from 'lucide-react';
 import { Link, useRouter } from '@tanstack/react-router';
 import { setLocale } from '@/features/shell/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
@@ -5,7 +6,8 @@ import { useI18n } from '@/i18n/index.tsx';
 export function Logo() {
   return (
     <span className="logo" style={{ padding: 0 }}>
-      Str<span>uo</span>
+      <span className="logo-mark"><HardHat size={16} /></span>
+      <span>Str<span className="accent">uo</span></span>
     </span>
   );
 }
