@@ -4,7 +4,10 @@ import {
   actorFromApiKey, addDocument, addExpense, addMilestone, createApiKey, createInvoice, createPortalLink, createProject,
   getProject, importProjectsCsv, listAlerts, listDocuments, listInvoices, marginBySegment, portalPostMessage,
   portalValidateMilestone, portalView, receivablesAging, recordPayment, revokeApiKey, revokePortalLink, reviewReport,
-  submitReport, financeSummary, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
+  submitReport, financeSummary, operationsSummary, recentActivity, listProjects, listMilestones, gantt, listExpenses,
+  marginByProject, complianceByProject, listReports, listIncidents, listPayments, listClients, getSettings, getSubscription,
+  getConfiguration, listMembers, fieldSnapshot, listApiKeys, listPortalLinks, listMessages, reportAudioLocation, setReportTranscript, grantMcpCompany, actorFromMcpGrant, revokeMcpConnection, listMcpConnections,
+  startSubscriptionPayment, settleSubscriptionPayment, listSubscriptionPayments, accountingExport, companyExport, eraseCompany, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
 } from '../src/index.ts';
 import { addMember, createTestCompany, setupDatabase, today, type TestDb } from './helpers.ts';
 
@@ -169,5 +172,124 @@ describe('CSV import (spec 003)', () => {
     const result = await importProjectsCsv(db.app, owner, csv);
     expect(result.created).toBe(2);
     expect(result.errors.map((e) => e.code)).toEqual(['invalid_input', 'code_taken']);
+  });
+});
+
+describe('every read of the dashboard and pages answers (smoke)', () => {
+  it('runs each listing without SQL error', async () => {
+    const reads = [
+      operationsSummary(db.app, owner), recentActivity(db.app, owner), listProjects(db.app, owner), listMilestones(db.app, owner),
+      gantt(db.app, owner), listExpenses(db.app, owner), marginByProject(db.app, owner), complianceByProject(db.app, owner),
+      listReports(db.app, owner), listIncidents(db.app, owner), listPayments(db.app, owner), listClients(db.app, owner),
+      getSettings(db.app, owner), getSubscription(db.app, owner), getConfiguration(db.app, owner), listMembers(db.app, owner),
+      fieldSnapshot(db.app, owner), listApiKeys(db.app, owner), financeSummary(db.app, owner), receivablesAging(db.app, owner),
+      listInvoices(db.app, owner), listAlerts(db.app, owner),
+    ];
+    const results = await Promise.allSettled(reads);
+    expect(results.filter((r) => r.status === 'rejected').map((r) => String((r as PromiseRejectedResult).reason))).toEqual([]);
+    const { id } = await createProject(db.app, owner, { name: 'Smoke' });
+    await expect(Promise.all([listPortalLinks(db.app, owner, id), listMessages(db.app, owner, id), getProject(db.app, owner, id)])).resolves.toBeTruthy();
+  });
+});
+
+describe('voice notes (spec 015)', () => {
+  it('keeps a voice note with its report, then its transcript', async () => {
+    const { id: projectId } = await createProject(db.app, owner, { name: 'Chantier vocal', status: 'active' });
+    const id = randomUUID();
+    const result = await submitReport(db.app, owner, {
+      id, projectId, takenAt: new Date().toISOString(),
+      audio: { storageKey: `org/${owner.orgId}/audio/${id}`, mediaType: 'audio/webm', sizeBytes: 2048 },
+    });
+    expect(result).toMatchObject({ created: true, hasAudio: true });
+    expect(await reportAudioLocation(db.app, owner, id)).toEqual({ storageKey: `org/${owner.orgId}/audio/${id}`, mediaType: 'audio/webm' });
+    let [report] = await listReports(db.app, owner, { projectId });
+    expect(report).toMatchObject({ hasAudio: true, transcriptStatus: 'pending', transcript: null });
+    await setReportTranscript(db.app, { ...owner, door: 'job' }, id, { status: 'done', text: 'Coulage de la dalle terminé.' });
+    [report] = await listReports(db.app, owner, { projectId });
+    expect(report).toMatchObject({ transcriptStatus: 'done', transcript: 'Coulage de la dalle terminé.' });
+    // Another company cannot reach the note.
+    const other = await createTestCompany(db, 'Autre entreprise');
+    expect(await reportAudioLocation(db.app, other, id)).toBeNull();
+  });
+});
+
+describe('OAuth MCP clients (spec 016)', () => {
+  it('acts in the company chosen at consent, never in another one, until revoked', async () => {
+    await grantMcpCompany(db.app, owner.userId, 'client-claude', owner.orgId);
+    expect(await actorFromMcpGrant(db.app, owner.userId, 'client-claude')).toMatchObject({ orgId: owner.orgId, role: 'owner', door: 'mcp' });
+    expect(await actorFromMcpGrant(db.app, owner.userId, 'unknown-client')).toBeNull();
+    // A company the person is not a member of cannot be granted.
+    const other = await createTestCompany(db, 'Entreprise tierce');
+    await expect(grantMcpCompany(db.app, owner.userId, 'client-claude', other.orgId)).rejects.toMatchObject({ code: 'forbidden' });
+    expect((await listMcpConnections(db.app, owner)).map((c) => c.clientId)).toContain('client-claude');
+    await revokeMcpConnection(db.app, owner, 'client-claude');
+    expect(await actorFromMcpGrant(db.app, owner.userId, 'client-claude')).toBeNull();
+  });
+});
+
+describe('subscription payments (spec 017)', () => {
+  it('prices from the plan, applies the plan once, extends the paid period, and only the platform settles', async () => {
+    const company = await createTestCompany(db, 'Entreprise abonnée');
+    const siteLead = await addMember(db, company.orgId, 'site_lead');
+    await expect(startSubscriptionPayment(db.app, siteLead, { planCode: 'pro', months: 3, provider: 'simulator' })).rejects.toMatchObject({ code: 'forbidden' });
+    await expect(startSubscriptionPayment(db.app, company, { planCode: 'trial', months: 1, provider: 'simulator' })).rejects.toMatchObject({ code: 'plan_not_payable' });
+    const payment = await startSubscriptionPayment(db.app, company, { planCode: 'pro', months: 3, provider: 'simulator' });
+    expect(payment).toMatchObject({ amountMinor: 225_000, currencyCode: 'XOF' });
+    // The application role cannot mark a payment as paid by itself.
+    const raw = await db.app.connect();
+    try {
+      await raw.query('begin');
+      await raw.query(`select set_config('struo.user_id', $1, true)`, [company.userId]);
+      await expect(raw.query(`update subscription_payment set status = 'succeeded' where id = $1`, [payment.id])).rejects.toThrow(/permission denied/u);
+      await raw.query('rollback');
+    } finally {
+      raw.release();
+    }
+    const outcome = { id: payment.id, status: 'succeeded' as const, amountMinor: 225_000, currencyCode: 'XOF' };
+    expect(await settleSubscriptionPayment(db.owner, outcome)).toBe('applied');
+    expect(await settleSubscriptionPayment(db.owner, outcome)).toBe('ignored');
+    const subscription = await getSubscription(db.app, company);
+    expect(subscription.plan.code).toBe('pro');
+    expect(subscription.paymentDue).toBe(false);
+    const days = (new Date(subscription.paidUntil!).getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(85);
+    expect(days).toBeLessThan(95);
+    expect((await listSubscriptionPayments(db.app, company))[0]?.status).toBe('succeeded');
+  });
+});
+
+describe('exports and erasure (spec 018)', () => {
+  it('exports invoices as CSV for the accountant, and the whole company without secrets', async () => {
+    const company = await createTestCompany(db, 'Entreprise exportée');
+    const { id: projectId } = await createProject(db.app, company, { name: 'Projet « export »; test', status: 'active' });
+    await createInvoice(db.app, company, { projectId, kind: 'progress', amountMinor: 1_000_000, dueOn: today(30) });
+    const invoices = await accountingExport(db.app, company, 'invoices');
+    const lines = invoices.content.slice(1).trim().split(/\r?\n/u);
+    expect(invoices.content.codePointAt(0)).toBe(0xfeff);
+    expect(lines[0]).toContain('numero;type;statut');
+    expect(lines[1]).toContain('"Projet « export »; test"');
+    expect(lines[1]).toContain(';1000000;18;180000;1180000;59000;0;1121000;0;1121000');
+    await createApiKey(db.app, company, 'Clé secrète');
+    const exported = await companyExport(db.app, company);
+    expect(exported.tables.project).toHaveLength(1);
+    expect(exported.tables.journal!.length).toBeGreaterThan(0);
+    expect(JSON.stringify(exported)).not.toMatch(/key_hash|token_hash|secret_enc/u);
+    const accountant = await addMember(db, company.orgId, 'accountant');
+    await expect(companyExport(db.app, accountant)).rejects.toMatchObject({ code: 'forbidden' });
+    expect((await accountingExport(db.app, accountant, 'payments')).filename).toMatch(/^encaissements_/u);
+  });
+
+  it('erases a company only for its owner with its exact name, leaving the others untouched', async () => {
+    const company = await createTestCompany(db, 'À effacer SARL');
+    const neighbour = await createTestCompany(db, 'Voisine SARL');
+    await createProject(db.app, company, { name: 'Projet effacé' });
+    await createProject(db.app, neighbour, { name: 'Projet gardé' });
+    const admin = await addMember(db, company.orgId, 'admin');
+    await expect(eraseCompany(db.app, admin, 'À effacer SARL')).rejects.toMatchObject({ code: 'forbidden' });
+    await expect(eraseCompany(db.app, company, 'Mauvais nom')).rejects.toMatchObject({ code: 'erase_name_mismatch' });
+    expect(await eraseCompany(db.app, company, 'À effacer SARL')).toEqual({ storagePrefix: `org/${company.orgId}/` });
+    const left = await db.owner.query('select count(*)::int as n from project where org_id = $1', [company.orgId]);
+    expect(left.rows[0].n).toBe(0);
+    expect(await listProjects(db.app, neighbour)).toHaveLength(1);
   });
 });

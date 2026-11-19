@@ -1,27 +1,29 @@
 # Roadmap
 
 Ordered list of Spec Kit features. No dates: each feature starts when the previous one is merged
-into `dev` with green CI. Status: ✅ delivered · 🚧 in progress · ⏳ next.
+into `dev` with green CI. Status: ✅ delivered with proof · 🟡 delivered, part not verified with a
+real external account · ⏳ next.
 
-| # | Feature | Delivers | Status |
-|---|---|---|---|
-| 001 | `001-foundation` | Monorepo, TanStack Start app, PostgreSQL migrations with RLS and the `struo_app` role, journal, i18n fr/en, CI (typecheck, tests, build, gitleaks), Docker image | ⏳ |
-| 002 | `002-accounts-orgs` | Accounts (Better Auth), company creation with its settings (country, currency, VAT, retention), default configuration, members and roles, invitations by link | ⏳ |
-| 003 | `003-projects` | Clients, projects, phases with budget and progress, project types, statuses, search and filters, CSV import | ⏳ |
-| 004 | `004-field-pwa` | Installable field PWA: offline list of sites, report with photos (GPS, time), progress per phase, incidents, outbox with idempotent sync; office validation | ⏳ |
-| 005 | `005-finances` | Progress invoices (advance, progress, final) with VAT and retention, payments (Mobile Money, transfer, cheque, cash), balances, receivables aging, reminders, printable invoice | ⏳ |
-| 006 | `006-documents` | Document types per company, status per project, expiry dates, compliance rate, files | ⏳ |
-| 007 | `007-expenses` | Expenses by category and supplier, real cost vs budget, margin per project and per segment | ⏳ |
-| 008 | `008-planning` | Milestones planned vs actual, delays, consolidated Gantt | ⏳ |
-| 009 | `009-alerts-dashboard` | Alert rules (unpaid, documents J-30/J-15/J-7, late milestones, progress/collection gap > 10 pts, critical incidents), dashboard, daily digest e-mail | ⏳ |
-| 010 | `010-client-portal` | Secure link per project, progress, photos, documents, invoices due, online payment (Moneroo per company, simulator), messages, milestone validation | ⏳ |
-| 011 | `011-mcp` | API keys per company, MCP server with tool groups (projects, field, finance, documents, planning, alerts) | ⏳ |
-| 012 | `012-saas` | Plans and limits, landing page with pricing, platform console | ⏳ |
-| 013 | `013-ai` | Drafting of payment reminders and formal notices from real figures (OpenAI through a port) | ⏳ |
-| 014 | `014-whatsapp` | WhatsApp channel (Cloud API adapter + simulator) for reminders and the digest | ⏳ |
-| 015 | `015-voice` | Voice notes on field reports, transcribed at sync | ⏳ |
-| 016 | `016-oauth-mcp` | OAuth for MCP clients (Claude.ai, ChatGPT) in addition to API keys | ⏳ |
-| 017 | `017-subscription-payments` | Paying the subscription online (Moneroo, platform account) | ⏳ |
-| 018 | `018-exports` | Accounting export, full company export (zip) and erasure | ⏳ |
+| # | Feature | Delivers | Status | Proof / what is not verified |
+|---|---|---|---|---|
+| 001 | `001-foundation` | Monorepo, TanStack Start app, SQL migrations with RLS and the `struo_app` role, journal, i18n fr/en, CI, Docker image | ✅ | `security.test.ts`, `i18n.test.ts`; image start simulated locally (migrations then server, health ok) |
+| 002 | `002-accounts-orgs` | Accounts, company creation with its settings and default trade configuration, members and roles, invitations by link | ✅ | Sign-up → company → dashboard in the browser; isolation and role tests |
+| 003 | `003-projects` | Clients, projects, phases, types, statuses, search, CSV import | ✅ | Project created in the browser; CSV import test |
+| 004 | `004-field-pwa` | Installable field PWA, offline outbox, photos with GPS, incidents, idempotent sync, office validation | ✅ | Report with photo sent twice over HTTP (201 then 200); incident sent from the UI; validation applied the progress. Airplane-mode test on a real phone not done yet |
+| 005 | `005-finances` | Invoices (advance, progress, final) with VAT, retention and deduction, payments, aging, reminders, printable invoice | ✅ | Amounts test; invoice created in the browser (11,800,000 TTC / 11,210,000 net) |
+| 006 | `006-documents` | Document types, statuses, expiry, compliance, files | ✅ | Expiry alert test; PDF upload and download over HTTP; HTML refused |
+| 007 | `007-expenses` | Expenses, margin per project and segment, CPI | ✅ | Margin test |
+| 008 | `008-planning` | Milestones planned vs actual, delays, consolidated Gantt | ✅ | Late milestone test |
+| 009 | `009-alerts-dashboard` | Alert rules in SQL, dashboard, daily digest e-mail | 🟡 | Alerts tested and shown in the browser; digest e-mail not sent to a real inbox (needs `RESEND_API_KEY`) |
+| 010 | `010-client-portal` | Portal link, progress, photos, documents, invoices, messages, milestone validation, online payment | 🟡 | Portal → simulated payment → invoice paid, in the browser; Moneroo with a real company account not tested |
+| 011 | `011-mcp` | API keys, MCP server with tool groups | ✅ | Key test; initialize, tools/list (10 tools) and a finance call over HTTP |
+| 012 | `012-saas` | Plans and limits, landing page with pricing, platform console | ✅ | Trial limit test; landing rendered with plans from the database. Prices are provisional |
+| 013 | `013-ai` | Reminder and formal notice drafting from real figures | ✅ | Verified on staging with the real OpenAI key: the draft quotes the real number, dates, balance and company |
+| 014 | `014-whatsapp` | WhatsApp channel for reminders | 🟡 | Simulator path; real sending needs a WhatsApp Business account |
+| 015 | `015-voice` | Voice notes on field reports, transcribed after sync | ✅ | Voice note test; verified on staging: a spoken note uploaded and transcribed by OpenAI |
+| 016 | `016-oauth-mcp` | OAuth for MCP clients (Claude.ai, ChatGPT) besides API keys | ✅ | Full OAuth flow verified locally with a PKCE client; grant and revocation tests |
+| 017 | `017-subscription-payments` | Paying the subscription online (platform Moneroo account) | 🟡 | Tests and browser flow with the simulator; real platform Moneroo keys not provided yet |
+| 018 | `018-exports` | Accounting export, full company export (zip) and erasure | ✅ | Export and erasure tests; CSV and zip downloaded over HTTP |
+| 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

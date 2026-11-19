@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "struo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--env-file=apps/web/.env.local", "apps/web/.output/server/index.mjs"],
+      "port": 3000
+    }
+  ]
+}

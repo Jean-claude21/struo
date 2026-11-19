@@ -4,7 +4,8 @@
   "type": "module",
   "description": "Struo domain: SQL migrations and services. No HTTP, no React, no vendor.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./permissions": "./src/permissions.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
