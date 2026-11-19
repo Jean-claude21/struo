@@ -3,6 +3,7 @@ import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { Download, FileText, Kanban, Table2, TriangleAlert, Wallet } from 'lucide-react';
 import { InvoiceDialog, PaymentDialog, ReminderDialog } from '@/components/forms.tsx';
+import { StatementDialog } from '@/components/StatementDialog.tsx';
 import { Drawer, KpiTile, Modal, PageHeader, Panel, StatusChip, useRelative, useToast, type Shape } from '@/components/kit.tsx';
 import { DateText, formatMoney, Money, Tabs } from '@/components/ui.tsx';
 import { Board } from '@/components/views/Board.tsx';
@@ -105,6 +106,7 @@ function Finance() {
       <PageHeader title={t('finance.title')} text={t('fin.subtitle')}>
         {canWrite && data.projects.length ? (
           <>
+            <StatementDialog projects={data.projects} currency={currency} />
             <PaymentDialog projects={data.projects} currency={currency} invoices={data.invoices} />
             <InvoiceDialog projects={data.projects} currency={currency} />
           </>

@@ -53,14 +53,15 @@ export const getProjects = createServerFn({ method: 'GET' })
   .handler(({ data }) =>
     act(async (actor) => {
       const { db } = runtime();
-      const [projects, configuration, clients, members, settings] = await Promise.all([
+      const [projects, configuration, clients, members, settings, covers] = await Promise.all([
         core.listProjects(db, actor, data),
         core.getConfiguration(db, actor),
         core.listClients(db, actor),
         core.listMembers(db, actor),
         core.getSettings(db, actor),
+        core.projectCovers(db, actor),
       ]);
-      return { role: actor.role, projects, configuration, clients, members, currency: settings.currencyCode };
+      return { role: actor.role, projects, configuration, clients, members, currency: settings.currencyCode, covers };
     }),
   );
 
@@ -204,6 +205,10 @@ export const getFinance = createServerFn({ method: 'GET' }).handler(() =>
 export const createInvoice = createServerFn({ method: 'POST' })
   .validator(any)
   .handler(({ data }) => act((actor) => core.createInvoice(runtime().db, actor, data)));
+
+export const getProgressStatement = createServerFn({ method: 'GET' })
+  .validator(idOf)
+  .handler(({ data }) => act((actor) => core.progressStatement(runtime().db, actor, data.id)));
 
 export const cancelInvoice = createServerFn({ method: 'POST' })
   .validator(idOf)

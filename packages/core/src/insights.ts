@@ -73,6 +73,18 @@ export async function dashboardInsights(db: Db, actor: Actor, months = 6) {
   });
 }
 
+/** The latest photo of each site (its cover in lists). */
+export async function projectCovers(db: Db, actor: Actor): Promise<Record<string, string>> {
+  return asActor(db, actor, async (tx) => {
+    const { rows } = await tx.query<{ project_id: string; id: string }>(
+      `select distinct on (r.project_id) r.project_id, ph.id from report_photo ph join site_report r on r.id = ph.report_id
+        where ph.org_id = $1 order by r.project_id, ph.taken_at desc`,
+      [actor.orgId],
+    );
+    return Object.fromEntries(rows.map((row) => [row.project_id, row.id]));
+  });
+}
+
 /** Each member's last recorded action in the company (team page). */
 export async function memberActivity(db: Db, actor: Actor): Promise<Map<string, string>> {
   return asActor(db, actor, async (tx) => {
