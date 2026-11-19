@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  createDraftInvoice, createInvoice, createProject, deleteDraftInvoice, getInvoiceForEdit, getProject, issueInvoice, listInvoices, saveDraftInvoice,
+  companyLogoKey, createDraftInvoice, createInvoice, getInvoiceSettings, invoiceDocument, setCompanyLogo, createProject, deleteDraftInvoice, getInvoiceForEdit, getProject, issueInvoice, listInvoices, saveDraftInvoice,
   updateInvoiceSettings, updatePhase, type Actor,
 } from '../src/index.ts';
 import { addMember, createTestCompany, setupDatabase, today, type TestDb } from './helpers.ts';
@@ -78,5 +78,26 @@ describe('invoices as a building company issues them (spec 035)', () => {
     })).rejects.toMatchObject({ code: 'deduction_too_high' });
     const lead = await addMember(db, owner.orgId, 'site_lead');
     await expect(createDraftInvoice(db.app, lead, { projectId, kind: 'final' })).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('keeps the look of the invoices: layout, colour, titles, own fields, a public logo', async () => {
+    await updateInvoiceSettings(db.app, owner, {
+      template: 'modern', accentColor: '#1c6dd0', logoPosition: 'center', logoHeight: 80, showSignature: true, signerName: 'Afi Mensah',
+      titles: { progress: 'Situation de travaux' }, customFields: [{ label: 'Agrément', value: 'BTP catégorie B2' }],
+    });
+    await setCompanyLogo(db.app, owner, `org/${owner.orgId}/branding/logo-test`, `/api/files/logo/${owner.orgId}`);
+    const look = await getInvoiceSettings(db.app, owner);
+    expect(look).toMatchObject({ template: 'modern', accentColor: '#1c6dd0', logoPosition: 'center', titles: { progress: 'Situation de travaux' },
+      customFields: [{ label: 'Agrément', value: 'BTP catégorie B2' }], numberPrefix: 'FAC', logoKey: `org/${owner.orgId}/branding/logo-test` });
+    // The logo is public (printed on invoices): readable without a person.
+    expect(await companyLogoKey(db.app, owner.orgId)).toBe(`org/${owner.orgId}/branding/logo-test`);
+    await expect(updateInvoiceSettings(db.app, owner, { accentColor: 'red' })).rejects.toMatchObject({ code: 'invalid_input' });
+    const { id } = await createDraftInvoice(db.app, owner, { projectId, kind: 'final' });
+    await saveDraftInvoice(db.app, owner, id, { extraFields: [{ label: 'Délai', value: '6 mois' }] });
+    const doc = await invoiceDocument(db.app, owner, id);
+    expect(doc.extra_fields).toEqual([{ label: 'Délai', value: '6 mois' }]);
+    expect(doc.settings.template).toBe('modern');
+    await setCompanyLogo(db.app, owner, null, null);
+    expect(await companyLogoKey(db.app, owner.orgId)).toBeNull();
   });
 });

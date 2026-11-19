@@ -53,6 +53,7 @@ function InvoiceEditor() {
         kind: current.kind, label: current.label, issuedOn: current.issuedOn, dueOn: current.dueOn, contractRef: current.contractRef, orderRef: current.orderRef,
         notes: current.notes, terms: current.terms, vatBps: current.vatBps, vatExemptReason: current.vatExemptReason, retentionBps: current.retentionBps,
         deductionMinor: current.deductionMinor,
+        extraFields: current.extraFields.filter((field) => field.label.trim()),
         lines: current.lines.map(({ kind, section, designation, unit, quantityMilli, unitPriceMinor, phaseId, contractMinor, cumulativeBps, previousMinor }) => ({
           kind, section, designation: designation.trim() || '—', unit, quantityMilli, unitPriceMinor, phaseId, contractMinor, cumulativeBps, previousMinor })),
         adjustments: current.adjustments.map(({ label, rateBps, base, amountMinor }) => ({ label: label.trim() || '—', rateBps, base, amountMinor })),
@@ -127,6 +128,19 @@ function InvoiceEditor() {
               <label className="field">{t('inv.contractRef')}<input value={edit.contractRef ?? ''} maxLength={120} onChange={(event) => change({ contractRef: event.target.value || null })} /></label>
               <label className="field">{t('inv.orderRef')}<input value={edit.orderRef ?? ''} maxLength={120} onChange={(event) => change({ orderRef: event.target.value || null })} /></label>
             </fieldset>
+            <div className="stack" style={{ gap: '.4rem', marginTop: '.75rem' }}>
+              <span className="small"><b>{t('inv.extraFields')}</b> <span className="faint">{t('inv.extraFieldsSub')}</span></span>
+              {edit.extraFields.map((field, index) => (
+                <div key={index} className="row tight nowrap">
+                  <input value={field.label} disabled={!writable} placeholder={t('inv.fieldLabel')} maxLength={60} style={{ flex: 1, minWidth: 0 }}
+                    onChange={(event) => change((current) => ({ extraFields: current.extraFields.map((item, position) => (position === index ? { ...item, label: event.target.value } : item)) }))} />
+                  <input value={field.value} disabled={!writable} placeholder={t('inv.fieldValue')} maxLength={200} style={{ flex: 2, minWidth: 0 }}
+                    onChange={(event) => change((current) => ({ extraFields: current.extraFields.map((item, position) => (position === index ? { ...item, value: event.target.value } : item)) }))} />
+                  {writable ? <button type="button" className="icon-btn sm" aria-label={t('app.remove')} onClick={() => change((current) => ({ extraFields: current.extraFields.filter((_, position) => position !== index) }))}><Trash2 size={13} /></button> : null}
+                </div>
+              ))}
+              {writable && edit.extraFields.length < 12 ? <button type="button" className="btn ghost small" style={{ alignSelf: 'flex-start' }} onClick={() => change((current) => ({ extraFields: [...current.extraFields, { label: '', value: '' }] }))}><Plus size={14} />{t('inv.addField')}</button> : null}
+            </div>
           </Panel>
 
           <Panel title={t('inv.lines')} sub={t('inv.linesSub')} flush>

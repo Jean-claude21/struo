@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { asActor, ensure, journal, parse } from './access.ts';
 import type { Actor, Db } from './db.ts';
 import { DomainError, notFound } from './errors.ts';
-import { nextInvoiceNumber } from './invoicing.ts';
+import { nextInvoiceNumber, readSettings, type InvoiceSettings } from './invoicing.ts';
 
 export const PAYMENT_METHODS = ['mobile_money', 'transfer', 'cheque', 'cash', 'card', 'other'] as const;
 export const INVOICE_KINDS = ['advance', 'progress', 'final'] as const;
@@ -230,13 +230,13 @@ export async function invoiceDocument(db: Db, actor: Actor, id: string) {
       `select kind, section, designation, unit, quantity_milli, unit_price_minor, contract_minor, cumulative_bps, previous_minor, amount_minor
          from invoice_line where invoice_id = $1 order by position`, [id])).rows;
     const adjustments = (await tx.query('select label, rate_bps, base, amount_minor from invoice_adjustment where invoice_id = $1 order by position', [id])).rows;
-    const settings = (await tx.query('select * from invoice_settings where org_id = $1', [actor.orgId])).rows[0] ?? null;
+    const settings = await readSettings(tx, actor.orgId);
     return { ...row, lines, adjustments, settings } as InvoiceDocument;
   });
 }
 
 export interface InvoiceDocument {
-      id: string; project_id: string;
+      id: string; org_id: string; project_id: string;
       number: string; kind: string; label: string | null; issued_on: string; due_on: string; currency_code: string;
       amount_minor: number; vat_bps: number; vat_minor: number; total_minor: number; retention_bps: number;
       retention_minor: number; deduction_minor: number; net_minor: number; paid_minor: number | null;
@@ -244,11 +244,11 @@ export interface InvoiceDocument {
       client_name: string | null; client_address: string | null; client_email: string | null; client_phone: string | null;
       company_name: string; status: string; country_code: string;
       contract_ref: string | null; order_ref: string | null; notes: string | null; terms: string | null; vat_exempt_reason: string | null;
-      other_deductions_minor: number;
+      other_deductions_minor: number; extra_fields: { label: string; value: string }[];
       lines: { kind: string; section: string | null; designation: string; unit: string | null; quantity_milli: number; unit_price_minor: number;
         contract_minor: number; cumulative_bps: number; previous_minor: number; amount_minor: number }[];
       adjustments: { label: string; rate_bps: number | null; base: string; amount_minor: number }[];
-      settings: Record<string, string | number | boolean | null> | null;
+      settings: InvoiceSettings;
 }
 
 /** The company's money at a glance (dashboard). */
