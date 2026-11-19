@@ -23,7 +23,7 @@ real external account · ⏳ next.
 | 015 | `015-voice` | Voice notes on field reports, transcribed after sync | ✅ | Voice note test; transcription needs `OPENAI_API_KEY` (set in staging) |
 | 016 | `016-oauth-mcp` | OAuth for MCP clients (Claude.ai, ChatGPT) besides API keys | ✅ | Full OAuth flow verified locally with a PKCE client; grant and revocation tests |
 | 017 | `017-subscription-payments` | Paying the subscription online (platform Moneroo account) | 🟡 | Tests and browser flow with the simulator; real platform Moneroo keys not provided yet |
-| 018 | `018-exports` | Accounting export, full company export (zip) and erasure | ⏳ | |
+| 018 | `018-exports` | Accounting export, full company export (zip) and erasure | ✅ | Export and erasure tests; CSV and zip downloaded over HTTP |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

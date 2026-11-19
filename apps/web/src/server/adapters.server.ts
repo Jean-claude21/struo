@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import {
   fromMinor, type CheckoutOutcome, type Drafter, type Transcriber, type Mailer, type Messenger, type PaymentGateway, type Storage,
 } from '@struo/core';
@@ -31,6 +31,15 @@ export function createStorage(env: Env): Storage {
           return null;
         }
       },
+      async removePrefix(prefix) {
+        let token: string | undefined;
+        do {
+          const page = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }));
+          const keys = (page.Contents ?? []).map((object) => ({ Key: object.Key! }));
+          if (keys.length) await client.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys } }));
+          token = page.IsTruncated ? page.NextContinuationToken : undefined;
+        } while (token);
+      },
     };
   }
   const root = path.resolve(env.STORAGE_DIR);
@@ -54,6 +63,10 @@ export function createStorage(env: Env): Storage {
       } catch {
         return null;
       }
+    },
+    async removePrefix(prefix) {
+      if (!/^org\/[\w-]+\/$/u.test(prefix)) throw new Error('invalid prefix');
+      await rm(safe(prefix.slice(0, -1)), { recursive: true, force: true });
     },
   };
 }
