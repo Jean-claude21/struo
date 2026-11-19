@@ -18,9 +18,9 @@ real external account · ⏳ next.
 | 010 | `010-client-portal` | Portal link, progress, photos, documents, invoices, messages, milestone validation, online payment | 🟡 | Portal → simulated payment → invoice paid, in the browser; Moneroo with a real company account not tested |
 | 011 | `011-mcp` | API keys, MCP server with tool groups | ✅ | Key test; initialize, tools/list (10 tools) and a finance call over HTTP |
 | 012 | `012-saas` | Plans and limits, landing page with pricing, platform console | ✅ | Trial limit test; landing rendered with plans from the database. Prices are provisional |
-| 013 | `013-ai` | Reminder and formal notice drafting from real figures | 🟡 | Template path; OpenAI path needs `OPENAI_API_KEY` in the environment |
+| 013 | `013-ai` | Reminder and formal notice drafting from real figures | ✅ | Verified on staging with the real OpenAI key: the draft quotes the real number, dates, balance and company |
 | 014 | `014-whatsapp` | WhatsApp channel for reminders | 🟡 | Simulator path; real sending needs a WhatsApp Business account |
-| 015 | `015-voice` | Voice notes on field reports, transcribed after sync | ✅ | Voice note test; transcription needs `OPENAI_API_KEY` (set in staging) |
+| 015 | `015-voice` | Voice notes on field reports, transcribed after sync | ✅ | Voice note test; verified on staging: a spoken note uploaded and transcribed by OpenAI |
 | 016 | `016-oauth-mcp` | OAuth for MCP clients (Claude.ai, ChatGPT) besides API keys | ✅ | Full OAuth flow verified locally with a PKCE client; grant and revocation tests |
 | 017 | `017-subscription-payments` | Paying the subscription online (platform Moneroo account) | 🟡 | Tests and browser flow with the simulator; real platform Moneroo keys not provided yet |
 | 018 | `018-exports` | Accounting export, full company export (zip) and erasure | ✅ | Export and erasure tests; CSV and zip downloaded over HTTP |
