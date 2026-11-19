@@ -183,7 +183,8 @@ function Planning() {
           </span>
         ) : null}
         {canWrite && data.projects.length ? (
-          <MilestoneDialog projects={data.projects} date={adding?.date} open={adding !== null} onOpenChange={(next) => setAdding(next ? (adding ?? {}) : null)} />
+          <MilestoneDialog projects={data.projects} date={adding?.date} open={adding !== null} onOpenChange={(next) => setAdding(next ? (adding ?? {}) : null)}
+            milestones={allMs.map((milestone) => ({ id: milestone.id, label: `${milestone.site.code} · ${milestone.name}` }))} />
         ) : null}
       </PageHeader>
       <div className="grid">

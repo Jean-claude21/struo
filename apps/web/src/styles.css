@@ -852,3 +852,9 @@ input[type='range'] { accent-color: var(--brand); min-height: 32px; padding: 0; 
 /* library by day (spec 037) */
 .fday { scroll-margin-top: 1rem; }
 .fday-h { display: flex; align-items: baseline; gap: .6rem; padding: .4rem 0 .6rem; border-bottom: 1px solid var(--divider); margin-bottom: .75rem; position: sticky; top: 0; background: var(--bg); z-index: 2; }
+/* activity report (spec 039) */
+.print-page table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.print-page td, .print-page th { padding: .3rem .4rem; border-bottom: 1px solid #e5e5e5; text-align: left; }
+.print-page .right { text-align: right; }
+.report-kpis td.muted { width: 32%; }
+@media print { .print-page h2 { break-after: avoid; } .print-page tr { break-inside: avoid; } }

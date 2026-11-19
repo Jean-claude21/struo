@@ -94,6 +94,19 @@ export async function digestRecipients(owner: Db) {
   return rows.filter((row) => row.ownerId);
 }
 
+/** Every active company with its owner and the e-mails of its owners and admins, for the periodic reports (spec 039). */
+export async function reportRecipients(owner: Db) {
+  const { rows } = await owner.query<{ orgId: string; orgName: string; locale: 'fr' | 'en'; ownerId: string; emails: string[] }>(
+    `select o.id as "orgId", o.name as "orgName", s.locale,
+            (select m."userId" from member m where m."organizationId" = o.id and m.role = 'owner' order by m."createdAt" limit 1) as "ownerId",
+            array(select u.email from member m join "user" u on u.id = m."userId"
+                   where m."organizationId" = o.id and m.role in ('owner', 'admin')) as emails
+       from organization o join org_settings s on s.org_id = o.id
+      where s.suspended_at is null`,
+  );
+  return rows.filter((row) => row.ownerId && row.emails.length);
+}
+
 /** Marks a notification as sent today; false when it was already (never twice the same day). */
 export async function markNotified(owner: Db, orgId: string, kind: string, target: string, channel: string): Promise<boolean> {
   const { rowCount } = await owner.query(

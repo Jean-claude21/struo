@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  addDocument, addExpense, addMilestone, createDraftInvoice, draftReminder, recordPayment, reviewReport, sendReminder,
+  addDocument, addExpense, addMilestone, createDraftInvoice, draftReminder, recordPayment, reviewReport, sendReminder, setMilestoneDependencies,
 } from '@/features/office/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 import { Badge, DateText, DialogButton, ErrorText, Field, FormButtons, formData, orNull, parseMoney, todayIso, useAction } from './ui.tsx';
@@ -285,8 +285,10 @@ export function DocumentDialog({
   );
 }
 
-export function MilestoneDialog({ projects, projectId, date, open, onOpenChange, hideTrigger, defaultOpen }: {
+export function MilestoneDialog({ projects, projectId, date, open, onOpenChange, hideTrigger, defaultOpen, milestones = [] }: {
   projects?: ProjectOption[]; projectId?: string; date?: string; open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean; defaultOpen?: boolean;
+  /** Milestones it may wait for (any site), chosen at creation (spec 031). */
+  milestones?: { id: string; label: string }[];
 }) {
   const { t } = useI18n();
   const { run, error, busy } = useAction();
@@ -298,14 +300,21 @@ export function MilestoneDialog({ projects, projectId, date, open, onOpenChange,
           onSubmit={async (event) => {
             event.preventDefault();
             const v = formData(event.currentTarget);
-            const done = await run(() =>
-              addMilestone({
+            const done = await run(async () => {
+              const created = await addMilestone({
                 data: {
                   projectId: v.projectId, name: v.name, category: v.category, plannedOn: v.plannedOn, priority: v.priority,
                   action: orNull(v.action), clientValidation: v.clientValidation === 'on',
                 },
-              }),
-            );
+              });
+              // The milestone(s) it waits for, with the minimum gap.
+              const previous = new FormData(event.currentTarget).getAll('dependsOn').map(String).filter(Boolean);
+              if (previous.length) {
+                const lag = Math.max(0, Math.min(365, Number(v.lagDays) || 0));
+                await setMilestoneDependencies({ data: { id: (created as { id: string }).id, dependsOn: previous.map((id) => ({ id, lagDays: lag })) } });
+              }
+              return created;
+            });
             if (done) close();
           }}
         >
@@ -336,6 +345,18 @@ export function MilestoneDialog({ projects, projectId, date, open, onOpenChange,
               </select>
             </Field>
           </div>
+          {milestones.length ? (
+            <div className="form-grid">
+              <Field label={t('plan.waitsFor')} hint={t('plan.waitsForHint')}>
+                <select name="dependsOn" multiple size={Math.min(6, milestones.length)}>
+                  {milestones.map((milestone) => <option key={milestone.id} value={milestone.id}>{milestone.label}</option>)}
+                </select>
+              </Field>
+              <Field label={t('plan.lagDays')} hint={t('app.optional')}>
+                <input name="lagDays" type="number" min={0} max={365} defaultValue={0} />
+              </Field>
+            </div>
+          ) : null}
           <Field label={t('planning.action')} hint={t('app.optional')}>
             <input name="action" maxLength={500} />
           </Field>
