@@ -32,6 +32,9 @@ export interface Env {
   UMAMI_WEBSITE_ID: string;
   UMAMI_SCRIPT_URL: string;
   APP_VERSION: string;
+  /** Try without an account (spec 042): on unless DEMO_ENABLED=false; copies kept ready in advance. */
+  DEMO_ENABLED: boolean;
+  DEMO_POOL: number;
 }
 
 const read = (name: string, fallback = '') => (process.env[name] ?? fallback).trim();
@@ -83,6 +86,8 @@ export function env(): Env {
     UMAMI_WEBSITE_ID: read('UMAMI_WEBSITE_ID'),
     UMAMI_SCRIPT_URL: read('UMAMI_SCRIPT_URL'),
     APP_VERSION: read('APP_VERSION'),
+    DEMO_ENABLED: appEnv !== 'test' && read('DEMO_ENABLED', 'true') !== 'false',
+    DEMO_POOL: Math.max(0, Math.min(10, Number(read('DEMO_POOL', '2')) || 0)),
   };
   if (!cached.DATABASE_URL) throw new Error('DATABASE_URL is empty.');
   if (!cached.BETTER_AUTH_SECRET) throw new Error('BETTER_AUTH_SECRET is empty.');

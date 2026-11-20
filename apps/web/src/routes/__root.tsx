@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
-import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
+import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from '@tanstack/react-router';
 import { useEffect, type ReactNode } from 'react';
+import { DemoBar } from '@/components/DemoBar.tsx';
 import { ToastProvider } from '@/components/kit.tsx';
 import { getShell } from '@/features/shell/server.ts';
 import { THEME_BOOT } from '@/lib/theme.ts';
@@ -33,6 +34,10 @@ function Shell({ children }: { children: ReactNode }) {
   const data = Route.useLoaderData();
   const locale = data?.locale ?? 'fr';
   const userId = data?.viewer?.userId;
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  // The demo bar (spec 042) on every page of a demo company: office, field app, client space.
+  const demo = data?.viewer?.demo && data.viewer.company && path !== '/' ? data.viewer : null;
+  const demoRole = path.startsWith('/portal') ? 'client' : path.startsWith('/field') ? 'site_lead' : (demo?.company?.role ?? 'owner');
   useEffect(() => { void initBrowserMonitoring(data?.monitoring, userId); }, [data?.monitoring, userId]);
   return (
     <html lang={locale}>
@@ -46,7 +51,10 @@ function Shell({ children }: { children: ReactNode }) {
       </head>
       <body>
         <I18nProvider locale={locale}>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            {demo ? <DemoBar role={demoRole} expiresAt={demo.demo?.expiresAt ?? null} /> : null}
+            {children}
+          </ToastProvider>
         </I18nProvider>
         <Scripts />
       </body>

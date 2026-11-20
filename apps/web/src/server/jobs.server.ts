@@ -1,5 +1,6 @@
 import { companyKpis, digestRecipients, getSettings, listAlerts, markNotified, reportRecipients, resolveActor, type Alert } from '@struo/core';
 import { translate } from '@/i18n/index.tsx';
+import { refillDemoPool } from './demo.server.ts';
 import { monitorJob, reportError } from './monitor.server.ts';
 import type { Runtime } from './runtime.server.ts';
 
@@ -153,6 +154,8 @@ export function startJobs(rt: Runtime): void {
   // Every 15 minutes the jobs check in with the error tracker: if they stop, an alert is raised.
   const tick = () => {
     monitorJob('struo-jobs', '*/15 * * * *', async () => {
+      // Demo copies (spec 042): delete the expired ones, keep a few ready for the next visitors.
+      await refillDemoPool(rt).catch((error: unknown) => reportError(error, { where: 'job:demo' }));
       // The digest and the reports leave after 7:00 UTC (morning in West Africa).
       if (new Date().getUTCHours() < 7) return;
       await runDigest(rt).catch((error: unknown) => reportError(error, { where: 'job:digest' }));
