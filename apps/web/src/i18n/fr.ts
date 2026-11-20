@@ -7,7 +7,7 @@ export const fr = {
   ...aiFr,
   app: {
     name: 'Struo',
-    tagline: 'Pilotez tous vos chantiers, même sans réseau.',
+    tagline: 'Vos chantiers, en un regard.',
     language: 'Langue',
     loading: 'Chargement…',
     save: 'Enregistrer',
@@ -155,7 +155,7 @@ export const fr = {
   },
   landing: {
     heroTitle: 'Pilotez tous vos chantiers, même sans réseau.',
-    heroSub: 'Rapports terrain hors-ligne, facturation et impayés, conformité, coûts, planning et portail client — pour les entreprises du BTP d’Afrique de l’Ouest.',
+    heroSub: 'Suivez les rapports de chantier, l’avancement et les factures de votre entreprise de BTP, même sans réseau. Démo sans compte.',
     trial: 'Essai gratuit 14 jours',
     signIn: 'Se connecter',
     badgeOffline: 'Fonctionne hors-ligne',
