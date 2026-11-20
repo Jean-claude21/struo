@@ -22,7 +22,8 @@ export const Route = createFileRoute('/api/demo/start')({
         const back = (error: string) => Response.redirect(new URL(`/demo?error=${error}`, rt.env.APP_BASE_URL), 302);
         try {
           const session = await rt.auth.api.getSession({ headers: request.headers });
-          const visitor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'local';
+          // The proxy appends the real address at the end of the chain; what a visitor sends is ignored.
+          const visitor = request.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || request.headers.get('x-real-ip') || 'local';
           const sandbox = (session ? await sandboxOfUser(rt, session.user.id) : null) ?? (await claimSandbox(rt, visitor));
           if (role === 'client') {
             if (!sandbox.portal_token) return back('unavailable');

@@ -221,6 +221,8 @@ const variables = {
   JOBS_ENABLED: 'true',
   // The staging instance is a demo: the payment simulator is allowed there, never in production.
   PAYMENTS_SIMULATOR: args.env === 'staging' ? 'true' : 'false',
+  // Try without an account (spec 042): demo copies kept ready for visitors.
+  DEMO_POOL: args.env === 'production' ? '3' : '2',
   ...storageVariables,
   ...((admin.RESEND_API_KEY ?? own.RESEND_API_KEY) ? { RESEND_API_KEY: admin.RESEND_API_KEY ?? own.RESEND_API_KEY } : {}),
   ...(own.MAIL_FROM ? { MAIL_FROM: own.MAIL_FROM } : {}),

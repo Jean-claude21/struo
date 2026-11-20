@@ -15,7 +15,10 @@ export const DEMO_ROLES = ['owner', 'engineer', 'site_lead', 'accountant', 'clie
 export type DemoRole = (typeof DEMO_ROLES)[number];
 const LOCK = 727102;
 const TTL_HOURS = 24;
-const PER_VISITOR_PER_DAY = 3;
+// Mobile operators share one address between many people: a generous limit per address, and a cap
+// on the copies alive at the same time to protect the database.
+const PER_VISITOR_PER_DAY = 10;
+const MAX_ACTIVE = 150;
 /** The assistant's budget in a demo copy, in US cents: a few questions, no more. */
 const AI_BUDGET_CENTS = 30;
 
@@ -32,7 +35,7 @@ export function demoAvailable(rt: Runtime): boolean {
   return rt.env.DEMO_ENABLED && assetsDir() !== null;
 }
 
-async function createSandbox(rt: Runtime): Promise<void> {
+async function createSandbox(rt: Runtime): Promise<string> {
   const dir = assetsDir();
   if (!dir) throw new DomainError('demo_unavailable', 409);
   const tag = randomUUID().slice(0, 8);
@@ -46,6 +49,7 @@ async function createSandbox(rt: Runtime): Promise<void> {
   const portal = result.portals.find((item) => !item.requireCode)?.token ?? null;
   await rt.owner.query('insert into demo_sandbox (org_id, accounts, password_enc, portal_token) values ($1, $2, $3, $4)',
     [result.orgId, JSON.stringify(accounts), rt.secrets.seal(password), portal]);
+  return result.orgId;
 }
 
 async function deleteSandbox(rt: Runtime, row: Pick<SandboxRow, 'org_id' | 'accounts'>): Promise<void> {
@@ -63,8 +67,8 @@ export async function refillDemoPool(rt: Runtime): Promise<void> {
     try {
       const expired = await rt.owner.query<SandboxRow>(`select org_id, accounts from demo_sandbox where status = 'assigned' and expires_at < now()`);
       for (const row of expired.rows) await deleteSandbox(rt, row).catch((error: unknown) => reportError(error, { where: 'demo:delete', orgId: row.org_id }));
-      const ready = await rt.owner.query<{ n: number }>(`select count(*)::int as n from demo_sandbox where status = 'ready'`);
-      for (let n = ready.rows[0]!.n; n < rt.env.DEMO_POOL; n += 1) await createSandbox(rt);
+      const readyCount = async () => (await rt.owner.query<{ n: number }>(`select count(*)::int as n from demo_sandbox where status = 'ready'`)).rows[0]!.n;
+      for (let round = 0; round < rt.env.DEMO_POOL && (await readyCount()) < rt.env.DEMO_POOL; round += 1) await createSandbox(rt);
     } finally {
       await client.query('select pg_advisory_unlock($1)', [LOCK]);
     }
@@ -81,15 +85,16 @@ export async function claimSandbox(rt: Runtime, visitor: string): Promise<Sandbo
   const hash = visitorHash(rt, visitor);
   const recent = await rt.owner.query<{ n: number }>(`select count(*)::int as n from demo_sandbox where visitor_hash = $1 and assigned_at > now() - interval '1 day'`, [hash]);
   if (recent.rows[0]!.n >= PER_VISITOR_PER_DAY) throw new DomainError('demo_limit', 409);
-  const claim = () => rt.owner.query<SandboxRow>(
+  const active = await rt.owner.query<{ n: number }>(`select count(*)::int as n from demo_sandbox where status = 'assigned' and expires_at > now()`);
+  if (active.rows[0]!.n >= MAX_ACTIVE) throw new DomainError('demo_unavailable', 409);
+  const claim = (orgId: string | null) => rt.owner.query<SandboxRow>(
     `update demo_sandbox set status = 'assigned', visitor_hash = $1, assigned_at = now(), expires_at = now() + make_interval(hours => $2)
-      where org_id = (select org_id from demo_sandbox where status = 'ready' order by created_at limit 1 for update skip locked)
-      returning org_id, accounts, password_enc, portal_token, expires_at`, [hash, TTL_HOURS]);
-  let claimed = (await claim()).rows[0];
-  if (!claimed) {
-    await createSandbox(rt);
-    claimed = (await claim()).rows[0];
-  }
+      where org_id = coalesce($3, (select org_id from demo_sandbox where status = 'ready' order by created_at limit 1 for update skip locked))
+        and status = 'ready'
+      returning org_id, accounts, password_enc, portal_token, expires_at`, [hash, TTL_HOURS, orgId]);
+  let claimed = (await claim(null)).rows[0];
+  // None ready: make one now and give it to this visitor only.
+  if (!claimed) claimed = (await claim(await createSandbox(rt))).rows[0];
   // Prepare the next visitor's copy without making this one wait.
   void refillDemoPool(rt).catch((error: unknown) => reportError(error, { where: 'demo:refill' }));
   if (!claimed) throw new DomainError('demo_unavailable', 409);
