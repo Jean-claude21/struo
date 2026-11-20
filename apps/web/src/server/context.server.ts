@@ -3,6 +3,7 @@ import {
 } from '@struo/core';
 import { getCookie, getRequestHeaders, setCookie } from '@tanstack/react-start/server';
 import { isLocale, LOCALE_COOKIE, localeFromHeaders, type Locale } from '@/i18n/index.tsx';
+import { reportError } from './monitor.server.ts';
 import { runtime } from './runtime.server.ts';
 
 export const ORG_COOKIE = 'struo_org';
@@ -87,7 +88,7 @@ export function toClientError(error: unknown): Error {
     return new Error(Object.keys(error.params).length ? `${error.code}|${JSON.stringify(error.params)}` : error.code);
   }
   if (error instanceof Error && /^[a-z_]+(\|.*)?$/u.test(error.message)) return error;
-  console.error('[server]', error);
+  reportError(error, { where: 'server-fn' });
   return new Error('generic');
 }
 
@@ -95,6 +96,6 @@ export function toClientError(error: unknown): Error {
 export function jsonError(error: unknown): Response {
   if (isMalformedId(error)) return Response.json({ error: 'not_found', params: {} }, { status: 404 });
   if (error instanceof DomainError) return Response.json({ error: error.code, params: error.params }, { status: error.status });
-  console.error('[api]', error);
+  reportError(error, { where: 'api' });
   return Response.json({ error: 'generic' }, { status: 500 });
 }

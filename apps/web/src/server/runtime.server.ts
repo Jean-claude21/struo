@@ -8,6 +8,7 @@ import { env, type Env } from './env.server.ts';
 import { localeOfRequest, mailMessage, type MailContent } from './mail.server.ts';
 import { translate, type Locale } from '@/i18n/index.tsx';
 import { startJobs } from './jobs.server.ts';
+import { initMonitoring, reportError } from './monitor.server.ts';
 
 function createAuth(environment: Env, db: Db, mailer: Mailer) {
   const app = environment.APP_BASE_URL;
@@ -15,7 +16,7 @@ function createAuth(environment: Env, db: Db, mailer: Mailer) {
   const send = (to: string, request: Request | undefined, kind: string, build: (locale: Locale) => { subject: string; content: MailContent }) => {
     const locale = localeOfRequest(request);
     const { subject, content } = build(locale);
-    return mailer.send(mailMessage(locale, to, subject, content, app)).catch((error: unknown) => console.error(`[mail] ${kind}`, error));
+    return mailer.send(mailMessage(locale, to, subject, content, app)).catch((error: unknown) => { reportError(error, { where: `mail:${kind}` }); });
   };
   return betterAuth({
     appName: 'Struo',
@@ -147,6 +148,7 @@ let current: Runtime | undefined;
 export function runtime(): Runtime {
   if (current) return current;
   const environment = env();
+  initMonitoring(environment);
   const db = createPool(environment.DATABASE_URL, 10);
   const owner = createPool(environment.DATABASE_OWNER_URL || environment.DATABASE_URL, 3);
   const mailer = createMailer(environment);
