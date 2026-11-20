@@ -799,7 +799,7 @@ export const uxFr = {
     noReport: 'Aucun rapport',
   },
   home: {
-    eyebrow: 'Logiciel de gestion de chantiers · BTP Afrique de l’Ouest',
+    eyebrow: 'Logiciel de gestion de chantiers pour les entreprises du BTP',
     heroTitle: 'Vos chantiers payés à temps. Votre terrain qui rend compte chaque jour, même sans réseau.',
     heroSub: 'Struo remplace le fichier Excel, les appels et les relances à la main : rapports photo depuis le chantier, factures et impayés, conformité, planning, et un espace qui rassure vos clients.',
     ctaTrial: 'Essayer gratuitement 14 jours',
@@ -1191,7 +1191,7 @@ export const uxFr = {
       title: "Aujourd’hui · 5 chantiers",
       reports: "4 rapports reçus",
       watch: "1 à surveiller",
-      map: "Carte des chantiers à Lomé",
+      map: "Carte des chantiers de l’entreprise",
       e1: "Dalle du R+2 coulée, 6 photos",
       e2: "Livraison : 120 sacs de ciment reçus",
       e3: "Pluie : coulage reporté à demain",
@@ -1202,7 +1202,7 @@ export const uxFr = {
       e8: "Équipe sur place, 9 ouvriers",
     },
     hero: {
-      eyebrow: "BTP · Afrique de l’Ouest",
+      eyebrow: "Logiciel de suivi de chantiers",
       title1: "Vos chantiers,",
       title2: "en un regard.",
       lead: "Vos chefs de chantier envoient leurs photos, même sans réseau. Depuis le bureau, vous voyez quoi, quand et où, et vos clients voient une entreprise qui maîtrise son travail.",
@@ -1274,7 +1274,7 @@ export const uxFr = {
     offline: {
       on: "Rallumer le réseau",
       off: "Couper le réseau",
-      site: "École de Kpalimé · KC-07",
+      site: "École primaire · KC-07",
       waiting: "Hors ligne · {n} en attente",
       sending: "Envoi en cours…",
       allSent: "Tout est envoyé",
@@ -1352,7 +1352,7 @@ export const uxFr = {
       clientAlt: "Une cliente signe une étape sur le téléphone de l’ingénieure",
     },
     footer: {
-      tagline: "Gestion de chantiers · Togo, Bénin, Côte d’Ivoire",
+      tagline: "Gestion de chantiers pour les entreprises du BTP",
     },
   },
   demo: {
@@ -1372,7 +1372,7 @@ export const uxFr = {
     page: {
       eyebrow: "Démo sans compte",
       title: "Entrez dans une vraie entreprise de BTP. Elle est fictive, et rien qu’à vous.",
-      lead: "Kekeli Construction a 9 chantiers à Lomé, une équipe de 7 personnes et un an d’historique. Choisissez par quels yeux regarder : vous pourrez changer à tout moment.",
+      lead: "Kekeli Construction a 9 chantiers, une équipe de 7 personnes et un an d’historique. Choisissez par quels yeux regarder : vous pourrez changer à tout moment.",
       ownerTitle: "Voir tous mes chantiers d’un coup d’œil",
       ownerBody: "L’écran « Aujourd’hui », les retards, les impayés, les indicateurs.",
       site_leadTitle: "Faire un rapport en une minute",

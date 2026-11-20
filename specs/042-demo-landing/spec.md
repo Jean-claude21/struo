@@ -12,7 +12,7 @@ chantiers. Sans courir après personne. » Proof and payment are the mechanism, 
 
 Seven blocks, one main action repeated (« Voir la démo, sans compte »), the trial as second action:
 
-1. **Promise and product**: the headline, and a live « Today » board — a map of five sites in Lomé
+1. **Promise and product**: the headline, and a live « Today » board — a map of the company’s five sites
    and a feed of the day's events (what, when, where) that updates every few seconds.
 2. **The problem as they live it**: you have to call to know; everything is scattered; the client doubts.
 3. **What, when, where on one screen** (dark band): a photo report, a planning with a late milestone,
