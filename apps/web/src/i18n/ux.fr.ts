@@ -832,6 +832,8 @@ export const uxFr = {
       portal_manage: 'Inviter les clients',
       messages_write: 'Écrire aux clients',
       apikeys_manage: 'Clés API et assistants (MCP)',
+      crew_write: 'Gérer les ouvriers, présences et sous-traitants',
+      crew_rates: 'Voir et modifier les taux journaliers',
     },
   },
   onb: {

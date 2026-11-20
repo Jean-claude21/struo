@@ -7,6 +7,7 @@ import { DateText } from '@/components/ui.tsx';
 import { Board } from '@/components/views/Board.tsx';
 import { getFieldDesk, reviewReport, updateIncident } from '@/features/office/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
+import { usePhotoViewer } from '@/components/PhotoViewer.tsx';
 
 export const Route = createFileRoute('/app/field')({
   validateSearch: (search: Record<string, unknown>): { report?: string; tab?: string } => ({
@@ -40,6 +41,7 @@ function FieldDesk() {
   const [selectedId, setSelectedId] = useState<string | null>(search.report ?? list[0]?.id ?? null);
   const selected = data.reports.find((report) => report.id === selectedId) ?? null;
   const [photo, setPhoto] = useState(0);
+  const view = usePhotoViewer();
   const [asking, setAsking] = useState(false);
   const [note, setNote] = useState('');
   const [openIncident, setOpenIncident] = useState<Incident | null>(null);
@@ -127,7 +129,9 @@ function FieldDesk() {
                 {selected.photos.length ? (
                   <div className="stack" style={{ gap: '.5rem' }}>
                     <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: 'var(--sunken)' }}>
-                      <img src={`/api/files/photo/${selected.photos[photo]?.id}`} alt="" style={{ width: '100%', maxHeight: '46vh', objectFit: 'contain', display: 'block' }} />
+                      <button type="button" className="pv-open" aria-label={t('viewer.label')} onClick={() => view(selected.photos.map((item) => ({ url: `/api/files/photo/${item.id}`, title: `${selected.projectCode} · ${selected.projectName}`, detail: selected.authorName, latitude: selected.latitude, longitude: selected.longitude })), photo)}>
+                        <img src={`/api/files/photo/${selected.photos[photo]?.id}`} alt="" style={{ width: '100%', maxHeight: '46vh', objectFit: 'contain', display: 'block' }} />
+                      </button>
                       <span className="badge" style={{ position: 'absolute', left: 10, bottom: 10, background: 'rgba(0,0,0,.6)', color: '#fff' }}>
                         <MapPin size={12} />{selected.latitude !== null ? `${selected.latitude.toFixed(4)}, ${selected.longitude?.toFixed(4)}` : '—'} · <DateText value={selected.photos[photo]?.takenAt} time />
                       </span>

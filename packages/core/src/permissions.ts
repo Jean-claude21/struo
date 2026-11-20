@@ -18,6 +18,9 @@ export const PERMISSIONS = {
   'portal.manage': ['owner', 'admin', 'engineer'],
   'messages.write': ['owner', 'admin', 'engineer', 'accountant'],
   'apikeys.manage': ['owner', 'admin'],
+  // Spec 047: the crew register and the subcontracts; day rates are pay, seen by few.
+  'crew.write': ['owner', 'admin', 'engineer', 'accountant'],
+  'crew.rates': ['owner', 'admin', 'accountant'],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -43,6 +46,7 @@ export const SCREENS = {
   documents: ['owner', 'admin', 'engineer', 'accountant'],
   clients: ['owner', 'admin', 'engineer', 'accountant'],
   team: ['owner', 'admin'],
+  crew: ['owner', 'admin', 'engineer', 'accountant'],
   intelligence: ['owner', 'admin', 'engineer', 'accountant'],
   settings: ['owner', 'admin'],
   account: ['owner', 'admin', 'engineer', 'site_lead', 'accountant'],

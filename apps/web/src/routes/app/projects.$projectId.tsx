@@ -1,5 +1,5 @@
 import { can, sees } from '@struo/core/permissions';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { DocumentDialog, ExpenseDialog, InvoiceDialog, MilestoneDialog, PaymentDialog, ReminderDialog, ReportCard } from '@/components/forms.tsx';
 import { Badge, DateText, Empty, ErrorText, Field, formData, formatMoney, Kpi, Money, parseMoney, Progress, Tabs, useAction } from '@/components/ui.tsx';
@@ -14,13 +14,14 @@ import { KpiTile, Panel, Progress as Bar, StatusChip } from '@/components/kit.ts
 import { EndHint } from '@/components/SiteBits.tsx';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 import { NotesThread, TaskBoard } from '@/components/Work.tsx';
+import { usePhotoViewer } from '@/components/PhotoViewer.tsx';
 
 export const Route = createFileRoute('/app/projects/$projectId')({
   loader: ({ params }) => getProjectPage({ data: { id: params.projectId } }),
   component: ProjectPage,
 });
 
-type Tab = 'overview' | 'work' | 'field' | 'finance' | 'expenses' | 'documents' | 'planning' | 'portal' | 'messages';
+type Tab = 'overview' | 'work' | 'labour' | 'field' | 'finance' | 'expenses' | 'documents' | 'planning' | 'portal' | 'messages';
 type Data = Awaited<ReturnType<typeof getProjectPage>>;
 
 function ProjectPage() {
@@ -28,7 +29,7 @@ function ProjectPage() {
   const data = Route.useLoaderData();
   const { project } = data;
   const [tab, setTab] = useState<Tab>('overview');
-  const tabs: Tab[] = ['overview', 'work', 'field', ...(sees(data.role, 'finance') ? (['finance'] as Tab[]) : []), 'expenses', 'documents', 'planning', 'portal', 'messages'];
+  const tabs: Tab[] = ['overview', 'work', ...(sees(data.role, 'crew') ? (['labour'] as Tab[]) : []), 'field', ...(sees(data.role, 'finance') ? (['finance'] as Tab[]) : []), 'expenses', 'documents', 'planning', 'portal', 'messages'];
   const cover = data.reports.flatMap((report) => report.photos)[0];
   const client = data.clients.find((candidate) => candidate.id === project.clientId) ?? null;
   const money = (minor: number) => formatMoney(locale, minor, project.currencyCode);
@@ -74,7 +75,7 @@ function ProjectPage() {
         ) : null}
         <KpiTile label={t('projects.compliance')} value={project.compliancePct === null ? '—' : `${project.compliancePct} %`} tone={(project.compliancePct ?? 100) < 75 ? 'bad' : undefined} />
       </div>
-      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'portal' ? t('clientInvite.tab') : t(`projects.tabs.${value}`) }))} />
+      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'portal' ? t('clientInvite.tab') : value === 'labour' ? t('crew.tab') : t(`projects.tabs.${value}`) }))} />
       {tab === 'overview' ? <Overview data={data} /> : null}
       {tab === 'work' ? (
         <div className="grid-main">
@@ -82,6 +83,7 @@ function ProjectPage() {
           <NotesThread projectId={project.id} notes={data.notes} />
         </div>
       ) : null}
+      {tab === 'labour' ? <LabourTab data={data} /> : null}
       {tab === 'field' ? <FieldTab data={data} /> : null}
       {tab === 'finance' ? <FinanceTab data={data} /> : null}
       {tab === 'expenses' ? <ExpensesTab data={data} /> : null}
@@ -103,6 +105,14 @@ function Overview({ data }: { data: Data }) {
   const { run, error, busy, setError } = useAction();
   const money = (minor: number) => formatMoney(locale, minor, project.currencyCode);
   const journal = data.reports.slice(0, 6);
+  // Spec 047: every photo of the site in one viewer, newest report first.
+  const view = usePhotoViewer();
+  const when = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+  const viewerPhotos = data.reports.flatMap((report) => report.photos.map((photo) => ({
+    id: photo.id, url: `/api/files/photo/${photo.id}`, title: [project.code, report.phaseName].filter(Boolean).join(' · '),
+    detail: `${report.authorName} · ${when(photo.takenAt)}`, latitude: report.latitude, longitude: report.longitude,
+  })));
+  const openPhoto = (id: string) => (event: { preventDefault: () => void }) => { event.preventDefault(); view(viewerPhotos, Math.max(0, viewerPhotos.findIndex((item) => item.id === id))); };
   const upcoming = data.milestones.filter((milestone) => milestone.status !== 'done').slice(0, 5);
   const openIncidents = data.incidents.filter((incident) => incident.status !== 'resolved');
   const photos = data.reports.flatMap((report) => report.photos);
@@ -151,7 +161,7 @@ function Overview({ data }: { data: Data }) {
                 {report.note ? <p style={{ margin: '.25rem 0' }}>{report.note}</p> : null}
                 {report.photos.length ? (
                   <div className="row tight">{report.photos.slice(0, 4).map((photo) => (
-                    <a key={photo.id} href={`/api/files/photo/${photo.id}`} target="_blank" rel="noreferrer"><img src={`/api/files/photo/${photo.id}`} alt="" style={{ width: 84, height: 64, objectFit: 'cover', borderRadius: 6 }} loading="lazy" /></a>
+                    <a key={photo.id} href={`/api/files/photo/${photo.id}`} onClick={openPhoto(photo.id)}><img src={`/api/files/photo/${photo.id}`} alt="" style={{ width: 84, height: 64, objectFit: 'cover', borderRadius: 6 }} loading="lazy" /></a>
                   ))}</div>
                 ) : null}
               </div>
@@ -190,7 +200,7 @@ function Overview({ data }: { data: Data }) {
           {photos.length ? (
             <div className="site-gallery">
               {photos.slice(0, 6).map((photo) => (
-                <a key={photo.id} href={`/api/files/photo/${photo.id}`} target="_blank" rel="noreferrer"><img src={`/api/files/photo/${photo.id}`} alt="" loading="lazy" /></a>
+                <a key={photo.id} href={`/api/files/photo/${photo.id}`} onClick={openPhoto(photo.id)}><img src={`/api/files/photo/${photo.id}`} alt="" loading="lazy" /></a>
               ))}
             </div>
           ) : <p className="muted small" style={{ margin: 0 }}>{t('site.noPhotos')}</p>}
@@ -667,5 +677,40 @@ function MessagesTab({ data }: { data: Data }) {
       ) : null}
       <ErrorText error={error} />
     </section>
+  );
+}
+
+/** Spec 047: the site's labour from the ticked presences, and its subcontractors. */
+function LabourTab({ data }: { data: Data }) {
+  const { t, locale } = useI18n();
+  const money = (minor: number, currency = data.project.currencyCode) => formatMoney(locale, minor, currency);
+  const labour = data.labour;
+  return (
+    <div className="grid-main">
+      <Panel title={t('crew.labourTitle')} sub={t('crew.labourSub')}>
+        {labour ? (
+          <div className="stack">
+            <div className="grid">
+              <KpiTile label={t('crew.labourDays')} value={labour.days} />
+              <KpiTile label={t('crew.labourPeople')} value={labour.workers} />
+              {data.canRates && labour.costMinor !== null ? <KpiTile label={t('crew.labourCost')} value={money(labour.costMinor)} tone="brand" /> : null}
+            </div>
+            {data.canRates && labour.daysWithoutRate ? <p className="small bad-text" style={{ margin: 0 }}>{t('crew.labourMissing', { n: labour.daysWithoutRate })}</p> : null}
+            <Link to="/app/crew" className="btn secondary small" style={{ alignSelf: 'flex-start' }}>{t('crew.title')}</Link>
+          </div>
+        ) : <p className="muted small" style={{ margin: 0 }}>{t('crew.labourNone')}</p>}
+      </Panel>
+      <Panel title={t('crew.tabs.subcontracts')} flush>
+        {data.subcontracts.length ? (
+          <div className="table-wrap"><table><tbody>{data.subcontracts.map((item) => (
+            <tr key={item.id}>
+              <td><b>{item.name}</b>{item.trade ? <div className="small muted">{item.trade}</div> : null}</td>
+              <td style={{ width: '30%' }}><Progress value={item.progressPct} /></td>
+              <td className="right small">{t('crew.paid')} {money(item.paidMinor, item.currencyCode)} / {money(item.agreedMinor, item.currencyCode)}</td>
+            </tr>
+          ))}</tbody></table></div>
+        ) : <p className="muted small" style={{ margin: 0, padding: '1rem' }}>{t('crew.noSubcontracts')}</p>}
+      </Panel>
+    </div>
   );
 }

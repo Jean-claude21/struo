@@ -3,10 +3,11 @@
 // back to where it comes from (a report, a document, an invoice). Sorted by date, name, type or size;
 // files dropped on the explorer are uploaded; each file has a menu (right click or « … »): preview,
 // open where it comes from, download, copy its link.
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { CalendarDays, Download, Ellipsis, Eye, File, FileAudio, FileImage, FileSpreadsheet, FileText, Grid2x2, Link2, List, Receipt, SquareArrowOutUpRight, Upload } from 'lucide-react';
 import { useI18n } from '@/i18n/index.tsx';
 import { ContextMenu, MenuItem, menuAt, Modal, Seg, type MenuAt, type Shape, StatusChip, useRelative, useToast } from '../kit.tsx';
+import { usePhotoViewer } from '../PhotoViewer.tsx';
 
 export type FileKind = 'photo' | 'audio' | 'document' | 'invoice' | 'sheet';
 export interface FileItem {
@@ -51,6 +52,8 @@ export function FileExplorer({ items, kindLabels, sites, onUpload, uploadLabel, 
   const { t, locale } = useI18n();
   const toast = useToast();
   const [menu, setMenu] = useState<{ item: FileItem; at: MenuAt } | null>(null);
+  // Spec 047: a photo opens in the viewer, with the other photos of the list to browse.
+  const viewer = usePhotoViewer();
   const [dropping, setDropping] = useState(false);
   const copyLink = async (item: FileItem) => {
     if (!item.url) return;
@@ -63,7 +66,16 @@ export function FileExplorer({ items, kindLabels, sites, onUpload, uploadLabel, 
   const [site, setSite] = useState('');
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<'date' | 'name' | 'kind' | 'size'>('date');
-  const [preview, setPreview] = useState<FileItem | null>(null);
+  const [preview, setPreviewRaw] = useState<FileItem | null>(null);
+  const setPreview = (item: FileItem | null) => {
+    if (item?.kind === 'photo' && item.url) {
+      const photos = shownPhotos.current.length ? shownPhotos.current : [item];
+      viewer(photos.map((photo) => ({ url: photo.url!, title: [photo.site?.code, photo.origin].filter(Boolean).join(' · ') || photo.name, detail: [photo.author, new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(photo.date))].filter(Boolean).join(' · ') })), Math.max(0, photos.findIndex((photo) => photo.id === item.id)));
+      return;
+    }
+    setPreviewRaw(item);
+  };
+  const shownPhotos = useRef<FileItem[]>([]);
   const shown = useMemo(() => {
     const query = q.trim().toLowerCase();
     return items
@@ -74,6 +86,7 @@ export function FileExplorer({ items, kindLabels, sites, onUpload, uploadLabel, 
         : sort === 'size' ? (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0)
         : b.date.localeCompare(a.date)));
   }, [items, kind, site, q, sort]);
+  shownPhotos.current = shown.filter((item) => item.kind === 'photo' && item.url);
   const counts = useMemo(() => {
     const map: Partial<Record<FileKind, number>> = {};
     for (const item of items) map[item.kind] = (map[item.kind] ?? 0) + 1;

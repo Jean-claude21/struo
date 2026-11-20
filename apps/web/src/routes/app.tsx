@@ -55,6 +55,7 @@ const WORK: NavItem[] = [
   { to: '/app/projects', key: 'shell.sites', icon: FolderKanban, screen: 'projects' },
   { to: '/app/planning', key: 'shell.planning', icon: CalendarRange, screen: 'planning' },
   { to: '/app/tasks', key: 'tasks.nav', icon: ListChecks, screen: 'tasks' },
+  { to: '/app/crew', key: 'crew.nav', icon: HardHat, screen: 'crew' },
   { to: '/app/indicators', key: 'kpi.navLabel', icon: BarChart3, screen: 'indicators' },
   { to: '/app/field', key: 'shell.field', icon: HardHat, screen: 'field' },
   { to: '/app/finance', key: 'shell.finance', icon: Wallet, screen: 'finance' },

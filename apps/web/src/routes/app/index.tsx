@@ -13,6 +13,7 @@ import { DateText, formatMoney, Money } from '@/components/ui.tsx';
 import { getDashboard } from '@/features/office/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 import { SitesMap } from '@/components/SitesMap.tsx';
+import { usePhotoViewer } from '@/components/PhotoViewer.tsx';
 
 export const Route = createFileRoute('/app/')({
   validateSearch: (search: Record<string, unknown>): { ask?: string } => (typeof search.ask === 'string' ? { ask: search.ask } : {}),
@@ -86,13 +87,15 @@ function Sites({ data }: { data: Data }) {
 
 function Photos({ data }: { data: Data }) {
   const { t, locale } = useI18n();
+  const view = usePhotoViewer();
   const time = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }).format(new Date(value));
   return (
     <Panel title={t('today.photos')} actions={<Link to="/app/documents" className="btn ghost small">{t('ui.seeAll')}</Link>}>
       {data.insights.photos.length ? (
         <div className="photo-strip">
-          {data.insights.photos.slice(0, 8).map((photo) => (
-            <a key={photo.id} className="photo-tile" href={`/api/files/photo/${photo.id}`} target="_blank" rel="noreferrer">
+          {data.insights.photos.slice(0, 8).map((photo, index, shown) => (
+            <a key={photo.id} className="photo-tile" href={`/api/files/photo/${photo.id}`}
+              onClick={(event) => { event.preventDefault(); view(shown.map((item) => ({ url: `/api/files/photo/${item.id}`, title: item.projectCode, detail: `${item.author} · ${time(item.takenAt)}`, href: `/app/projects/${item.projectId}` })), index); }}>
               <img src={`/api/files/photo/${photo.id}`} alt="" loading="lazy" />
               <span className="cap">{photo.projectCode} · {time(photo.takenAt)}</span>
             </a>
@@ -177,6 +180,7 @@ function Manager({ data }: { data: Data }) {
           <KpiTile label={t('today.projectedMargin')} value={data.finance.projectedMarginPct === null ? '—' : `${data.finance.projectedMarginPct} %`}
             tone={data.finance.projectedMarginPct !== null && data.finance.projectedMarginPct < 10 ? 'bad' : undefined}
             sub={t('today.currentMargin', { pct: data.finance.marginPct ?? 0 })} />
+          <KpiTile icon={HardHat} label={t('crew.tile')} value={data.crew.workers} sub={t('crew.tileSub', { sites: data.crew.sites })} onClick={() => { window.location.href = '/app/crew'; }} />
         </div>
       ) : null}
       <div className="grid-main">
@@ -228,6 +232,7 @@ function Engineer({ data }: { data: Data }) {
         <KpiTile icon={TriangleAlert} label={t('dashboard.openIncidents')} value={ops.openIncidents} tone={ops.openIncidents ? 'bad' : undefined} onClick={() => { window.location.href = '/app/field?tab=incidents'; }} />
         <KpiTile icon={CalendarClock} label={t('planning.late')} value={late} tone={late ? 'bad' : undefined} onClick={() => { window.location.href = '/app/planning'; }} />
         <KpiTile icon={Camera} label={t('dashboard.photosWeek')} value={ops.photosWeek} sub={`${t('dashboard.reportsWeek')} ${ops.reportsWeek}`} />
+        <KpiTile icon={HardHat} label={t('crew.tile')} value={data.crew.workers} sub={t('crew.tileSub', { sites: data.crew.sites })} onClick={() => { window.location.href = '/app/crew'; }} />
       </div>
       <SitesMap sites={data.insights.sites} />
       <Weather data={data} />
