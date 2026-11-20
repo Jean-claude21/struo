@@ -108,19 +108,19 @@ function Indicators() {
         {k.finance ? (
           <Panel title={t('kpi.trendMoney')}>
             <BarChart categories={months} locale={locale} label={t('kpi.trendMoney')} series={[
-              { values: k.trend.map((row) => row.invoiced ?? 0), color: 'var(--info, #1c6dd0)' },
-              { values: k.trend.map((row) => row.collected ?? 0), color: 'var(--ok, #2f9e44)' },
-              { values: k.trend.map((row) => row.spent ?? 0), color: 'var(--warn, #b26a00)' },
+              { values: k.trend.map((row) => row.invoiced ?? 0), color: 'var(--info, #2f5f8a)' },
+              { values: k.trend.map((row) => row.collected ?? 0), color: 'var(--ok, #3d704e)' },
+              { values: k.trend.map((row) => row.spent ?? 0), color: 'var(--warn, #a36a12)' },
             ]} />
-            <Legend items={[{ label: t('kpi.invoiced'), color: 'var(--info, #1c6dd0)' }, { label: t('kpi.collected'), color: 'var(--ok, #2f9e44)' }, { label: t('kpi.spent'), color: 'var(--warn, #b26a00)' }]} />
+            <Legend items={[{ label: t('kpi.invoiced'), color: 'var(--info, #2f5f8a)' }, { label: t('kpi.collected'), color: 'var(--ok, #3d704e)' }, { label: t('kpi.spent'), color: 'var(--warn, #a36a12)' }]} />
           </Panel>
         ) : null}
         <Panel title={t('kpi.trendField')}>
           <BarChart categories={months} locale={locale} label={t('kpi.trendField')} series={[
             { values: k.trend.map((row) => row.reports), color: 'var(--brand)' },
-            { values: k.trend.map((row) => row.incidents), color: 'var(--bad, #c92a2a)' },
+            { values: k.trend.map((row) => row.incidents), color: 'var(--bad, #8e2a22)' },
           ]} />
-          <Legend items={[{ label: t('kpi.reports'), color: 'var(--brand)' }, { label: t('kpi.incidents'), color: 'var(--bad, #c92a2a)' }]} />
+          <Legend items={[{ label: t('kpi.reports'), color: 'var(--brand)' }, { label: t('kpi.incidents'), color: 'var(--bad, #8e2a22)' }]} />
         </Panel>
       </div>
 

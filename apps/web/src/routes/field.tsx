@@ -161,7 +161,7 @@ function FieldApp() {
             <h2 style={{ margin: 0 }}>{t('field2.tabPlans')} · {site.code}</h2>
             {site.plans?.length ? site.plans.map((plan) => (
               <a key={plan.id} className="site-card" href={`/api/files/document/${plan.id}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-                <span className="ftype" style={{ ['--c' as string]: '#c92a2a' }}><FileText size={18} /></span>
+                <span className="ftype" style={{ ['--c' as string]: '#8e2a22' }}><FileText size={18} /></span>
                 <span className="grow">{plan.title}</span><ChevronRight size={18} />
               </a>
             )) : <p className="muted">{t('field2.noPlans')}</p>}

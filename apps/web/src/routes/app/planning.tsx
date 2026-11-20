@@ -22,7 +22,7 @@ export const Route = createFileRoute('/app/planning')({
 type Data = Awaited<ReturnType<typeof getPlanning>>;
 type Site = Data['gantt'][number];
 type Ms = Site['milestones'][number] & { site: Site };
-const SITE_COLORS = ['#e8590c', '#1c6dd0', '#2f9e44', '#7048c8', '#c2255c', '#0c8599', '#b26a00'];
+const SITE_COLORS = ['#b9461e', '#2f5f8a', '#3d704e', '#6a4ba8', '#a8445f', '#2a7a78', '#a36a12'];
 
 function Planning() {
   const { t, errorText } = useI18n();

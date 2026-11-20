@@ -267,7 +267,7 @@ function Accountant({ data }: { data: Data }) {
   const thisMonth = data.insights.cash.at(-1)?.collected ?? 0;
   const aging = data.aging;
   const buckets = ['notDue', 'd30', 'd60', 'd90', 'd90plus'] as const;
-  const colors = ['#1c6dd0', '#f59f00', '#e8590c', '#d9480f', '#c92a2a'];
+  const colors = ['#2f5f8a', '#c9932e', '#b9461e', '#9b3818', '#8e2a22'];
   const total = aging ? buckets.reduce((sum, bucket) => sum + aging[bucket].amount, 0) : 0;
   const docs = data.alerts.filter((alert) => alert.kind.startsWith('document_')).length;
   return (

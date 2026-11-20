@@ -142,7 +142,7 @@ function OfficeLayout() {
     <div className="layout">
       {sideOpen ? <button type="button" className="scrim only-m" aria-label={t('ui.close')} onClick={() => setSideOpen(false)} /> : null}
       <nav className={`sidebar ${sideOpen ? 'open' : ''}`} aria-label="Struo">
-        <div className="logo"><span className="logo-mark"><HardHat size={16} /></span><span>Str<span className="accent">uo</span></span></div>
+        <div className="logo"><span className="logo-mark"><HardHat size={16} /></span><span>Struo</span></div>
         <Popover
           width={240}
           trigger={(props) => (

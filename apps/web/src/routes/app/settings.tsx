@@ -108,7 +108,7 @@ function CompanyTab({ data }: { data: Data }) {
             <input name="gapPoints" type="number" min={0} max={100} defaultValue={s.alertGapPoints} />
           </Field>
           <Field label={t('settings.brandColor')}>
-            <input name="brandColor" type="color" defaultValue={s.brandColor ?? '#e8590c'} />
+            <input name="brandColor" type="color" defaultValue={s.brandColor ?? '#b9461e'} />
           </Field>
         </div>
         <ErrorText error={error} />

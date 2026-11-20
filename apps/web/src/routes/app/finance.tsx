@@ -27,7 +27,7 @@ type Invoice = Data['invoices'][number];
 type Stage = 'draft' | 'issued' | 'partial' | 'overdue' | 'paid' | 'cancelled';
 const STAGES: Stage[] = ['draft', 'issued', 'partial', 'overdue', 'paid', 'cancelled'];
 const STAGE_SHAPE: Record<Stage, Shape> = { draft: 'todo', issued: 'todo', partial: 'progress', overdue: 'late', paid: 'done', cancelled: 'blocked' };
-const STAGE_COLOR: Record<Stage, string> = { draft: '#949494', issued: '#1c6dd0', partial: '#b26a00', overdue: '#d92d2d', paid: '#2f9e44', cancelled: '#6b6b6b' };
+const STAGE_COLOR: Record<Stage, string> = { draft: '#8a9187', issued: '#2f5f8a', partial: '#a36a12', overdue: '#d92d2d', paid: '#3d704e', cancelled: '#6b6b6b' };
 
 export const stageOf = (invoice: Invoice): Stage =>
   invoice.status === 'cancelled' ? 'cancelled'
@@ -104,7 +104,7 @@ function Finance() {
   const overdueMinor = overdue.reduce((sum, invoice) => sum + invoice.balanceMinor, 0);
   const aging = (['notDue', 'd30', 'd60', 'd90', 'd90plus'] as const).map((bucket) => ({ ...data.aging[bucket], bucket }));
   const agingTotal = aging.reduce((sum, item) => sum + item.amount, 0);
-  const agingColors = ['#1c6dd0', '#f59f00', '#e8590c', '#d9480f', '#c92a2a'];
+  const agingColors = ['#2f5f8a', '#c9932e', '#b9461e', '#9b3818', '#8e2a22'];
   const current = data.invoices.find((invoice) => invoice.id === openId) ?? null;
 
   const exportCsv = (ids: string[]) => {

@@ -89,7 +89,7 @@ export function SkeletonRows({ rows = 6 }: { rows?: number }) {
 
 // ---------------------------------------------------------------- people
 
-const AVATAR_COLORS = ['#e8590c', '#2f9e44', '#1c6dd0', '#7048c8', '#c2255c', '#0c8599', '#b26a00', '#5c5f66'];
+const AVATAR_COLORS = ['#b9461e', '#3d704e', '#2f5f8a', '#6a4ba8', '#a8445f', '#2a7a78', '#a36a12', '#5c665d'];
 export const colorFor = (seed: string) => {
   let hash = 0;
   for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) | 0;

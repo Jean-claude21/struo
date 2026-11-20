@@ -26,11 +26,11 @@ export interface FileItem {
 }
 
 const KIND_META: Record<FileKind, { color: string; icon: typeof File }> = {
-  photo: { color: '#0c8599', icon: FileImage },
-  audio: { color: '#7048c8', icon: FileAudio },
-  document: { color: '#c92a2a', icon: FileText },
-  invoice: { color: '#e8590c', icon: Receipt },
-  sheet: { color: '#2f9e44', icon: FileSpreadsheet },
+  photo: { color: '#2a7a78', icon: FileImage },
+  audio: { color: '#6a4ba8', icon: FileAudio },
+  document: { color: '#8e2a22', icon: FileText },
+  invoice: { color: '#b9461e', icon: Receipt },
+  sheet: { color: '#3d704e', icon: FileSpreadsheet },
 };
 
 export const sizeText = (bytes: number | null | undefined) =>

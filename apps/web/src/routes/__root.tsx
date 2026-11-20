@@ -17,7 +17,7 @@ export const Route = createRootRoute({
       { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
       { title: `Struo — ${translate(loaderData?.locale ?? 'fr', 'app.tagline')}` },
       { name: 'description', content: translate(loaderData?.locale ?? 'fr', 'landing.heroSub') },
-      { name: 'theme-color', content: '#e8590c' },
+      { name: 'theme-color', content: '#f8f7f1' },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
