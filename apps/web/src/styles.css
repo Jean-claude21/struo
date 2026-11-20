@@ -192,9 +192,15 @@ input[type='checkbox'], input[type='radio'] { width: 18px; min-height: 18px; acc
 .kpi .label { color: var(--ink-soft); font-size: .85rem; }
 .kpi .value { font-size: 1.45rem; font-weight: 700; }
 .kpi .value.bad { color: var(--bad); }
-.kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); padding: .9rem 1rem; display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+.kpi-tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); padding: .9rem 1rem; display: flex; flex-direction: column; gap: .2rem; min-width: 0; container-type: inline-size; }
 .kpi-tile .k-label { display: flex; align-items: center; gap: .4rem; color: var(--ink-soft); font: 500 .72rem/1.4 var(--mono); letter-spacing: .05em; text-transform: uppercase; }
-.kpi-tile .k-value { font-size: 1.7rem; font-weight: 700; letter-spacing: -.045em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.kpi-tile .k-value { font-size: 1.7rem; font-weight: 700; letter-spacing: -.04em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Long values (amounts) shrink with their tile so they never overflow; short ones keep their size. */
+.kpi-tile .k-value.long { font-size: clamp(1.05rem, 8.6cqi, 1.7rem); }
+/* KPI grids that must not leave one tile alone on a row: 4, 3, 2 or 1 columns. */
+.grid.kpi-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .grid.kpi-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .grid.kpi-4 { grid-template-columns: minmax(0, 1fr); } }
 .kpi-tile .k-value.brand { color: var(--brand); }
 .kpi-tile .k-value.bad { color: var(--bad); }
 .kpi-tile .k-sub { font-size: .82rem; color: var(--ink-faint); display: flex; align-items: center; gap: .35rem; }

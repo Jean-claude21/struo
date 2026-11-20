@@ -46,7 +46,7 @@ export function KpiTile({ label, value, sub, tone, icon: Icon, subTone, onClick 
   const body = (
     <>
       <span className="k-label">{Icon ? <Icon size={15} /> : null}{label}</span>
-      <span className={`k-value ${tone ?? ''}`}>{value}</span>
+      <span className={`k-value ${tone ?? ''} ${String(value ?? '').length > 11 ? 'long' : ''}`} title={typeof value === 'string' || typeof value === 'number' ? String(value) : undefined}>{value}</span>
       {sub ? <span className={`k-sub ${subTone ?? ''}`}>{sub}</span> : null}
     </>
   );

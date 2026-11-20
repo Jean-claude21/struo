@@ -36,7 +36,10 @@ export const Route = createFileRoute('/api/demo/start')({
             asResponse: true,
           });
           if (!signIn.ok) return back('unavailable');
-          const headers = new Headers({ location: new URL(LANDING[role], rt.env.APP_BASE_URL).toString() });
+          // A page of the office or the field app can be asked for (links from the landing).
+          const next = url.searchParams.get('next');
+          const target = next && /^\/(app|field)(\/[\w/-]*)?$/u.test(next) ? next : LANDING[role];
+          const headers = new Headers({ location: new URL(target, rt.env.APP_BASE_URL).toString() });
           for (const cookie of signIn.headers.getSetCookie()) headers.append('set-cookie', cookie);
           headers.append('set-cookie', `${ORG_COOKIE}=${sandbox.org_id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${rt.env.APP_BASE_URL.startsWith('https://') ? '; Secure' : ''}`);
           return new Response(null, { status: 302, headers });
