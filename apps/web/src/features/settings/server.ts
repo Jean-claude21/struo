@@ -4,6 +4,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { translate } from '@/i18n/index.tsx';
 import { monerooGateway, simulatorGateway } from '@/server/adapters.server.ts';
 import { createChariow } from '@/server/chariow.server.ts';
+import { invitationMail } from '@/server/mail.server.ts';
 import { chooseCompany, guarded, loadViewer, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 
@@ -98,12 +99,9 @@ export const inviteMember = createServerFn({ method: 'POST' })
       const settings = await core.getSettings(db, actor);
       const url = `${env.APP_BASE_URL}/invite/${invitation.id}`;
       const locale = settings.locale;
+      const inviter = (await loadViewer())?.name ?? settings.name;
       await mailer
-        .send({
-          to: invitation.email,
-          subject: translate(locale, 'digest.invitationSubject', { org: settings.name }),
-          text: translate(locale, 'digest.invitationBody', { org: settings.name, url }),
-        })
+        .send(invitationMail(locale, { to: invitation.email, org: settings.name, inviter, role: data.role, url }, env.APP_BASE_URL))
         .catch((error: unknown) => console.error('[mail] invitation', error));
       return { url };
     }),

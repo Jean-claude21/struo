@@ -44,6 +44,7 @@ real external account · ⏳ next.
 | 037 | `037-library-by-day` | Library « by day » view: files grouped per day with sites, authors and jump to a day | ✅ | Typecheck, filters shared with grid and list |
 | 038 | `038-platform-console` | Platform console complete (companies detail, suspend, trial and paid extensions, journal) and subscriptions paid with Chariow licences | ✅ | `platform.test.ts`; Chariow on once the key is set |
 | 039 | `039-indicators-reports` | Indicators (DSO, collection, runway, CPI, SPI, field, compliance) with definitions and trends, printable activity report, weekly and monthly e-mails; predecessors chosen when creating a milestone | ✅ | `kpis.test.ts`, `reports.test.ts` |
+| 040 | `040-account-emails` | Forgotten password and reset (1 h link, sessions closed, « changed » mail), address verification with reminder, My account (name, address change, password, other devices), branded bilingual e-mails, invitation e-mail | ✅ | `mail.test.ts`, 23 end-to-end checks |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

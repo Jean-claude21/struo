@@ -11,6 +11,7 @@ import type { Permission } from '@struo/core/permissions';
 import { z } from 'zod';
 import { translate } from '@/i18n/index.tsx';
 import { alertText } from '@/server/jobs.server.ts';
+import { invitationMail } from '@/server/mail.server.ts';
 import type { Runtime } from '@/server/runtime.server.ts';
 import { forecast } from '@/server/weather.server.ts';
 
@@ -495,8 +496,9 @@ export const CAPABILITIES: Capability[] = [
       const invitation = await core.inviteMember(rt.db, actor, input);
       const settings = await core.getSettings(rt.db, actor);
       const url = `${rt.env.APP_BASE_URL}/invite/${invitation.id}`;
-      await rt.mailer.send({ to: invitation.email, subject: translate(settings.locale, 'digest.invitationSubject', { org: settings.name }),
-        text: translate(settings.locale, 'digest.invitationBody', { org: settings.name, url }) }).catch(() => undefined);
+      const inviter = (await rt.db.query<{ name: string }>('select name from "user" where id = $1', [actor.userId])).rows[0]?.name ?? settings.name;
+      await rt.mailer.send(invitationMail(settings.locale, { to: invitation.email, org: settings.name, inviter, role: input.role, url }, rt.env.APP_BASE_URL))
+        .catch((error: unknown) => console.error('[mail] invitation', error));
       return { invited: invitation.email };
     },
     summary: async (_context, input) => `${input.email} · ${input.role}`,

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   BarChart3, Building2, CalendarRange, ChevronsUpDown, FileText, FolderKanban, HardHat, Home, LogOut, Menu, Monitor, Moon, Palette, Plus,
-  Keyboard, Sparkles, Receipt, Search, Settings, Shield, Sun, Users, Wallet, WalletCards, Contact, type LucideIcon,
+  Keyboard, MailWarning, Sparkles, Receipt, Search, Settings, Shield, Sun, UserRound, Users, Wallet, WalletCards, Contact, type LucideIcon,
 } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { CommandPalette } from '@/components/Palette.tsx';
@@ -220,6 +220,7 @@ function OfficeLayout() {
                   <div style={{ fontWeight: 600 }}>{viewer.name}</div>
                   <div className="muted xsmall trunc">{viewer.email}</div>
                 </div>
+                <MenuItem icon={UserRound} onSelect={() => { close(); void navigate({ to: '/app/account' }); }}>{t('account.title')}</MenuItem>
                 <div className="msep" />
                 <div className="mhead">{t('ui.theme')}</div>
                 <MenuItem icon={Sun} checked={theme === 'light'} onSelect={() => changeTheme('light')}>{t('ui.themeLight')}</MenuItem>
@@ -235,6 +236,13 @@ function OfficeLayout() {
           </Popover>
         </header>
         <main className="main">
+          {!viewer.emailVerified && path !== '/app/account' ? (
+            <div className="notice warn small row tight" style={{ marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <MailWarning size={16} />
+              <span>{t('account.banner', { email: viewer.email })}</span>
+              <Link to="/app/account" className="btn small secondary" style={{ marginLeft: 'auto' }}>{t('account.bannerAction')}</Link>
+            </div>
+          ) : null}
           <Outlet />
         </main>
       </div>

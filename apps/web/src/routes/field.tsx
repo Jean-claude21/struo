@@ -181,6 +181,7 @@ function FieldApp() {
             )) : <p className="muted">{t('field2.noOutbox')}</p>}
             <button type="button" className="btn secondary" onClick={() => void refresh()}><RefreshCw size={16} />{t('fieldApp.syncNow')}</button>
             <a href="/app" className="btn ghost">{t('field2.office')}</a>
+            <a href="/app/account" className="btn ghost">{t('account.title')}</a>
             <button type="button" className="btn ghost" onClick={async () => { await clearSnapshot(); await authClient.signOut(); window.location.href = '/login?next=/field'; }}><LogOut size={16} />{t('field2.signOut')}</button>
           </div>
         ) : null}

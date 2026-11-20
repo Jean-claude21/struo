@@ -79,7 +79,8 @@ export function createMailer(env: Env): Mailer {
     return {
       configured: false,
       async send(message) {
-        console.info('[mail:log]', JSON.stringify({ to: message.to, subject: message.subject }));
+        // Development: the text is logged so links can be followed; never the body in production.
+        console.info('[mail:log]', JSON.stringify({ to: message.to, subject: message.subject, ...(env.APP_ENV === 'production' ? {} : { text: message.text }) }));
       },
     };
   }
