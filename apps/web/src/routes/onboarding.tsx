@@ -20,11 +20,23 @@ export const Route = createFileRoute('/onboarding')({
 });
 
 // Country → currency, VAT (%) and retention (%) usually applied; all editable.
-const COUNTRIES: Record<string, { currency: string; vat: number; label: string }> = {
-  TG: { currency: 'XOF', vat: 18, label: 'Togo' }, BJ: { currency: 'XOF', vat: 18, label: 'Bénin' }, CI: { currency: 'XOF', vat: 18, label: 'Côte d’Ivoire' },
-  SN: { currency: 'XOF', vat: 18, label: 'Sénégal' }, BF: { currency: 'XOF', vat: 18, label: 'Burkina Faso' }, ML: { currency: 'XOF', vat: 18, label: 'Mali' },
-  NE: { currency: 'XOF', vat: 19, label: 'Niger' }, GH: { currency: 'GHS', vat: 15, label: 'Ghana' }, CM: { currency: 'XAF', vat: 19.25, label: 'Cameroun' },
-  GA: { currency: 'XAF', vat: 18, label: 'Gabon' }, GN: { currency: 'GNF', vat: 18, label: 'Guinée' }, FR: { currency: 'EUR', vat: 20, label: 'France' },
+const COUNTRIES: Record<string, { currency: string; vat: number; label: string }> = Object.fromEntries(Object.entries({
+  DZ: { currency: 'DZD', vat: 19, label: 'Algérie' }, DE: { currency: 'EUR', vat: 19, label: 'Allemagne' }, BE: { currency: 'EUR', vat: 21, label: 'Belgique' },
+  BJ: { currency: 'XOF', vat: 18, label: 'Bénin' }, BF: { currency: 'XOF', vat: 18, label: 'Burkina Faso' }, CM: { currency: 'XAF', vat: 19.25, label: 'Cameroun' },
+  CA: { currency: 'CAD', vat: 5, label: 'Canada' }, CD: { currency: 'CDF', vat: 16, label: 'Congo (RDC)' }, CG: { currency: 'XAF', vat: 18, label: 'Congo' },
+  CI: { currency: 'XOF', vat: 18, label: 'Côte d’Ivoire' }, ES: { currency: 'EUR', vat: 21, label: 'Espagne' }, US: { currency: 'USD', vat: 0, label: 'États-Unis' },
+  FR: { currency: 'EUR', vat: 20, label: 'France' }, GA: { currency: 'XAF', vat: 18, label: 'Gabon' }, GH: { currency: 'GHS', vat: 15, label: 'Ghana' },
+  GN: { currency: 'GNF', vat: 18, label: 'Guinée' }, IT: { currency: 'EUR', vat: 22, label: 'Italie' }, KE: { currency: 'KES', vat: 16, label: 'Kenya' },
+  LU: { currency: 'EUR', vat: 17, label: 'Luxembourg' }, MG: { currency: 'MGA', vat: 20, label: 'Madagascar' }, ML: { currency: 'XOF', vat: 18, label: 'Mali' },
+  MA: { currency: 'MAD', vat: 20, label: 'Maroc' }, NE: { currency: 'XOF', vat: 19, label: 'Niger' }, NG: { currency: 'NGN', vat: 7.5, label: 'Nigeria' },
+  PT: { currency: 'EUR', vat: 23, label: 'Portugal' }, GB: { currency: 'GBP', vat: 20, label: 'Royaume-Uni' }, RW: { currency: 'RWF', vat: 18, label: 'Rwanda' },
+  SN: { currency: 'XOF', vat: 18, label: 'Sénégal' }, CH: { currency: 'CHF', vat: 8.1, label: 'Suisse' }, TD: { currency: 'XAF', vat: 18, label: 'Tchad' },
+  TG: { currency: 'XOF', vat: 18, label: 'Togo' }, TN: { currency: 'TND', vat: 19, label: 'Tunisie' },
+}).sort(([, a], [, b]) => a.label.localeCompare(b.label, 'fr')));
+/** The browser's country when we know it, else France (the list is international). */
+const guessCountry = () => {
+  const region = typeof navigator !== 'undefined' ? navigator.language.split('-')[1]?.toUpperCase() : undefined;
+  return region && COUNTRIES[region] ? region : 'FR';
 };
 
 type Config = Awaited<ReturnType<typeof getConfiguration>>;
@@ -34,8 +46,8 @@ function Onboarding() {
   const { viewer } = Route.useLoaderData();
   const { run, error, busy } = useAction();
   const [step, setStep] = useState(1);
-  const [country, setCountry] = useState('TG');
-  const preset = COUNTRIES[country] ?? COUNTRIES.TG!;
+  const [country, setCountry] = useState(guessCountry);
+  const preset = COUNTRIES[country] ?? COUNTRIES.FR!;
   const steps = [t('onb.stepCompany'), t('onb.stepTrade'), t('onb.stepTeam')];
   return (
     <div className="public" style={{ maxWidth: 820 }}>

@@ -39,8 +39,8 @@ const Eyebrow = ({ children, light }: { children: ReactNode; light?: boolean }) 
 // ---------------------------------------------------------------- the day's events (what, when, where)
 type Tone = 'ok' | 'warn' | 'bad' | 'info';
 const SITES = [
-  { code: 'KC-01', place: 'Avédji', x: 30, y: 38 }, { code: 'KC-02', place: 'Adidogomé', x: 18, y: 55 }, { code: 'KC-03', place: 'Agoè', x: 46, y: 22 },
-  { code: 'KC-04', place: 'Port', x: 70, y: 74 }, { code: 'KC-05', place: 'Bè-Kpota', x: 60, y: 58 },
+  { code: 'KC-01', place: 'Villa R+1', x: 30, y: 38 }, { code: 'KC-02', place: 'Immeuble R+4', x: 18, y: 55 }, { code: 'KC-03', place: 'École', x: 46, y: 22 },
+  { code: 'KC-04', place: 'Entrepôt', x: 70, y: 74 }, { code: 'KC-05', place: 'Clinique', x: 60, y: 58 },
 ];
 const EVENTS: { site: number; time: string; tone: Tone; key: string; pct: number }[] = [
   { site: 0, time: '07:42', tone: 'ok', key: 'e8', pct: 62 }, { site: 1, time: '11:20', tone: 'ok', key: 'e1', pct: 71 }, { site: 4, time: '10:52', tone: 'info', key: 'e2', pct: 48 },
@@ -68,7 +68,7 @@ function HeroVisual() {
     <figure className="lx-hero-visual">
       <div className="lx-hero-photo">
         <img src="/landing/hero-proof.webp" alt={t('lx.hero.alt')} width={1536} height={1024} fetchPriority="high" />
-        <span className="lx-photo-tag"><MapPin size={13} />{site.place}, Lomé</span>
+        <span className="lx-photo-tag"><MapPin size={13} />{site.code} · {site.place}</span>
       </div>
       <figcaption className="lx-report" key={head} aria-live="polite">
         <div className="lx-report-top"><span className="lx-report-icon"><FileText size={14} /></span><span>{site.code} · {t('lx.hero.reportLabel')}</span><time>{event.time}</time></div>
@@ -80,7 +80,7 @@ function HeroVisual() {
   );
 }
 
-/** The « Today » board: five sites on a map of Lomé, and the feed of the day. */
+/** The « Today » board: five sites on the company map, and the feed of the day. */
 function TodayBoard() {
   const { t } = useI18n();
   const head = useTicker(EVENTS.length, 2800);

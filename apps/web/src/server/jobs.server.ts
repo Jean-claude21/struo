@@ -32,6 +32,7 @@ export async function runDigest(rt: Runtime): Promise<number> {
     if (!rows[0]?.locked) return 0;
     try {
       for (const company of await digestRecipients(rt.owner)) {
+        if (localClock(company.timeZone).hour < MORNING) continue;
         const alerts = (await listAlerts(rt.db, { userId: company.ownerId, orgId: company.orgId })).filter(
           (alert) => alert.severity !== 'info',
         );
@@ -65,6 +66,20 @@ export async function runDigest(rt: Runtime): Promise<number> {
 }
 
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
+
+/** The hour and the calendar day in a company's time zone (Struo is used in many countries). */
+export function localClock(timeZone: string, now = new Date()): { hour: number; day: Date } {
+  let parts: Record<string, string>;
+  try {
+    parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
+      .formatToParts(now).map((part) => [part.type, part.value]));
+  } catch {
+    return localClock('UTC', now);
+  }
+  return { hour: Number(parts.hour), day: new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), 12)) };
+}
+/** Messages leave from 7:00 in the morning, local time. */
+const MORNING = 7;
 function moneyText(locale: 'fr' | 'en', minor: number, currency: string): string {
   const decimals = new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 0;
   return new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(minor / 10 ** decimals);
@@ -92,9 +107,7 @@ export function reportPeriods(today: Date): ReportPeriod[] {
  * The weekly (Monday) and monthly (1st) reports (spec 039): owners and admins receive the key
  * indicators of the period and a link to the full printable report. One send per company and period.
  */
-export async function runReports(rt: Runtime, today = new Date()): Promise<number> {
-  const periods = reportPeriods(today);
-  if (!periods.length) return 0;
+export async function runReports(rt: Runtime, now = new Date()): Promise<number> {
   const client = await rt.owner.connect();
   let sent = 0;
   try {
@@ -102,7 +115,9 @@ export async function runReports(rt: Runtime, today = new Date()): Promise<numbe
     if (!rows[0]?.locked) return 0;
     try {
       for (const company of await reportRecipients(rt.owner)) {
-        for (const period of periods) {
+        const local = localClock(company.timeZone, now);
+        if (local.hour < MORNING) continue;
+        for (const period of reportPeriods(local.day)) {
           if (!(await markNotified(rt.owner, company.orgId, `report.${period.kind}`, period.key, 'email'))) continue;
           try {
             const actor = await resolveActor(rt.db, company.ownerId, company.orgId, 'web');
@@ -156,8 +171,7 @@ export function startJobs(rt: Runtime): void {
     monitorJob('struo-jobs', '*/15 * * * *', async () => {
       // Demo copies (spec 042): delete the expired ones, keep a few ready for the next visitors.
       await refillDemoPool(rt).catch((error: unknown) => reportError(error, { where: 'job:demo' }));
-      // The digest and the reports leave after 7:00 UTC (morning in West Africa).
-      if (new Date().getUTCHours() < 7) return;
+      // The digest and the reports leave from 7:00 in each company's own time zone.
       await runDigest(rt).catch((error: unknown) => reportError(error, { where: 'job:digest' }));
       await runReports(rt).catch((error: unknown) => reportError(error, { where: 'job:reports' }));
     }).catch((error: unknown) => reportError(error, { where: 'jobs' }));

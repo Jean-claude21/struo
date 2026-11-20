@@ -800,7 +800,7 @@ export const uxEn: typeof uxFr = {
     noReport: 'No report',
   },
   home: {
-    eyebrow: 'Construction site management software · West Africa',
+    eyebrow: 'Site management software for construction companies',
     heroTitle: 'Your sites paid on time. Your field team reporting every day, even offline.',
     heroSub: 'Struo replaces the Excel file, the calls and the manual reminders: photo reports from the site, invoices and receivables, compliance, planning, and a space that reassures your clients.',
     ctaTrial: 'Try free for 14 days',
@@ -1192,7 +1192,7 @@ export const uxEn: typeof uxFr = {
       title: "Today · 5 sites",
       reports: "4 reports received",
       watch: "1 to watch",
-      map: "Map of the sites in Lomé",
+      map: "Map of the company’s sites",
       e1: "2nd-floor slab poured, 6 photos",
       e2: "Delivery: 120 bags of cement received",
       e3: "Rain: pour postponed to tomorrow",
@@ -1203,7 +1203,7 @@ export const uxEn: typeof uxFr = {
       e8: "Crew on site, 9 workers",
     },
     hero: {
-      eyebrow: "Construction · West Africa",
+      eyebrow: "Construction site software",
       title1: "Your sites,",
       title2: "at a glance.",
       lead: "Your site leads send their photos, even without network. From the office you see what, when and where, and your clients see a company in control of its work.",
@@ -1275,7 +1275,7 @@ export const uxEn: typeof uxFr = {
     offline: {
       on: "Turn the network back on",
       off: "Cut the network",
-      site: "Kpalimé school · KC-07",
+      site: "Primary school · KC-07",
       waiting: "Offline · {n} waiting",
       sending: "Sending…",
       allSent: "Everything is sent",
@@ -1353,7 +1353,7 @@ export const uxEn: typeof uxFr = {
       clientAlt: "A client signs a milestone on the engineer’s phone",
     },
     footer: {
-      tagline: "Site management · Togo, Benin, Côte d’Ivoire",
+      tagline: "Site management for construction companies",
     },
   },
   demo: {
@@ -1373,7 +1373,7 @@ export const uxEn: typeof uxFr = {
     page: {
       eyebrow: "Demo, no account",
       title: "Step into a real construction company. It is fictional, and yours alone.",
-      lead: "Kekeli Construction has 9 sites in Lomé, a team of 7 and a year of history. Choose whose eyes to look through: you can switch at any time.",
+      lead: "Kekeli Construction has 9 sites, a team of 7 and a year of history. Choose whose eyes to look through: you can switch at any time.",
       ownerTitle: "See all my sites at a glance",
       ownerBody: "The « Today » screen, delays, unpaid invoices, indicators.",
       site_leadTitle: "Send a report in one minute",

@@ -40,7 +40,7 @@ function System() {
 
       <section className="ds-sec"><h2>{t('ds.type')}</h2>
         <Panel><div className="stack">
-          <h1 style={{ margin: 0 }}>Villa R+1 Bè-Kpota</h1><h2 style={{ margin: 0 }}>Situation de travaux n°3</h2><h3 style={{ margin: 0 }}>Gros œuvre</h3>
+          <h1 style={{ margin: 0 }}>Villa R+1 Amegah</h1><h2 style={{ margin: 0 }}>Situation de travaux n°3</h2><h3 style={{ margin: 0 }}>Gros œuvre</h3>
           <p style={{ margin: 0 }}>Ferraillage du plancher posé, coulage prévu vendredi.</p><p className="muted small" style={{ margin: 0 }}>Komi Adadé · il y a 2 h</p>
           <span className="num" style={{ fontSize: '1.6rem', fontWeight: 700 }}>48 000 000 FCFA</span>
         </div></Panel>
