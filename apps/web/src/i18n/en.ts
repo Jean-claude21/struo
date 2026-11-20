@@ -3,9 +3,11 @@ import type { Catalog } from './fr.ts';
 // English catalog — same keys as fr.ts (the compiler refuses a missing or extra key).
 import { uxEn } from './ux.en.ts';
 import { aiEn } from './ai.en.ts';
+import { growEn } from './grow.en.ts';
 export const en: Catalog = {
   ...uxEn,
   ...aiEn,
+  ...growEn,
   app: {
     name: 'Struo',
     tagline: 'Your sites, at a glance.',

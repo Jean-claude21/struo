@@ -4,10 +4,11 @@
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { PublicHeader } from '@/components/PublicHeader.tsx';
-import { Badge, DateText, formatMoney, Tabs } from '@/components/ui.tsx';
+import { Badge, DateText, formatMoney, parseMoney, Tabs } from '@/components/ui.tsx';
+import { COUNTRIES, sortedCountries } from '@/features/settings/countries.ts';
 import { BarChart } from '@/components/charts.tsx';
 import { Drawer, KpiTile, Panel, useToast } from '@/components/kit.tsx';
-import { consoleCompanyAction, getConsole, getConsoleCompany, removeLicenseProduct, saveLicenseProduct, setCompanyPlan } from '@/features/settings/server.ts';
+import { consoleCompanyAction, getConsole, getConsoleCompany, markContactHandled, removeLicenseProduct, saveLicenseProduct, setCompanyPlan, setPlanPrice } from '@/features/settings/server.ts';
 import { getShell } from '@/features/shell/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
@@ -21,7 +22,7 @@ export const Route = createFileRoute('/console')({
 });
 
 type Data = Awaited<ReturnType<typeof getConsole>>;
-type Tab = 'overview' | 'health' | 'companies' | 'licenses' | 'journal';
+type Tab = 'overview' | 'health' | 'leads' | 'companies' | 'prices' | 'licenses' | 'journal';
 
 function Console() {
   const { t } = useI18n();
@@ -35,12 +36,16 @@ function Console() {
         { value: 'overview', label: t('console2.overview') },
         { value: 'health', label: t('health.tab') },
         { value: 'companies', label: `${t('console.companies')} · ${data.companies.length}` },
+        { value: 'leads', label: `${t('leads.tab')} · ${data.leads.filter((lead) => !lead.handledAt).length}` },
+        { value: 'prices', label: t('prices.tab') },
         { value: 'licenses', label: `${t('console2.licenses')} · ${data.products.length}` },
         { value: 'journal', label: t('console2.journal') },
       ]} />
       {tab === 'overview' ? <Overview data={data} /> : null}
       {tab === 'health' ? <Health data={data} /> : null}
       {tab === 'companies' ? <Companies data={data} /> : null}
+      {tab === 'leads' ? <Leads data={data} /> : null}
+      {tab === 'prices' ? <Prices data={data} /> : null}
       {tab === 'licenses' ? <Licenses data={data} /> : null}
       {tab === 'journal' ? <Journal data={data} /> : null}
     </div>
@@ -159,6 +164,82 @@ function CompanyDrawer({ orgId, plans, onClose }: { orgId: string; plans: Data['
         </div>
       ) : null}
     </Drawer>
+  );
+}
+
+/** Spec 045: prospects who asked to be called back from the site. */
+function Leads({ data }: { data: Data }) {
+  const { t, locale, errorText } = useI18n();
+  const toast = useToast();
+  const router = useRouter();
+  const when = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+  const handle = async (id: string) => {
+    try { await markContactHandled({ data: { id } }); await router.invalidate(); }
+    catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
+  };
+  return (
+    <Panel title={t('leads.title')} sub={t('leads.sub')} flush>
+      {data.leads.length ? (
+        <div className="table-wrap"><table><tbody>{data.leads.map((lead) => (
+          <tr key={lead.id} className={lead.handledAt ? 'muted' : undefined}>
+            <td className="nowrap small">{when(lead.createdAt)}</td>
+            <td><b>{lead.company}</b><div className="small">{lead.name}</div></td>
+            <td><code>{lead.reach}</code></td>
+            <td className="small">{lead.countryCode ?? ''}{lead.activeSites !== null ? ` · ${t('leads.sites', { n: lead.activeSites })}` : ''}</td>
+            <td className="small" style={{ maxWidth: 360 }}>{lead.message ?? ''}</td>
+            <td className="right">{lead.handledAt ? <Badge>{t('leads.handled')}</Badge> : <button type="button" className="btn ghost small" onClick={() => void handle(lead.id)}>{t('leads.markHandled')}</button>}</td>
+          </tr>
+        ))}</tbody></table></div>
+      ) : <p className="muted small" style={{ padding: '1rem', margin: 0 }}>{t('leads.none')}</p>}
+    </Panel>
+  );
+}
+
+/**
+ * Spec 045: one price per plan and currency. The public page shows the visitor's country currency;
+ * a plan without a price there is shown on quote, never converted from another currency.
+ */
+function Prices({ data }: { data: Data }) {
+  const { t, locale, errorText } = useI18n();
+  const toast = useToast();
+  const router = useRouter();
+  const paid = data.plans.filter((plan) => plan.code !== 'trial' && plan.code !== 'enterprise');
+  const currencies = [...new Set(Object.values(COUNTRIES).map((item) => item.currency))].sort();
+  const countriesOf = (currency: string) => sortedCountries(locale).filter((item) => item.currency === currency).map((item) => item.name).join(', ');
+  const priceOf = (planCode: string, currency: string) => data.prices.find((price) => price.planCode === planCode && price.currencyCode === currency)?.priceMinor ?? null;
+  const save = async (planCode: string, currency: string, text: string) => {
+    const priceMinor = text.trim() === '' ? null : parseMoney(text, currency);
+    if (text.trim() !== '' && (priceMinor === null || priceMinor <= 0)) { toast({ text: t('prices.invalid'), kind: 'err' }); return; }
+    if (priceMinor === priceOf(planCode, currency)) return;
+    try { await setPlanPrice({ data: { planCode, currencyCode: currency, priceMinor } }); toast({ text: t('console2.done') }); await router.invalidate(); }
+    catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
+  };
+  const missing = currencies.filter((currency) => paid.some((plan) => priceOf(plan.code, currency) === null)).length;
+  return (
+    <div className="stack">
+      <p className={`notice ${missing ? 'warn' : 'ok'} small`}>{missing ? t('prices.missing', { n: missing }) : t('prices.complete')}</p>
+      <Panel title={t('prices.title')} sub={t('prices.sub')} flush>
+        <div className="table-wrap"><table>
+          <thead><tr><th>{t('prices.currency')}</th>{paid.map((plan) => <th key={plan.code} className="right">{plan.name} {t('landing.perMonth')}</th>)}</tr></thead>
+          <tbody>{currencies.map((currency) => (
+            <tr key={currency}>
+              <td><b>{currency}</b><div className="faint xsmall trunc" style={{ maxWidth: 360 }}>{countriesOf(currency)}</div></td>
+              {paid.map((plan) => {
+                const current = priceOf(plan.code, currency);
+                return (
+                  <td key={plan.code} className="right">
+                    <input key={`${plan.code}-${currency}-${current ?? ''}`} inputMode="decimal" aria-label={`${plan.name} ${currency}`} style={{ width: 140, textAlign: 'right' }}
+                      defaultValue={current === null ? '' : formatMoney(locale, current, currency).replace(/[^\d,.\s]/gu, '').trim()}
+                      placeholder={t('prices.onQuote')}
+                      onBlur={(event) => void save(plan.code, currency, event.currentTarget.value)} />
+                  </td>
+                );
+              })}
+            </tr>
+          ))}</tbody>
+        </table></div>
+      </Panel>
+    </div>
   );
 }
 

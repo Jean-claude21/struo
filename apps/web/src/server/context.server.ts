@@ -3,6 +3,7 @@ import {
 } from '@struo/core';
 import { getCookie, getRequestHeaders, setCookie } from '@tanstack/react-start/server';
 import { isLocale, LOCALE_COOKIE, localeFromHeaders, type Locale } from '@/i18n/index.tsx';
+import { COUNTRY_COOKIE, countryFromLanguages, DEFAULT_COUNTRY, isCountry } from '@/features/settings/countries.ts';
 import { reportError } from './monitor.server.ts';
 import { runtime } from './runtime.server.ts';
 
@@ -72,6 +73,23 @@ export function requestLocale(): Locale {
   if (isLocale(chosen)) return chosen;
   const headers = getRequestHeaders() as unknown as Record<string, string | undefined>;
   return localeFromHeaders(null, headers['accept-language'] ?? null);
+}
+
+/**
+ * The visitor's country for public prices (spec 045): the country they picked (cookie), else the
+ * country a proxy or CDN in front of the app tells us, else the region of their browser's language,
+ * else the default. Only used to choose a currency, never stored.
+ */
+export function requestCountry(): { country: string; detected: boolean } {
+  const chosen = getCookie(COUNTRY_COOKIE)?.toUpperCase();
+  if (isCountry(chosen)) return { country: chosen, detected: true };
+  const headers = getRequestHeaders() as unknown as Record<string, string | undefined>;
+  for (const name of ['cf-ipcountry', 'x-vercel-ip-country', 'cloudfront-viewer-country', 'x-country-code']) {
+    const value = headers[name]?.toUpperCase();
+    if (isCountry(value)) return { country: value, detected: true };
+  }
+  const fromLanguage = countryFromLanguages(headers['accept-language']);
+  return fromLanguage ? { country: fromLanguage, detected: true } : { country: DEFAULT_COUNTRY, detected: false };
 }
 
 /**

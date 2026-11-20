@@ -190,3 +190,48 @@ export async function listAllRedemptions(owner: Db, limit = 100) {
 
 /** Journals a gesture of the operator (a plan set from the console). */
 export { platformJournal as recordPlatformGesture };
+
+// ---------------------------------------------------------------- contact requests (spec 045)
+
+export interface ContactRequest {
+  id: string; createdAt: string; name: string; company: string; reach: string; activeSites: number | null;
+  message: string | null; countryCode: string | null; locale: string; handledAt: string | null;
+}
+
+const contactSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  company: z.string().trim().min(1).max(160),
+  reach: z.string().trim().min(3).max(160),
+  activeSites: z.number().int().min(0).max(10000).nullable().optional(),
+  message: z.string().trim().max(2000).nullable().optional(),
+  countryCode: z.string().regex(/^[A-Z]{2}$/u).nullable().optional(),
+  locale: z.enum(['fr', 'en']).default('fr'),
+});
+
+/**
+ * A prospect asks to be called back from the public site. The same contact sent twice within an
+ * hour is kept once (a double click or an impatient visitor), and nothing is sent to anyone.
+ */
+export async function createContactRequest(owner: Db, input: unknown): Promise<void> {
+  const data = parse(contactSchema, input);
+  const { rows } = await owner.query(
+    `select 1 from contact_request where lower(reach) = lower($1) and created_at > now() - interval '1 hour'`, [data.reach]);
+  if (rows.length) return;
+  await owner.query(
+    `insert into contact_request (name, company, reach, active_sites, message, country_code, locale) values ($1, $2, $3, $4, $5, $6, $7)`,
+    [data.name, data.company, data.reach, data.activeSites ?? null, data.message || null, data.countryCode ?? null, data.locale]);
+}
+
+export async function listContactRequests(owner: Db, limit = 200): Promise<ContactRequest[]> {
+  const { rows } = await owner.query<ContactRequest>(
+    `select id, created_at as "createdAt", name, company, reach, active_sites as "activeSites", message,
+            country_code as "countryCode", locale, handled_at as "handledAt"
+       from contact_request order by created_at desc limit $1`, [limit]);
+  return rows;
+}
+
+export async function markContactHandled(owner: Db, id: string, adminId: string): Promise<void> {
+  const { rowCount } = await owner.query('update contact_request set handled_at = now(), handled_by = $2 where id = $1 and handled_at is null', [id, adminId]);
+  if (!rowCount) throw notFound();
+  await platformJournal(owner, adminId, 'contact.handled', null, { id });
+}

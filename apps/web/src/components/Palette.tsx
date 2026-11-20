@@ -10,10 +10,16 @@ import { useAssistant } from './Intelligence.tsx';
 import { useI18n } from '@/i18n/index.tsx';
 import { applyTheme, effectiveDark, readTheme } from '@/lib/theme.ts';
 import { StatusChip } from './kit.tsx';
+import { screenOf, sees, type Role } from '@struo/core/permissions';
+
+const PATHS: Record<string, string> = {
+  'c-today': '/app', 'c-sites': '/app/projects', 'c-plan': '/app/planning', 'c-fin': '/app/finance', 'c-docs': '/app/documents',
+  'c-field': '/app/field', 'c-team': '/app/team', 'c-set': '/app/settings', 'a-site': '/app/projects', 'a-inv': '/app/finance', 'a-invite': '/app/team',
+};
 
 type Item = { id: string; group: string; icon: LucideIcon; label: string; detail?: ReactNode; run: () => void };
 
-export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CommandPalette({ open, onClose, role }: { open: boolean; onClose: () => void; role: Role }) {
   const assistant = useAssistant();
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -37,6 +43,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   }, [query, open]);
 
   const go = (to: string, search?: Record<string, string>) => () => { onClose(); void navigate({ to, search: search as never }); };
+  // Spec 045: a role is only offered its own screens.
+  const mine = (path: string) => { const screen = screenOf(path); return !screen || sees(role, screen); };
   const commands: Item[] = useMemo(() => [
     { id: 'c-today', group: t('shell.goTo'), icon: Home, label: t('shell.today'), run: go('/app') },
     { id: 'c-sites', group: t('shell.goTo'), icon: FolderKanban, label: t('shell.sites'), run: go('/app/projects') },
@@ -51,7 +59,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     { id: 'a-invite', group: t('shell.actions'), icon: Users, label: t('shell.inviteSomeone'), run: go('/app/team', { invite: '1' }) },
     { id: 'a-theme', group: t('shell.actions'), icon: Moon, label: t('shell.toggleTheme'), run: () => { applyTheme(effectiveDark(readTheme()) ? 'light' : 'dark'); onClose(); } },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [t]);
+  ].filter((item) => mine(PATHS[item.id] ?? '')), [t, role]);
 
   const q = query.trim().toLowerCase();
   const kindIcon = { project: Building2, client: Users, invoice: Receipt, document: FileText } as const;
