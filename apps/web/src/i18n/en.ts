@@ -8,7 +8,7 @@ export const en: Catalog = {
   ...aiEn,
   app: {
     name: 'Struo',
-    tagline: 'Run every site, even without network.',
+    tagline: 'Your sites, at a glance.',
     language: 'Language',
     loading: 'Loading…',
     save: 'Save',
@@ -156,7 +156,7 @@ export const en: Catalog = {
   },
   landing: {
     heroTitle: 'Run every site, even without network.',
-    heroSub: 'Offline field reports, invoicing and unpaid follow-up, compliance, costs, planning and a client portal — for construction companies in West Africa.',
+    heroSub: 'Follow the site reports, progress and invoices of your construction company, even without network. Demo without an account.',
     trial: 'Free 14-day trial',
     signIn: 'Sign in',
     badgeOffline: 'Works offline',
