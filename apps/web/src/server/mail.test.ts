@@ -29,3 +29,11 @@ describe('account e-mails (spec 040)', () => {
     expect(localeOfRequest(undefined)).toBe('fr');
   });
 });
+
+describe('reserved test domains (spec 041)', () => {
+  it('recognises addresses that cannot exist', async () => {
+    const { RESERVED_DOMAIN } = await import('./adapters.server.ts');
+    for (const address of ['komi@struo.test', 'a@example.com', 'x@foo.example', 'b@site.invalid', 'c@localhost']) expect(RESERVED_DOMAIN.test(address)).toBe(true);
+    for (const address of ['ama@gmail.com', 'chef@kekeli.tg', 'x@testing.com', 'y@mytest.org']) expect(RESERVED_DOMAIN.test(address)).toBe(false);
+  });
+});

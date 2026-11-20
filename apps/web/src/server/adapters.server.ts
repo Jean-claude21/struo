@@ -73,6 +73,9 @@ export function createStorage(env: Env): Storage {
 
 // ---------------------------------------------------------------- mail
 
+/** Domains reserved for tests and examples (RFC 2606): no mailbox exists there. */
+export const RESERVED_DOMAIN = /@([^@]+\.)?(test|example|invalid|localhost)$|@example\.(com|org|net)$/iu;
+
 /** Resend when configured; else the message is written to the log (development). */
 export function createMailer(env: Env): Mailer {
   if (!env.RESEND_API_KEY) {
@@ -87,6 +90,11 @@ export function createMailer(env: Env): Mailer {
   return {
     configured: true,
     async send(message) {
+      // Reserved test domains (the demo's @struo.test accounts…) never exist: sending there only
+      // bounces and harms the reputation of the sending domain.
+      const to = (Array.isArray(message.to) ? message.to : [message.to]).filter((address) => !RESERVED_DOMAIN.test(address.trim()));
+      if (!to.length) { console.info('[mail:skipped]', JSON.stringify({ subject: message.subject, reason: 'reserved test domain' })); return; }
+      message = { ...message, to };
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
