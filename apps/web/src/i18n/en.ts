@@ -3,12 +3,14 @@ import type { Catalog } from './fr.ts';
 // English catalog — same keys as fr.ts (the compiler refuses a missing or extra key).
 import { uxEn } from './ux.en.ts';
 import { aiEn } from './ai.en.ts';
+import { growEn } from './grow.en.ts';
 export const en: Catalog = {
   ...uxEn,
   ...aiEn,
+  ...growEn,
   app: {
     name: 'Struo',
-    tagline: 'Your sites, at a glance.',
+    tagline: 'Good management shows.',
     language: 'Language',
     loading: 'Loading…',
     save: 'Save',
@@ -255,6 +257,7 @@ export const en: Catalog = {
     noProjects: 'No project yet. Create the first one or import your spreadsheet.',
     tabs: {
       overview: 'Overview',
+      work: 'Tasks and internal thread',
       field: 'Field',
       finance: 'Finance',
       expenses: 'Expenses',

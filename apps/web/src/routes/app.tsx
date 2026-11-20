@@ -1,9 +1,9 @@
-import { can, type Permission } from '@struo/core/permissions';
+import { homeOf, screenOf, sees, type Screen } from '@struo/core/permissions';
 import { useEffect, useRef, useState } from 'react';
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   BarChart3, Building2, CalendarRange, ChevronsUpDown, FileText, FolderKanban, HardHat, Home, LogOut, Menu, Monitor, Moon, Palette, Plus,
-  Keyboard, MailWarning, Sparkles, Receipt, Search, Settings, Shield, Sun, UserRound, Users, Wallet, WalletCards, Contact, type LucideIcon,
+  Keyboard, ListChecks, MailWarning, Sparkles, Receipt, Search, Settings, Shield, Sun, UserRound, Users, Wallet, WalletCards, Contact, type LucideIcon,
 } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { CommandPalette } from '@/components/Palette.tsx';
@@ -20,6 +20,13 @@ export const Route = createFileRoute('/app')({
     const { viewer } = await getShell();
     if (!viewer) throw redirect({ to: '/login', search: { next: location.pathname } });
     if (!viewer.company) throw redirect({ to: '/onboarding' });
+    // Spec 045: a role only opens its own screens; anything else leads to where it starts.
+    const screen = screenOf(location.pathname);
+    if (screen && !sees(viewer.company.role, screen)) {
+      const home = homeOf(viewer.company.role);
+      if (home.startsWith('/field')) throw redirect({ href: home });
+      throw redirect({ to: home });
+    }
     return { viewer: { ...viewer, company: viewer.company } };
   },
   component: OfficeLayout,
@@ -42,29 +49,30 @@ function OfficeError({ error }: { error: unknown }) {
   );
 }
 
-type NavItem = { to: string; key: MessageKey; icon: LucideIcon; exact?: boolean; permission?: Permission };
+type NavItem = { to: string; key: MessageKey; icon: LucideIcon; exact?: boolean; screen?: Screen };
 const WORK: NavItem[] = [
-  { to: '/app', key: 'shell.today', icon: Home, exact: true },
-  { to: '/app/projects', key: 'shell.sites', icon: FolderKanban },
-  { to: '/app/planning', key: 'shell.planning', icon: CalendarRange },
-  { to: '/app/indicators', key: 'kpi.navLabel', icon: BarChart3 },
-  { to: '/app/field', key: 'shell.field', icon: HardHat },
-  { to: '/app/finance', key: 'shell.finance', icon: Wallet, permission: 'finance.read' },
-  { to: '/app/expenses', key: 'shell.expenses', icon: WalletCards },
-  { to: '/app/documents', key: 'shell.documents', icon: FileText },
+  { to: '/app', key: 'shell.today', icon: Home, exact: true, screen: 'today' },
+  { to: '/app/projects', key: 'shell.sites', icon: FolderKanban, screen: 'projects' },
+  { to: '/app/planning', key: 'shell.planning', icon: CalendarRange, screen: 'planning' },
+  { to: '/app/tasks', key: 'tasks.nav', icon: ListChecks, screen: 'tasks' },
+  { to: '/app/indicators', key: 'kpi.navLabel', icon: BarChart3, screen: 'indicators' },
+  { to: '/app/field', key: 'shell.field', icon: HardHat, screen: 'field' },
+  { to: '/app/finance', key: 'shell.finance', icon: Wallet, screen: 'finance' },
+  { to: '/app/expenses', key: 'shell.expenses', icon: WalletCards, screen: 'expenses' },
+  { to: '/app/documents', key: 'shell.documents', icon: FileText, screen: 'documents' },
 ];
 const COMPANY: NavItem[] = [
-  { to: '/app/clients', key: 'shell.clients', icon: Contact },
-  { to: '/app/team', key: 'shell.team', icon: Users },
-  { to: '/app/intelligence', key: 'ai.navLabel', icon: Sparkles },
-  { to: '/app/settings', key: 'shell.settings', icon: Settings },
+  { to: '/app/clients', key: 'shell.clients', icon: Contact, screen: 'clients' },
+  { to: '/app/team', key: 'shell.team', icon: Users, screen: 'team' },
+  { to: '/app/intelligence', key: 'ai.navLabel', icon: Sparkles, screen: 'intelligence' },
+  { to: '/app/settings', key: 'shell.settings', icon: Settings, screen: 'settings' },
 ];
 const MOBILE: NavItem[] = [
-  { to: '/app', key: 'shell.today', icon: Home, exact: true },
-  { to: '/app/projects', key: 'shell.sites', icon: FolderKanban },
-  { to: '/app/planning', key: 'shell.planning', icon: CalendarRange },
-  { to: '/app/finance', key: 'shell.finance', icon: Wallet, permission: 'finance.read' },
-  { to: '/app/documents', key: 'shell.documents', icon: FileText },
+  { to: '/app', key: 'shell.today', icon: Home, exact: true, screen: 'today' },
+  { to: '/app/projects', key: 'shell.sites', icon: FolderKanban, screen: 'projects' },
+  { to: '/app/planning', key: 'shell.planning', icon: CalendarRange, screen: 'planning' },
+  { to: '/app/finance', key: 'shell.finance', icon: Wallet, screen: 'finance' },
+  { to: '/app/documents', key: 'shell.documents', icon: FileText, screen: 'documents' },
 ];
 
 function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
@@ -135,7 +143,7 @@ function OfficeLayout() {
   const signOut = async () => { await clearSnapshot().catch(() => undefined); await authClient.signOut(); window.location.href = '/'; };
   const role = t(`roles.${viewer.company.role}` as MessageKey);
   // A role only sees the pages it may open.
-  const allowed = (item: NavItem) => !item.permission || can(viewer.company.role, item.permission);
+  const allowed = (item: NavItem) => !item.screen || sees(viewer.company.role, item.screen);
 
   return (
     <IntelligenceProvider>
@@ -253,7 +261,7 @@ function OfficeLayout() {
           </Link>
         ))}
       </nav>
-      <CommandPalette open={palette} onClose={() => setPalette(false)} />
+      <CommandPalette open={palette} onClose={() => setPalette(false)} role={viewer.company.role} />
       <Modal open={help} onClose={() => setHelp(false)} title={t('shell.shortcuts')}>
         <div className="shortcuts">
           {SHORTCUTS.map(([keys, label]) => (

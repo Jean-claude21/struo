@@ -12,6 +12,7 @@ import { EmptyState, KpiTile, Panel, Progress, StatusChip, useRelative, type Sha
 import { DateText, formatMoney, Money } from '@/components/ui.tsx';
 import { getDashboard } from '@/features/office/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
+import { SitesMap } from '@/components/SitesMap.tsx';
 
 export const Route = createFileRoute('/app/')({
   validateSearch: (search: Record<string, unknown>): { ask?: string } => (typeof search.ask === 'string' ? { ask: search.ask } : {}),
@@ -182,6 +183,7 @@ function Manager({ data }: { data: Data }) {
         <ActionCards data={data} />
         <Clients data={data} />
       </div>
+      <SitesMap sites={data.insights.sites} />
       <AskCard initial={ask} />
       <div className="grid-main">
         {cash.length ? (
@@ -227,6 +229,7 @@ function Engineer({ data }: { data: Data }) {
         <KpiTile icon={CalendarClock} label={t('planning.late')} value={late} tone={late ? 'bad' : undefined} onClick={() => { window.location.href = '/app/planning'; }} />
         <KpiTile icon={Camera} label={t('dashboard.photosWeek')} value={ops.photosWeek} sub={`${t('dashboard.reportsWeek')} ${ops.reportsWeek}`} />
       </div>
+      <SitesMap sites={data.insights.sites} />
       <Weather data={data} />
       <div className="grid-main">
         <Panel title={t('today.phases')} flush>

@@ -9,6 +9,7 @@ import { ErrorText, Field, formData, useAction } from '@/components/ui.tsx';
 import { addConfigurationItem, createCompany, getConfiguration, removeConfigurationItem } from '@/features/settings/server.ts';
 import { getShell, selectCompany } from '@/features/shell/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
+import { COUNTRIES, countryFromLanguages, DEFAULT_COUNTRY, sortedCountries } from '@/features/settings/countries.ts';
 
 export const Route = createFileRoute('/onboarding')({
   loader: async () => {
@@ -19,25 +20,8 @@ export const Route = createFileRoute('/onboarding')({
   component: Onboarding,
 });
 
-// Country → currency, VAT (%) and retention (%) usually applied; all editable.
-const COUNTRIES: Record<string, { currency: string; vat: number; label: string }> = Object.fromEntries(Object.entries({
-  DZ: { currency: 'DZD', vat: 19, label: 'Algérie' }, DE: { currency: 'EUR', vat: 19, label: 'Allemagne' }, BE: { currency: 'EUR', vat: 21, label: 'Belgique' },
-  BJ: { currency: 'XOF', vat: 18, label: 'Bénin' }, BF: { currency: 'XOF', vat: 18, label: 'Burkina Faso' }, CM: { currency: 'XAF', vat: 19.25, label: 'Cameroun' },
-  CA: { currency: 'CAD', vat: 5, label: 'Canada' }, CD: { currency: 'CDF', vat: 16, label: 'Congo (RDC)' }, CG: { currency: 'XAF', vat: 18, label: 'Congo' },
-  CI: { currency: 'XOF', vat: 18, label: 'Côte d’Ivoire' }, ES: { currency: 'EUR', vat: 21, label: 'Espagne' }, US: { currency: 'USD', vat: 0, label: 'États-Unis' },
-  FR: { currency: 'EUR', vat: 20, label: 'France' }, GA: { currency: 'XAF', vat: 18, label: 'Gabon' }, GH: { currency: 'GHS', vat: 15, label: 'Ghana' },
-  GN: { currency: 'GNF', vat: 18, label: 'Guinée' }, IT: { currency: 'EUR', vat: 22, label: 'Italie' }, KE: { currency: 'KES', vat: 16, label: 'Kenya' },
-  LU: { currency: 'EUR', vat: 17, label: 'Luxembourg' }, MG: { currency: 'MGA', vat: 20, label: 'Madagascar' }, ML: { currency: 'XOF', vat: 18, label: 'Mali' },
-  MA: { currency: 'MAD', vat: 20, label: 'Maroc' }, NE: { currency: 'XOF', vat: 19, label: 'Niger' }, NG: { currency: 'NGN', vat: 7.5, label: 'Nigeria' },
-  PT: { currency: 'EUR', vat: 23, label: 'Portugal' }, GB: { currency: 'GBP', vat: 20, label: 'Royaume-Uni' }, RW: { currency: 'RWF', vat: 18, label: 'Rwanda' },
-  SN: { currency: 'XOF', vat: 18, label: 'Sénégal' }, CH: { currency: 'CHF', vat: 8.1, label: 'Suisse' }, TD: { currency: 'XAF', vat: 18, label: 'Tchad' },
-  TG: { currency: 'XOF', vat: 18, label: 'Togo' }, TN: { currency: 'TND', vat: 19, label: 'Tunisie' },
-}).sort(([, a], [, b]) => a.label.localeCompare(b.label, 'fr')));
-/** The browser's country when we know it, else France (the list is international). */
-const guessCountry = () => {
-  const region = typeof navigator !== 'undefined' ? navigator.language.split('-')[1]?.toUpperCase() : undefined;
-  return region && COUNTRIES[region] ? region : 'FR';
-};
+/** The browser's country when we know it, else the default (the list is international). */
+const guessCountry = () => (typeof navigator !== 'undefined' && countryFromLanguages(navigator.languages?.join(',') || navigator.language)) || DEFAULT_COUNTRY;
 
 type Config = Awaited<ReturnType<typeof getConfiguration>>;
 
@@ -47,7 +31,7 @@ function Onboarding() {
   const { run, error, busy } = useAction();
   const [step, setStep] = useState(1);
   const [country, setCountry] = useState(guessCountry);
-  const preset = COUNTRIES[country] ?? COUNTRIES.FR!;
+  const preset = COUNTRIES[country] ?? COUNTRIES[DEFAULT_COUNTRY]!;
   const steps = [t('onb.stepCompany'), t('onb.stepTrade'), t('onb.stepTeam')];
   return (
     <div className="public" style={{ maxWidth: 820 }}>
@@ -71,7 +55,7 @@ function Onboarding() {
             <div className="form-grid">
               <Field label={t('onb.country')}>
                 <select value={country} onChange={(event) => setCountry(event.target.value)}>
-                  {Object.entries(COUNTRIES).map(([code, item]) => <option key={code} value={code}>{item.label}</option>)}
+                  {sortedCountries(locale).map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
                 </select>
               </Field>
               <Field label={t('onboarding.currency')}><input key={`c-${country}`} name="currencyCode" defaultValue={preset.currency} maxLength={3} required pattern="[A-Za-z]{3}" /></Field>

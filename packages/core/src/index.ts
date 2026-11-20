@@ -26,3 +26,4 @@ export * from './ai.ts';
 export * from './invoicing.ts';
 export * from './platform.ts';
 export * from './kpis.ts';
+export * from './work.ts';

@@ -5,7 +5,8 @@ import { translate } from '@/i18n/index.tsx';
 import { monerooGateway, simulatorGateway } from '@/server/adapters.server.ts';
 import { createChariow } from '@/server/chariow.server.ts';
 import { invitationMail } from '@/server/mail.server.ts';
-import { chooseCompany, guarded, loadViewer, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
+import { chooseCompany, guarded, loadViewer, requestCountry, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
+import { COUNTRIES } from './countries.ts';
 import { outboundAllowed } from '@/server/demo.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 
@@ -53,7 +54,7 @@ export const acceptInvitation = createServerFn({ method: 'POST' })
 export const getSettingsPage = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { db, env } = runtime();
-    const [settings, configuration, members, invitations, provider, keys, subscription, connections, subscriptionPayments, plans] = await Promise.all([
+    const [settings, configuration, members, invitations, provider, keys, subscription, connections, subscriptionPayments] = await Promise.all([
       core.getSettings(db, actor),
       core.getConfiguration(db, actor),
       core.listMembers(db, actor),
@@ -63,8 +64,9 @@ export const getSettingsPage = createServerFn({ method: 'GET' }).handler(() =>
       core.getSubscription(db, actor),
       core.listMcpConnections(db, actor),
       core.listSubscriptionPayments(db, actor),
-      core.listPlans(db),
     ]);
+    // Spec 045: plans priced in the company's own currency.
+    const plans = await core.listPlansIn(db, settings.currencyCode);
     const journal = core.can(actor.role, 'org.manage') ? await core.recentActivity(db, actor, 200) : [];
     return {
       role: actor.role, userId: actor.userId, settings, configuration, members, invitations, provider, keys, subscription, connections, subscriptionPayments, plans, journal,
@@ -163,7 +165,12 @@ export const revokeApiKey = createServerFn({ method: 'POST' })
 // ---------------------------------------------------------------- public: plans, console
 
 export const getPlans = createServerFn({ method: 'GET' }).handler(() =>
-  guarded(async () => ({ plans: await core.listPlans(runtime().db), locale: requestLocale() })),
+  guarded(async () => {
+    // Spec 045: the public prices are those of the visitor's country currency, never converted.
+    const { country, detected } = requestCountry();
+    const currency = COUNTRIES[country]!.currency;
+    return { plans: await core.listPlansIn(runtime().db, currency), country, currency, detected, locale: requestLocale() };
+  }),
 );
 
 export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
@@ -173,10 +180,44 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
     const [companies, plans, revenue, products, redemptions, journal] = await Promise.all([
       core.platformOverview(owner), core.listPlans(db), core.platformRevenue(owner), core.listLicenseProducts(owner),
       core.listAllRedemptions(owner), core.platformJournalList(owner)]);
+    const [prices, leads] = await Promise.all([core.listPlanPrices(owner), core.listContactRequests(owner)]);
     const health = await core.productHealth(owner);
-    return { companies, plans, revenue, products, redemptions, journal, health, chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
+    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
   }),
 );
+
+/** Spec 045: a prospect asks to be called back (public, no account). A filled honeypot is dropped. */
+export const sendContactRequest = createServerFn({ method: 'POST' })
+  .validator((input: { name: string; company: string; reach: string; activeSites: number | null; message: string; website?: string }) => input)
+  .handler(({ data }) =>
+    guarded(async () => {
+      if (data.website) return { ok: true };
+      const { country } = requestCountry();
+      await core.createContactRequest(runtime().owner, { ...data, countryCode: country, locale: requestLocale() });
+      return { ok: true };
+    }),
+  );
+
+export const markContactHandled = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) =>
+    guarded(async () => {
+      const viewer = await requirePlatformAdmin();
+      await core.markContactHandled(runtime().owner, data.id, viewer.userId);
+      return { ok: true };
+    }),
+  );
+
+/** Spec 045: the operator sets a plan's price in one currency (null removes it). */
+export const setPlanPrice = createServerFn({ method: 'POST' })
+  .validator((input: { planCode: string; currencyCode: string; priceMinor: number | null }) => input)
+  .handler(({ data }) =>
+    guarded(async () => {
+      const viewer = await requirePlatformAdmin();
+      await core.setPlanPrice(runtime().owner, data, viewer.userId);
+      return { ok: true };
+    }),
+  );
 
 export const setCompanyPlan = createServerFn({ method: 'POST' })
   .validator((input: { orgId: string; planCode: string }) => input)

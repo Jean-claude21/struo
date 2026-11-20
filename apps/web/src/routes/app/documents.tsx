@@ -9,6 +9,7 @@ import { DateText } from '@/components/ui.tsx';
 import { FileExplorer, type FileItem, type FileKind } from '@/components/views/Files.tsx';
 import { getDocuments, updateDocument } from '@/features/office/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
+import { DocumentVersions } from '@/components/Work.tsx';
 
 export const Route = createFileRoute('/app/documents')({
   validateSearch: (search: Record<string, unknown>): { doc?: string } => (typeof search.doc === 'string' ? { doc: search.doc } : {}),
@@ -161,6 +162,7 @@ function Documents() {
               <b>{t('documents.file')}</b>
               {current.hasFile ? <a className="btn secondary small" href={`/api/files/document/${current.id}`} target="_blank" rel="noreferrer">{t('docs.viewFile')}</a> : <span className="muted small">{t('docs.noFile')}</span>}
               {canWrite ? <UploadButton documentId={current.id} /> : null}
+              {current.hasFile ? <DocumentVersions key={current.id} documentId={current.id} /> : null}
             </div>
           </div>
         ) : null}

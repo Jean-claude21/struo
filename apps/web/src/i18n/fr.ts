@@ -2,12 +2,14 @@
 // by i18n.test.ts). Placeholders: {name}.
 import { uxFr } from './ux.fr.ts';
 import { aiFr } from './ai.fr.ts';
+import { growFr } from './grow.fr.ts';
 export const fr = {
   ...uxFr,
   ...aiFr,
+  ...growFr,
   app: {
     name: 'Struo',
-    tagline: 'Vos chantiers, en un regard.',
+    tagline: 'Ce qui est bien géré se voit.',
     language: 'Langue',
     loading: 'Chargement…',
     save: 'Enregistrer',
@@ -254,6 +256,7 @@ export const fr = {
     noProjects: 'Aucun chantier. Créez le premier ou importez votre tableur.',
     tabs: {
       overview: 'Vue d’ensemble',
+      work: 'Tâches et fil interne',
       field: 'Terrain',
       finance: 'Finances',
       expenses: 'Dépenses',
