@@ -91,7 +91,7 @@ for (const [key, , , role] of PEOPLE) {
   if (role === 'owner') continue;
   await owner.query('insert into member (id, "organizationId", "userId", role, "createdAt") values ($1, $2, $3, $4, now() - interval \'11 months\')', [randomUUID(), orgId, userIds[key], role]);
 }
-await owner.query(`update org_settings set plan_code = 'pro', paid_until = now() + interval '1 month' where org_id = $1`, [orgId]);
+await owner.query(`update org_settings set plan_code = 'pro', paid_until = now() + interval '1 month', is_demo = true where org_id = $1`, [orgId]);
 const actors = {} as Record<Person, core.Actor>;
 for (const [key, , , role] of PEOPLE) actors[key] = (await core.resolveActor(app, userIds[key], orgId, role === 'site_lead' ? 'field' : 'web'))!;
 const boss = actors.afi;

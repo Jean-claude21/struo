@@ -231,6 +231,10 @@ const variables = {
   ...(own.OPENAI_SIWC_CLIENT_SECRET ? { OPENAI_SIWC_CLIENT_SECRET: own.OPENAI_SIWC_CLIENT_SECRET } : {}),
   // Subscriptions sold as licences on Chariow (spec 038).
   ...(own.CHARIOW_API_KEY ? { CHARIOW_API_KEY: own.CHARIOW_API_KEY } : {}),
+  // Monitoring (spec 041): errors from both environments; audience analytics in production only,
+  // so tests on staging never count as visits.
+  ...(own.SENTRY_DSN ? { SENTRY_DSN: own.SENTRY_DSN } : {}),
+  ...(args.env === 'production' && own.UMAMI_WEBSITE_ID && own.UMAMI_SCRIPT_URL ? { UMAMI_WEBSITE_ID: own.UMAMI_WEBSITE_ID, UMAMI_SCRIPT_URL: own.UMAMI_SCRIPT_URL } : {}),
 };
 await coolify(`/applications/${application.uuid}/envs/bulk`, {
   method: 'PATCH',

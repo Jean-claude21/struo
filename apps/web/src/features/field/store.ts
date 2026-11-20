@@ -1,6 +1,7 @@
 // The field app's memory on the device (IndexedDB): the last snapshot of the sites, and the outbox
 // of what was written offline. Every item carries its own id: sending it twice changes nothing on
 // the server (idempotency), so a network that drops after the server saved it is harmless.
+import { reportClientError } from '@/lib/monitor.ts';
 
 export interface FieldWeatherDay { date: string; code: number; max: number; rain: number }
 
@@ -208,6 +209,10 @@ export function syncOutbox(userId?: string): Promise<{ sent: number; failed: num
             failed += 1;
             const reason = ((await response.json().catch(() => ({}))) as { error?: string }).error ?? String(response.status);
             await put({ ...item, attempts: item.attempts + 1, lastError: reason });
+            // A field report the server refuses, or that stays stuck, is the worst failure we can have.
+            if (response.status >= 500 || item.attempts + 1 === 3) {
+              reportClientError(new Error(`field sync refused: ${item.type} ${reason}`), 'field-sync', { status: response.status, attempts: item.attempts + 1, type: item.type });
+            }
             if (response.status === 401) break;
           }
         } catch {

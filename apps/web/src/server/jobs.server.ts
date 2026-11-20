@@ -1,5 +1,6 @@
 import { companyKpis, digestRecipients, getSettings, listAlerts, markNotified, reportRecipients, resolveActor, type Alert } from '@struo/core';
 import { translate } from '@/i18n/index.tsx';
+import { monitorJob, reportError } from './monitor.server.ts';
 import type { Runtime } from './runtime.server.ts';
 
 const LOCK = 727100;
@@ -133,7 +134,7 @@ export async function runReports(rt: Runtime, today = new Date()): Promise<numbe
             });
             sent += 1;
           } catch (error) {
-            console.error('[jobs] report', company.orgId, error);
+            reportError(error, { where: 'job:reports', orgId: company.orgId });
           }
         }
       }
@@ -149,11 +150,14 @@ export async function runReports(rt: Runtime, today = new Date()): Promise<numbe
 export function startJobs(rt: Runtime): void {
   if (started) return;
   started = true;
+  // Every 15 minutes the jobs check in with the error tracker: if they stop, an alert is raised.
   const tick = () => {
-    // The digest leaves after 7:00 UTC (morning in West Africa).
-    if (new Date().getUTCHours() < 7) return;
-    runDigest(rt).catch((error: unknown) => console.error('[jobs] digest', error));
-    runReports(rt).catch((error: unknown) => console.error('[jobs] reports', error));
+    monitorJob('struo-jobs', '*/15 * * * *', async () => {
+      // The digest and the reports leave after 7:00 UTC (morning in West Africa).
+      if (new Date().getUTCHours() < 7) return;
+      await runDigest(rt).catch((error: unknown) => reportError(error, { where: 'job:digest' }));
+      await runReports(rt).catch((error: unknown) => reportError(error, { where: 'job:reports' }));
+    }).catch((error: unknown) => reportError(error, { where: 'jobs' }));
   };
   setTimeout(tick, 30_000).unref?.();
   setInterval(tick, 15 * 60_000).unref?.();

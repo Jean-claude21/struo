@@ -172,7 +172,8 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
     const [companies, plans, revenue, products, redemptions, journal] = await Promise.all([
       core.platformOverview(owner), core.listPlans(db), core.platformRevenue(owner), core.listLicenseProducts(owner),
       core.listAllRedemptions(owner), core.platformJournalList(owner)]);
-    return { companies, plans, revenue, products, redemptions, journal, chariowConfigured: Boolean(env.CHARIOW_API_KEY) };
+    const health = await core.productHealth(owner);
+    return { companies, plans, revenue, products, redemptions, journal, health, chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
   }),
 );
 
