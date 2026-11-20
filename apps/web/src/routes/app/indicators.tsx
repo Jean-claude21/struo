@@ -65,7 +65,7 @@ function Indicators() {
 
       {k.finance ? (
         <Panel title={t('kpi.money')}>
-          <div className="grid">
+          <div className="grid kpi-4">
             <KpiTile label={label('invoiced')} value={money(k.finance.invoicedMinor)} sub={t('kpi.inPeriod')} />
             <KpiTile label={label('collected')} value={money(k.finance.collectedMinor)} sub={`${t('kpi.collectionRate')} ${pct(k.finance.collectionRatePct)}`} tone="brand" />
             <KpiTile label={label('spent')} value={money(k.finance.spentMinor)} sub={t('kpi.inPeriod')} />
@@ -92,7 +92,7 @@ function Indicators() {
       </Panel>
 
       <Panel title={t('kpi.fieldTitle')}>
-        <div className="grid">
+        <div className="grid kpi-4">
           <KpiTile label={t('kpi.reports')} value={k.field.reports} sub={t('kpi.photos', { n: k.field.photos })} />
           <KpiTile label={t('kpi.toReview')} value={k.field.toReview} tone={k.field.toReview ? 'brand' : undefined} sub={`${t('kpi.reviewDelay')} ${k.field.reviewHours === null ? '—' : t('kpi.hours', { n: k.field.reviewHours })}`} />
           <KpiTile label={label('rejected')} value={pct(k.field.rejectedPct)} />
