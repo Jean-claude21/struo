@@ -8,6 +8,7 @@ import { THEME_BOOT } from '@/lib/theme.ts';
 import { initBrowserMonitoring } from '@/lib/monitor.ts';
 import { I18nProvider, translate } from '@/i18n/index.tsx';
 import appCss from '@/styles.css?url';
+import { PhotoViewerProvider } from '@/components/PhotoViewer.tsx';
 
 export const Route = createRootRoute({
   loader: () => getShell(),
@@ -52,8 +53,10 @@ function Shell({ children }: { children: ReactNode }) {
       <body>
         <I18nProvider locale={locale}>
           <ToastProvider>
-            {demo ? <DemoBar role={demoRole} expiresAt={demo.demo?.expiresAt ?? null} /> : null}
-            {children}
+            <PhotoViewerProvider>
+              {demo ? <DemoBar role={demoRole} expiresAt={demo.demo?.expiresAt ?? null} /> : null}
+              {children}
+            </PhotoViewerProvider>
           </ToastProvider>
         </I18nProvider>
         <Scripts />

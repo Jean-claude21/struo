@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { asActor, ensure, journal, parse } from './access.ts';
 import type { Actor, Db } from './db.ts';
 import { DomainError, notFound } from './errors.ts';
+import { recordAttendance } from './crew.ts';
 
 export const INCIDENT_KINDS = ['material_delay', 'weather', 'defect', 'accident', 'equipment', 'other'] as const;
 export const PRIORITIES = ['critical', 'important', 'info'] as const;
@@ -13,18 +14,30 @@ export async function fieldSnapshot(db: Db, actor: Actor) {
       `select p.id, p.code, p.name, p.location, p.status, pp.progress_pct as "progressPct", p.latitude, p.longitude,
               coalesce((select json_agg(json_build_object('id', ph.id, 'name', ph.name, 'progressPct', ph.progress_pct)
                                         order by ph.position)
-                          from project_phase ph where ph.project_id = p.id), '[]') as phases
+                          from project_phase ph where ph.project_id = p.id), '[]') as phases,
+              -- Spec 047: the crew of the last day someone was ticked here, to start from.
+              coalesce((select json_agg(a.worker_id) from worker_attendance a where a.project_id = p.id
+                          and a.day = (select max(b.day) from worker_attendance b where b.project_id = p.id)), '[]') as "lastCrew"
          from project p join project_progress pp on pp.project_id = p.id
         where p.org_id = $1 and p.archived_at is null and p.status in ('active', 'pending', 'suspended')
         order by case p.status when 'active' then 0 else 1 end, p.code`,
       [actor.orgId],
     );
+    const workers = await tx.query<{ id: string; name: string; trade: string | null }>(
+      'select id, name, trade from worker where org_id = $1 and active order by name', [actor.orgId]);
+    const tasks = await tx.query<{ id: string; projectId: string; title: string; dueOn: string | null; status: string; priority: string }>(
+      `select t.id, t.project_id as "projectId", t.title, to_char(t.due_on, 'YYYY-MM-DD') as "dueOn", t.status, t.priority
+         from project_task t join project p on p.id = t.project_id
+        where t.org_id = $1 and t.assignee_id = $2 and t.status <> 'done' and p.archived_at is null
+        order by t.due_on nulls last limit 50`, [actor.orgId, actor.userId]);
     return {
       at: new Date().toISOString(),
       projects: rows as {
         id: string; code: string; name: string; location: string | null; status: string; progressPct: number;
-        latitude: number | null; longitude: number | null; phases: { id: string; name: string; progressPct: number }[];
+        latitude: number | null; longitude: number | null; phases: { id: string; name: string; progressPct: number }[]; lastCrew: string[];
       }[],
+      workers: workers.rows,
+      tasks: tasks.rows,
     };
   });
 }
@@ -49,6 +62,8 @@ const reportInput = z.object({
   longitude: z.number().min(-180).max(180).nullable().optional(),
   takenAt: z.string().datetime({ offset: true }),
   photos: z.array(photoInput).max(20).default([]),
+  /** Spec 047: the workers present on the site that day. */
+  workerIds: z.array(z.string().uuid()).max(300).optional(),
   audio: z
     .object({
       storageKey: z.string().min(1).max(300),
@@ -88,7 +103,14 @@ export async function submitReport(db: Db, actor: Actor, input: unknown): Promis
       );
     }
     const created = inserted.rowCount === 1;
-    if (created) await journal(tx, actor, 'report.submit', data.id, null, { ...data, photos: data.photos.length, audio: Boolean(data.audio) });
+    if (created && data.workerIds?.length) {
+      // The day of the report, in the company's time zone.
+      const { rows } = await tx.query<{ day: string }>(
+        `select to_char(($1::timestamptz at time zone coalesce(s.time_zone, 'UTC'))::date, 'YYYY-MM-DD') as day from org_settings s where s.org_id = $2`,
+        [data.takenAt, actor.orgId]);
+      await recordAttendance(db, actor, { projectId: data.projectId, day: rows[0]?.day ?? data.takenAt.slice(0, 10), workerIds: data.workerIds, reportId: data.id }, tx);
+    }
+    if (created) await journal(tx, actor, 'report.submit', data.id, null, { ...data, photos: data.photos.length, audio: Boolean(data.audio), workerIds: data.workerIds?.length ?? 0 });
     return { id: data.id, created, hasAudio: created && Boolean(data.audio) };
   });
 }

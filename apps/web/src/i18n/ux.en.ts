@@ -833,6 +833,8 @@ export const uxEn: typeof uxFr = {
       portal_manage: 'Invite clients',
       messages_write: 'Write to clients',
       apikeys_manage: 'API keys and assistants (MCP)',
+      crew_write: 'Manage workers, presences and subcontractors',
+      crew_rates: 'See and change day rates',
     },
   },
   onb: {

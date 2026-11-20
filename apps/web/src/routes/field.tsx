@@ -5,7 +5,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Camera, Check, ChevronRight, ClipboardCheck, CloudRain, CloudSun, FileSignature, FileText, Hammer, HardHat, Home, LogOut, Map as MapIcon,
-  Mic, PackageCheck, RefreshCw, ScanLine, Square, Sun, TriangleAlert, Truck, UserRound, Wind, Wrench, CloudOff, CheckCircle2, X,
+  Mic, PackageCheck, RefreshCw, ScanLine, Square, Sun, TriangleAlert, Truck, UserRound, Users, Wind, Wrench, CloudOff, CheckCircle2, X,
 } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { SignaturePad, type SignaturePadHandle } from '@/components/SignaturePad.tsx';
@@ -17,6 +17,7 @@ import {
   clearSnapshot,
 } from '@/features/field/store.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
+import { updateTask } from '@/features/office/server.ts';
 
 export const Route = createFileRoute('/field')({
   ssr: false,
@@ -249,6 +250,7 @@ function HomeTab({ snapshot, site, onFlow, onSite }: {
           {toFix.map((report) => (
             <div key={report.id} className="notice small"><TriangleAlert size={16} />{t('field2.toFix', { note: report.reviewNote ?? '' })}</div>
           ))}
+          {(snapshot.tasks ?? []).filter((task) => task.projectId === site.id).map((task) => <FieldTask key={task.id} task={task} />)}
           {site.openIncidents ? <div className="notice bad small"><TriangleAlert size={16} />{t('field2.openIncidents', { n: site.openIncidents })}</div> : null}
           <div className="pair" style={{ marginTop: '.25rem' }}>
             <button type="button" className="btn secondary small" onClick={() => onFlow('delivery')}><ScanLine size={16} />{t('field2.scan')}</button>
@@ -333,6 +335,26 @@ function PhotoPicker({ photos, setPhotos, gps, site }: {
 
 // ---------------------------------------------------------------- T4–T6: report in four steps
 
+/** A task given to the site lead (spec 046): mark it done when the network is there. */
+function FieldTask({ task }: { task: { id: string; title: string; dueOn: string | null; status: string; priority: string } }) {
+  const { t } = useI18n();
+  const [state, setState] = useState<'open' | 'sending' | 'done' | 'offline'>('open');
+  const late = task.dueOn !== null && task.dueOn < new Date().toISOString().slice(0, 10);
+  const finish = async () => {
+    if (!navigator.onLine) { setState('offline'); return; }
+    setState('sending');
+    try { await updateTask({ data: { id: task.id, patch: { status: 'done' } } }); setState('done'); } catch { setState('offline'); }
+  };
+  return (
+    <div className={`check-row ${state === 'done' ? 'on' : ''}`}>
+      <button type="button" className="box" aria-label={t('tasks.statuses.done')} disabled={state === 'done' || state === 'sending'} onClick={() => void finish()}>{state === 'done' ? <Check size={16} /> : null}</button>
+      <span className="grow">{task.title}{task.priority === 'urgent' ? <b className="bad-text"> · {t('tasks.priorities.urgent')}</b> : null}
+        {state === 'offline' ? <span className="faint small" style={{ display: 'block' }}>{t('crew.taskNeedsNetwork')}</span> : null}</span>
+      {task.dueOn ? <span className={`small ${late ? 'bad-text' : 'faint'}`}>{task.dueOn.slice(8, 10)}/{task.dueOn.slice(5, 7)}</span> : null}
+    </div>
+  );
+}
+
 function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: FieldSnapshot; initialSite: FieldProject; onCancel: () => void; onSaved: () => Promise<void> }) {
   const { t } = useI18n();
   const [step, setStep] = useState(1);
@@ -347,6 +369,10 @@ function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: Fi
   const [gps, setGps] = useState<{ latitude: number; longitude: number } | null | undefined>(undefined);
   const [voice, setVoice] = useState<{ blob: Blob; mediaType: string; seconds: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Spec 047: who is present today, starting from the crew of the last day on this site.
+  const workers = snapshot.workers ?? [];
+  const [crew, setCrew] = useState<Set<string>>(() => new Set((site.lastCrew ?? []).filter((id) => workers.some((worker) => worker.id === id))));
+  const toggleCrew = (id: string) => setCrew((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   useEffect(() => { void currentPosition().then(setGps); }, []);
   const labels = [t('field2.steps.site'), t('field2.steps.photos'), t('field2.steps.progress'), t('field2.steps.send')];
   const value = progress ?? phase?.progressPct ?? 0;
@@ -356,7 +382,7 @@ function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: Fi
     const weatherText = weather ? `[${t(`field2.${weather}` as MessageKey)}] ` : '';
     await enqueue({
       id, type: 'report', createdAt: now(), attempts: 0, lastError: null,
-      payload: { id, projectId: site.id, phaseId, progressPct: phaseId ? value : null, note: `${weatherText}${note.trim()}`.trim() || null, latitude: gps?.latitude ?? null, longitude: gps?.longitude ?? null, takenAt: now() },
+      payload: { id, projectId: site.id, phaseId, progressPct: phaseId ? value : null, note: `${weatherText}${note.trim()}`.trim() || null, latitude: gps?.latitude ?? null, longitude: gps?.longitude ?? null, takenAt: now(), workerIds: [...crew] },
       photos: photos.map(({ url: _url, ...photo }) => photo),
       audio: voice,
     });
@@ -368,7 +394,7 @@ function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: Fi
       <FlowHeader title={t('field2.newReport')} onClose={onCancel} step={step} total={4} labels={labels} />
       <div className="field-body">
         {step === 1 ? snapshot.projects.map((candidate) => (
-          <button key={candidate.id} type="button" className={`site-card ${candidate.id === siteId ? 'selected' : ''}`} onClick={() => { setSiteId(candidate.id); setPhaseId(null); setProgress(null); }}>
+          <button key={candidate.id} type="button" className={`site-card ${candidate.id === siteId ? 'selected' : ''}`} onClick={() => { setSiteId(candidate.id); setPhaseId(null); setProgress(null); setCrew(new Set((candidate.lastCrew ?? []).filter((id) => workers.some((worker) => worker.id === id)))); }}>
             <span className="grow"><strong>{candidate.code} · {candidate.name}</strong><div className="muted small">{candidate.location ?? ''}</div></span><strong>{candidate.progressPct} %</strong>
           </button>
         )) : null}
@@ -399,6 +425,21 @@ function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: Fi
               </div>
             ) : null}
             <div className="stack" style={{ gap: '.5rem' }}>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <b>{t('crew.presentToday', { n: crew.size })}</b>
+                {workers.length ? <button type="button" className="btn ghost small" onClick={() => setCrew(crew.size ? new Set() : new Set(workers.map((worker) => worker.id)))}>{crew.size ? t('crew.none') : t('crew.all')}</button> : null}
+              </div>
+              {workers.length ? (
+                <div className="chips">
+                  {[...workers].sort((a, b) => Number((site.lastCrew ?? []).includes(b.id)) - Number((site.lastCrew ?? []).includes(a.id))).map((worker) => (
+                    <button key={worker.id} type="button" className={`chip ${crew.has(worker.id) ? 'selected' : ''}`} aria-pressed={crew.has(worker.id)} onClick={() => toggleCrew(worker.id)}>
+                      {crew.has(worker.id) ? <Check size={14} /> : null}{worker.name}{worker.trade ? <span className="faint small"> · {worker.trade}</span> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : <span className="muted small">{t('crew.noWorkersField')}</span>}
+            </div>
+            <div className="stack" style={{ gap: '.5rem' }}>
               <VoiceRecorder voice={voice} onChange={setVoice} />
               <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={t('fieldApp.observationPlaceholder')} maxLength={4000} rows={3} />
             </div>
@@ -419,6 +460,7 @@ function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: Fi
             {photos.length ? <div className="thumbs">{photos.map((photo) => <img key={photo.id} src={photo.url} alt="" />)}</div> : null}
             {phase ? <span className="badge brand" style={{ alignSelf: 'flex-start' }}>{phase.name} : {phase.progressPct} % → {value} %</span> : null}
             {voice ? <span className="row tight small"><Mic size={14} />{t('fieldApp.voiceNote', { seconds: voice.seconds })}</span> : null}
+            {crew.size ? <span className="row tight small"><Users size={14} />{t('crew.presentToday', { n: crew.size })}</span> : null}
             {note ? <p style={{ margin: 0 }}>{note}</p> : null}
             <span className="faint small row tight"><CloudOff size={14} />{t('field2.worksOffline')}</span>
           </div>

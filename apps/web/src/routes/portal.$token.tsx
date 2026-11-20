@@ -10,6 +10,7 @@ import { Modal, useToast } from '@/components/kit.tsx';
 import { formatDate, formatMoney } from '@/components/ui.tsx';
 import { getPortal, portalMessage, portalPay, portalRequestCode, portalVerifyCode } from '@/features/portal/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
+import { usePhotoViewer } from '@/components/PhotoViewer.tsx';
 
 export const Route = createFileRoute('/portal/$token')({
   validateSearch: (search: Record<string, unknown>): { paid?: string } => (typeof search.paid === 'string' ? { paid: search.paid } : {}),
@@ -112,7 +113,8 @@ function SpaceView({ data }: { data: Space }) {
   const toast = useToast();
   const { view, reports, show } = data;
   const [tab, setTab] = useState<Tab>('site');
-  const [story, setStory] = useState<number | null>(null);
+  const openViewer = usePhotoViewer();
+  const photoTime = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
   const [signing, setSigning] = useState<Space['view']['milestones'][number] | null>(null);
   const [report, setReport] = useState<Space['reports'][number] | null>(null);
   const money = (minor: number) => formatMoney(locale, minor, view.project.currency);
@@ -146,7 +148,7 @@ function SpaceView({ data }: { data: Space }) {
           {view.photos.length ? (
             <div className="stories" aria-label={t('portal.photos')}>
               {view.photos.slice(0, 12).map((photo, index) => (
-                <button key={photo.id} type="button" className={`story ${index > 2 ? 'seen' : ''}`} onClick={() => setStory(index)}>
+                <button key={photo.id} type="button" className={`story ${index > 2 ? 'seen' : ''}`} onClick={() => openViewer(view.photos.map((item) => ({ url: photoUrl(item.id), title: item.note ?? null, detail: photoTime(item.takenAt) })), index)}>
                   <span className="ring-img"><img src={photoUrl(photo.id)} alt="" loading="lazy" /></span>
                   {new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'short' }).format(new Date(photo.takenAt))}
                 </button>
@@ -223,23 +225,11 @@ function SpaceView({ data }: { data: Space }) {
         ))}
       </nav>
 
-      <Modal open={story !== null} onClose={() => setStory(null)} title={story !== null && view.photos[story] ? date(view.photos[story]!.takenAt) : ''}>
-        {story !== null && view.photos[story] ? (
-          <div className="stack">
-            <img src={photoUrl(view.photos[story]!.id)} alt="" style={{ width: '100%', borderRadius: 8 }} />
-            {view.photos[story]!.note ? <p style={{ margin: 0 }}>{view.photos[story]!.note}</p> : null}
-            <div className="pair">
-              <button type="button" className="btn secondary" disabled={story === 0} onClick={() => setStory(story - 1)}>{t('ui.previous')}</button>
-              <button type="button" className="btn" disabled={story >= view.photos.length - 1} onClick={() => setStory(story + 1)}>{t('ui.next')}</button>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
 
       <Modal open={Boolean(report)} onClose={() => setReport(null)} title={report ? t('clientPortal.reportTitle', { date: date(report.takenAt) }) : ''}>
         {report ? (
           <div className="stack">
-            {report.photos.map((id) => <img key={id} src={photoUrl(id)} alt="" style={{ width: '100%', borderRadius: 8 }} loading="lazy" />)}
+            {report.photos.map((id, index) => <button key={id} type="button" className="pv-open" onClick={() => openViewer(report.photos.map((item) => ({ url: photoUrl(item), detail: photoTime(report.takenAt) })), index)}><img src={photoUrl(id)} alt="" style={{ width: '100%', borderRadius: 8 }} loading="lazy" /></button>)}
             <p style={{ margin: 0, fontSize: '1.02rem' }}>{report.note}</p>
             <span className="muted small">{t('clientPortal.reportBy', { name: report.author })}</span>
             <div className="pair">

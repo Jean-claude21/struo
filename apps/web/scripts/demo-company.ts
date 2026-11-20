@@ -673,6 +673,48 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
   }
   log(`tasks: ${TASKS.length}, internal notes: ${THREADS.length}`);
 
+  // ---------------------------------------------------------------- crew, presences, subcontractors (spec 047)
+  const CREW: [string, string, number, string][] = [
+    ['Kossi Amouzou', 'Maçon', 6000, 'KC-01'], ['Yawo Dossou', 'Maçon', 6000, 'KC-01'], ['Komlan Ahiaku', 'Manœuvre', 3500, 'KC-01'],
+    ['Edem Kpogli', 'Ferrailleur', 6500, 'KC-02'], ['Mawuena Togbe', 'Ferrailleur', 6500, 'KC-02'], ['Sena Akakpo', 'Maçon', 6000, 'KC-02'],
+    ['Folly Adjovi', 'Manœuvre', 3500, 'KC-02'], ['Kodjo Atsu', 'Coffreur', 6500, 'KC-02'], ['Elom Sossou', 'Manœuvre', 3500, 'KC-03'],
+    ['Dela Agbodjan', 'Carreleur', 7000, 'KC-03'], ['Afi Lawson', 'Peintre', 5500, 'KC-03'], ['Kafui Mensah', 'Menuisier', 7000, 'KC-03'],
+    ['Messan Ekoue', 'Soudeur', 7500, 'KC-04'], ['Agbeko Tete', 'Manœuvre', 3500, 'KC-04'], ['Selom Gbedey', 'Maçon', 6000, 'KC-05'],
+    ['Ayité Fiagan', 'Plombier', 7000, 'KC-05'], ['Kokou Djondo', 'Électricien', 7000, 'KC-05'], ['Amavi Kuevi', 'Manœuvre', 3500, 'KC-05'],
+  ];
+  const workerIds: Record<string, { id: string; site: string }> = {};
+  for (const [name, trade, rate, site] of CREW) {
+    const { id } = await core.saveWorker(app, boss, null, { name, trade, dayRateMinor: rate, phone: `90 ${between(10, 99)} ${between(10, 99)} ${between(10, 99)}` });
+    workerIds[name] = { id, site };
+  }
+  let presences = 0;
+  for (let offset = -20; offset <= 0; offset++) {
+    const date = new Date(); date.setDate(date.getDate() + offset);
+    if (date.getDay() === 0) continue;
+    for (const [name, { id, site }] of Object.entries(workerIds)) {
+      if (!ids[site] || rnd() < 0.12) continue;
+      // Some ironworkers help on the school when the slab is poured.
+      const where = name.startsWith('Mawuena') && offset % 5 === 0 && ids['KC-03'] ? 'KC-03' : site;
+      await owner.query(
+        `insert into worker_attendance (org_id, project_id, worker_id, day, recorded_by) values ($1, $2, $3, $4, $5) on conflict do nothing`,
+        [orgId, ids[where], id, day(offset), userIds.komi]);
+      presences++;
+    }
+  }
+  const SUBS: [string, string, string, number, number, number][] = [
+    ['KC-02', 'Électricité Lumière SARL', 'Électricien', 4_800_000, 35, 1_200_000],
+    ['KC-02', 'Tâcheron Akouété (étanchéité)', 'Étanchéité', 1_500_000, 0, 0],
+    ['KC-01', 'Plomberie Agbo', 'Plombier', 2_200_000, 60, 1_100_000],
+    ['KC-05', 'Climatisation Golfe Froid', 'Frigoriste', 6_500_000, 20, 1_950_000],
+  ];
+  for (const [site, name, trade, agreed, progress, paid] of SUBS) {
+    if (!ids[site]) continue;
+    const { id } = await core.createSubcontract(app, actors.jean, { projectId: ids[site], name, trade, agreedMinor: agreed });
+    if (progress) await core.updateSubcontract(app, actors.jean, id, { progressPct: progress });
+    if (paid) await core.paySubcontract(app, actors.akossiwa, id, { amountMinor: paid });
+  }
+  log(`crew: ${CREW.length} workers, ${presences} presences, ${SUBS.length} subcontracts`);
+
   // ---------------------------------------------------------------- the journal follows the real dates
   await owner.query(
     `update journal j set at = x.at from (

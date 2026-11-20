@@ -49,6 +49,7 @@ real external account · ⏳ next.
 | 042 | `042-demo-landing` | « Clarity » landing (live Today board, what/when/where, professionalism, offline simulator, offer « Démarrage Chantiers Clairs ») and try without an account (private 24 h copy per visitor, every role, demo bar, nothing sent) | ✅ | 14 end-to-end checks; guarantee withdrawn in 045 |
 | 045 | `045-landing-clarity` | Landing « Ce qui est bien géré se voit » (Impeccable), sourced figures and estimate, prices per country currency, call-back requests, screens per role (demo and real use), site map on Today | 🟡 for review | `growth.test.ts`; every demo role walked |
 | 046 | `045-landing-clarity` | Tasks given per site (page and site tab), internal thread per site, document versions kept and downloadable | 🟡 for review | `work.test.ts` |
+| 047 | `047-crew-viewer` | One photo viewer everywhere; field crew (workers, presences ticked in the day report, labour per site), subcontractors paid as expenses; tasks in the field app | 🟡 for review | `crew.test.ts` |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

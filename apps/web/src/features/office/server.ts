@@ -38,11 +38,13 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(() =>
       core.listMembers(db, actor),
     ]);
     const me = members.find((member) => member.userId === actor.userId);
+    // Spec 047: who is on the sites today.
+    const crew = await core.crewToday(db, actor, new Date().toISOString().slice(0, 10));
     const weather = await Promise.all(insights.sites.filter((site) => site.status === 'active' && site.latitude !== null && site.longitude !== null)
       .map(async (site) => ({ projectId: site.id, code: site.code, location: site.location, days: await forecast(site.latitude!, site.longitude!) })));
     return {
       role: actor.role, name: me?.name ?? '', settings, finance, operations, alerts, projects, activity, subscription,
-      insights: canFinance ? insights : { ...insights, cash: [], risk: [] }, aging, payments, weather, rainLimit: RAIN_LIMIT,
+      insights: canFinance ? insights : { ...insights, cash: [], risk: [] }, aging, payments, weather, rainLimit: RAIN_LIMIT, crew,
     };
   }),
 );
@@ -89,12 +91,13 @@ export const getProjectPage = createServerFn({ method: 'GET' })
           core.listClients(db, actor),
           core.listMembers(db, actor),
         ]);
-      const [settings, tasks, notes] = await Promise.all([
+      const [settings, tasks, notes, subcontracts, labour] = await Promise.all([
         core.getSettings(db, actor), core.listTasks(db, actor, { projectId: data.id }), core.listNotes(db, actor, data.id),
+        core.listSubcontracts(db, actor, { projectId: data.id }), core.labourByProject(db, actor),
       ]);
       return {
         role: actor.role, userId: actor.userId, project, reports, incidents, invoices, payments, documents, milestones,
-        expenses, messages, links, configuration, clients, members, companyName: settings.name, tasks, notes,
+        expenses, messages, links, configuration, clients, members, companyName: settings.name, tasks, notes, subcontracts, labour: labour.find((row) => row.projectId === data.id) ?? null, canRates: core.can(actor.role, 'crew.rates'),
       };
     }),
   );
@@ -590,6 +593,49 @@ export const postNote = createServerFn({ method: 'POST' })
 export const getDocumentVersions = createServerFn({ method: 'GET' })
   .validator(idOf)
   .handler(({ data }) => act((actor) => core.listDocumentVersions(runtime().db, actor, data.id)));
+
+// ---------------------------------------------------------------- crew and subcontracts (spec 047)
+
+const isoDay = (offset = 0) => { const date = new Date(); date.setDate(date.getDate() + offset); return date.toISOString().slice(0, 10); };
+
+export const getCrew = createServerFn({ method: 'GET' }).handler(() =>
+  act(async (actor) => {
+    const { db } = runtime();
+    const [workers, attendance, subcontracts, projects, labour, settings] = await Promise.all([
+      core.listWorkers(db, actor),
+      core.listAttendance(db, actor, { from: isoDay(-13), to: isoDay(0) }),
+      core.listSubcontracts(db, actor),
+      core.listProjects(db, actor, {}),
+      core.labourByProject(db, actor),
+      core.getSettings(db, actor),
+    ]);
+    return {
+      role: actor.role, workers, attendance, subcontracts, labour, currency: settings.currencyCode, today: isoDay(0),
+      projects: projects.filter((project) => project.status !== 'done').map((project) => ({ id: project.id, code: project.code, name: project.name })),
+      canWrite: core.can(actor.role, 'crew.write'), canRates: core.can(actor.role, 'crew.rates'), canPay: core.can(actor.role, 'expenses.write'),
+    };
+  }, 'crew.write'),
+);
+
+export const saveWorker = createServerFn({ method: 'POST' })
+  .validator((input: { id: string | null; patch: Record<string, unknown> }) => input)
+  .handler(({ data }) => act((actor) => core.saveWorker(runtime().db, actor, data.id, data.patch)));
+
+export const setAttendance = createServerFn({ method: 'POST' })
+  .validator((input: { projectId: string; day: string; workerIds: string[] }) => input)
+  .handler(({ data }) => act((actor) => core.recordAttendance(runtime().db, actor, { ...data, replace: true })));
+
+export const createSubcontract = createServerFn({ method: 'POST' })
+  .validator(any)
+  .handler(({ data }) => act((actor) => core.createSubcontract(runtime().db, actor, data)));
+
+export const updateSubcontract = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; patch: Record<string, unknown> }) => input)
+  .handler(({ data }) => act((actor) => core.updateSubcontract(runtime().db, actor, data.id, data.patch)));
+
+export const paySubcontract = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; amountMinor: number }) => input)
+  .handler(({ data }) => act((actor) => core.paySubcontract(runtime().db, actor, data.id, { amountMinor: data.amountMinor })));
 
 // ---------------------------------------------------------------- alerts as text (assistants)
 
