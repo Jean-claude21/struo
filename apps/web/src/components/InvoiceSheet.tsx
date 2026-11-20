@@ -32,7 +32,7 @@ export function InvoiceSheet({ doc, look, logoUrl }: { doc: SheetDoc; look: Shee
   const { t, locale } = useI18n();
   const money = (minor: number | null) => formatMoney(locale, minor, doc.currency_code);
   const qty = (milli: number) => new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { maximumFractionDigits: 3 }).format(milli / 1000);
-  const accent = look.accentColor ?? '#e8590c';
+  const accent = look.accentColor ?? '#b9461e';
   const kind = doc.kind as 'advance' | 'progress' | 'final';
   const title = look.titles[kind]?.trim() || t(`finance.kinds.${kind}`);
   const progress = doc.lines.some((line) => line.kind === 'progress');

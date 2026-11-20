@@ -18,23 +18,23 @@ const escape = (value: string) => value.replace(/[&<>"']/gu, (char) => ({ '&': '
 /** Builds the HTML and text versions of a message. */
 export function renderMail(locale: Locale, content: MailContent, appUrl: string): { html: string; text: string } {
   const button = content.button
-    ? `<tr><td style="padding:8px 0 24px"><a href="${escape(content.button.url)}" style="display:inline-block;background:#16191c;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 22px;border-radius:6px">${escape(content.button.label)}</a></td></tr>
-       <tr><td style="font-size:12px;color:#6b7075;padding-bottom:16px">${escape(translate(locale, 'mail.linkFallback'))}<br><a href="${escape(content.button.url)}" style="color:#6b7075;word-break:break-all">${escape(content.button.url)}</a></td></tr>`
+    ? `<tr><td style="padding:8px 0 24px"><a href="${escape(content.button.url)}" style="display:inline-block;background:#b9461e;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 22px;border-radius:6px">${escape(content.button.label)}</a></td></tr>
+       <tr><td style="font-size:12px;color:#515c52;padding-bottom:16px">${escape(translate(locale, 'mail.linkFallback'))}<br><a href="${escape(content.button.url)}" style="color:#515c52;word-break:break-all">${escape(content.button.url)}</a></td></tr>`
     : '';
   const html = `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(content.title)}</title></head>
-<body style="margin:0;background:#efede7;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#16191c">
+<body style="margin:0;background:#f8f7f1;font-family:'DM Sans',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#202820">
 <span style="display:none;max-height:0;overflow:hidden;opacity:0">${escape(content.preheader)}</span>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#efede7;padding:24px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f7f1;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px">
-<tr><td style="padding:0 4px 14px;font-weight:900;font-size:20px;letter-spacing:.04em"><span style="display:inline-block;width:10px;height:16px;background:#f2b705;margin-right:8px;vertical-align:-1px"></span>STRUO</td></tr>
-<tr><td style="background:#ffffff;border-radius:8px;padding:28px 26px;border-top:4px solid #f2b705">
+<tr><td style="padding:0 4px 14px;font-weight:800;font-size:22px;letter-spacing:-1px;color:#202820"><span style="display:inline-block;width:22px;height:22px;background:#d94d20;border-radius:6px;margin-right:8px;vertical-align:-4px"></span>Struo</td></tr>
+<tr><td style="background:#ffffff;border-radius:10px;padding:28px 26px;border:1px solid #d7d9d0">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr><td style="font-size:22px;font-weight:700;line-height:1.25;padding-bottom:14px">${escape(content.title)}</td></tr>
+<tr><td style="font-size:24px;font-weight:700;line-height:1.2;letter-spacing:-.5px;padding-bottom:14px">${escape(content.title)}</td></tr>
 ${content.paragraphs.map((paragraph) => `<tr><td style="font-size:15px;line-height:1.6;padding-bottom:14px">${escape(paragraph)}</td></tr>`).join('')}
 ${button}
-${content.footnote ? `<tr><td style="font-size:13px;line-height:1.5;color:#6b7075;border-top:1px solid #e6e3dc;padding-top:14px">${escape(content.footnote)}</td></tr>` : ''}
+${content.footnote ? `<tr><td style="font-size:13px;line-height:1.5;color:#515c52;border-top:1px solid #e7e8e0;padding-top:14px">${escape(content.footnote)}</td></tr>` : ''}
 </table></td></tr>
-<tr><td style="font-size:12px;color:#6b7075;padding:16px 4px;line-height:1.5">${escape(translate(locale, 'mail.signature'))} · <a href="${escape(appUrl)}" style="color:#6b7075">${escape(appUrl.replace(/^https?:\/\//u, ''))}</a></td></tr>
+<tr><td style="font-size:12px;color:#515c52;padding:16px 4px;line-height:1.5">${escape(translate(locale, 'mail.signature'))} · <a href="${escape(appUrl)}" style="color:#515c52">${escape(appUrl.replace(/^https?:\/\//u, ''))}</a></td></tr>
 </table></td></tr></table></body></html>`;
   const text = [
     content.title, '',

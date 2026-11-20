@@ -26,10 +26,10 @@ function Demo() {
   const open = (role: string) => (event: MouseEvent) => { event.preventDefault(); setOpening(role); window.location.href = `/api/demo/start?role=${role}`; };
   return (
     <div className="lx">
-      <div className="public lx-header"><PublicHeader signedIn={Boolean(viewer)} /></div>
+      <div className="lx-top"><div className="lx-wrap"><PublicHeader signedIn={Boolean(viewer)} /></div></div>
       <section className="lx-section lx-demo">
         <div className="lx-wrap">
-          <span className="lx-eyebrow">{t('demo.page.eyebrow')}</span>
+          <p className="lx-eyebrow"><span />{t('demo.page.eyebrow')}</p>
           <h1 className="lx-narrow">{t('demo.page.title')}</h1>
           <p className="lx-lead lx-narrow">{t('demo.page.lead')}</p>
           {error ? <p className="notice lx-narrow" role="alert">{t(error === 'limit' ? 'demo.page.errLimit' : 'demo.page.errUnavailable')}</p> : null}

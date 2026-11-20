@@ -15,7 +15,7 @@ export const Route = createFileRoute('/app/team')({
 });
 
 const ROLE_ICON: Record<Role, LucideIcon> = { owner: Crown, admin: Settings2, engineer: Wrench, site_lead: HardHat, accountant: Calculator };
-const ROLE_COLOR: Record<Role, string> = { owner: '#e8590c', admin: '#5c5f66', engineer: '#1c6dd0', site_lead: '#b26a00', accountant: '#2f9e44' };
+const ROLE_COLOR: Record<Role, string> = { owner: '#b9461e', admin: '#5c665d', engineer: '#2f5f8a', site_lead: '#a36a12', accountant: '#3d704e' };
 
 function Team() {
   const { t } = useI18n();

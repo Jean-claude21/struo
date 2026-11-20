@@ -22,7 +22,7 @@ export const Route = createFileRoute('/app/expenses')({
 
 const CATEGORIES = ['materials', 'labour', 'subcontracting', 'equipment', 'transport', 'fees', 'other'] as const;
 const CATEGORY_COLOR: Record<string, string> = {
-  materials: '#e8590c', labour: '#1c6dd0', subcontracting: '#7048c8', equipment: '#0c8599', transport: '#b26a00', fees: '#c2255c', other: '#949494',
+  materials: '#b9461e', labour: '#2f5f8a', subcontracting: '#6a4ba8', equipment: '#2a7a78', transport: '#a36a12', fees: '#a8445f', other: '#8a9187',
 };
 
 function Expenses() {

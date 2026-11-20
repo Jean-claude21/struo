@@ -204,7 +204,7 @@ function SpaceView({ data }: { data: Space }) {
           <h2>{t('portal.documents')}</h2>
           {view.documents.length ? view.documents.map((document) => (
             <a key={document.id} className="site-card" href={document.hasFile ? photoUrl(document.id) : undefined} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-              <span className="ftype" style={{ ['--c' as string]: '#c92a2a' }}><FileText size={16} /></span>
+              <span className="ftype" style={{ ['--c' as string]: '#8e2a22' }}><FileText size={16} /></span>
               <span className="grow">{document.title}</span>
             </a>
           )) : <p className="muted">{t('portal.noDocuments')}</p>}

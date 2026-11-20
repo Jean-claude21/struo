@@ -18,7 +18,7 @@ export function formatMoney(locale: string, minor: number | null | undefined, cu
   const decimals = decimalsOf(currency);
   return new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'fr-FR', {
     style: 'currency', currency, maximumFractionDigits: decimals, minimumFractionDigits: decimals,
-  }).format(minor / 10 ** decimals);
+  }).format(minor / 10 ** decimals).replace(/ /gu, ' '); // DM Sans has no narrow no-break space
 }
 
 /** Amount typed by a person → minor units (null when invalid). */
