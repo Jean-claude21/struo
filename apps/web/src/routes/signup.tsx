@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Mascot } from '@/components/Mascot.tsx';
 import { PublicHeader } from '@/components/PublicHeader.tsx';
 import { ErrorText, Field } from '@/components/ui.tsx';
-import { useI18n } from '@/i18n/index.tsx';
+import { authErrorKey } from '@/features/auth/call.ts';
+import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 import { authenticate, nextSearch } from './login.tsx';
 
 export const Route = createFileRoute('/signup')({ validateSearch: nextSearch, component: Signup });
@@ -33,9 +34,11 @@ function Signup() {
               name: String(form.get('name')),
               email: String(form.get('email')),
               password: String(form.get('password')),
+              // Where the verification link of the welcome e-mail lands (spec 040).
+              callbackURL: '/app/account?verified=1',
             });
             setBusy(false);
-            if (!result.ok) setError(t('errors.sign_up_failed'));
+            if (!result.ok) setError(result.code ? t(authErrorKey(result.code) as MessageKey) : t('errors.sign_up_failed'));
             else window.location.href = result.url ?? next ?? '/onboarding';
           }}
         >

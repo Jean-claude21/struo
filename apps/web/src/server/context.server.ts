@@ -11,6 +11,8 @@ export interface Viewer {
   userId: string;
   name: string;
   email: string;
+  /** Whether the address was confirmed from the e-mailed link (spec 040). */
+  emailVerified: boolean;
   companies: { id: string; name: string; role: Role }[];
   /** The company being worked on (cookie, else the first one). */
   company: { id: string; name: string; role: Role } | null;
@@ -29,6 +31,7 @@ export async function loadViewer(): Promise<Viewer | null> {
     userId: session.user.id,
     name: session.user.name,
     email: session.user.email,
+    emailVerified: Boolean(session.user.emailVerified),
     companies,
     company,
     platformAdmin: env.PLATFORM_ADMIN_EMAILS.includes(session.user.email.toLowerCase()),
