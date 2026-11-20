@@ -5,6 +5,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { translate } from '@/i18n/index.tsx';
 import { guarded, requestLocale, requireActor } from '@/server/context.server.ts';
 import { alertText } from '@/server/jobs.server.ts';
+import { outboundAllowed } from '@/server/demo.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 import { forecast, RAIN_LIMIT } from '@/server/weather.server.ts';
 
@@ -379,11 +380,13 @@ export const sendReminder = createServerFn({ method: 'POST' })
     act(async (actor) => {
       const { db, mailer, messenger } = runtime();
       const invoice = await core.invoiceDocument(db, actor, data.id);
-      if (data.send && data.channel === 'email' && invoice.client_email) {
+      // A demo company never sends anything (spec 042): the reminder is recorded only.
+      const outbound = await outboundAllowed(runtime(), actor.orgId);
+      if (outbound && data.send && data.channel === 'email' && invoice.client_email) {
         const subject = data.body.split('\n')[0]?.replace(/^(Objet|Subject)\s*:\s*/u, '') ?? invoice.number;
         await mailer.send({ to: invoice.client_email, subject, text: data.body });
       }
-      if (data.send && data.channel === 'whatsapp' && invoice.client_phone) await messenger.send(invoice.client_phone, data.body);
+      if (outbound && data.send && data.channel === 'whatsapp' && invoice.client_phone) await messenger.send(invoice.client_phone, data.body);
       return core.recordReminder(db, actor, data.id, { kind: data.kind, channel: data.channel, body: data.body });
     }, 'finance.write'),
   );
@@ -530,13 +533,14 @@ export const inviteClient = createServerFn({ method: 'POST' })
       });
       const url = `${env.APP_BASE_URL}/portal/${link.token}`;
       const message = translate(locale, 'clientInvite.message', { name: data.contactName || '', project: project.name, company: settings.name, url });
+      const outbound = await outboundAllowed(runtime(), actor.orgId);
       if (data.channel === 'email') {
         if (!data.contactEmail) throw new core.DomainError('invalid_input', 422, { field: 'contactEmail', detail: '' });
-        await mailer.send({ to: data.contactEmail, subject: translate(locale, 'clientInvite.subject', { project: project.name, company: settings.name }), text: message });
+        if (outbound) await mailer.send({ to: data.contactEmail, subject: translate(locale, 'clientInvite.subject', { project: project.name, company: settings.name }), text: message });
       }
       const phone = (data.contactPhone ?? '').replace(/[^\d]/gu, '');
       const whatsappUrl = data.channel === 'whatsapp' && phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null;
-      return { url, message, whatsappUrl, mailSent: data.channel === 'email' && mailer.configured };
+      return { url, message, whatsappUrl, mailSent: outbound && data.channel === 'email' && mailer.configured };
     }, 'portal.manage'),
   );
 

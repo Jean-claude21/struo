@@ -18,6 +18,8 @@ export interface Viewer {
   /** The company being worked on (cookie, else the first one). */
   company: { id: string; name: string; role: Role } | null;
   platformAdmin: boolean;
+  /** A demonstration company (spec 042): when the visitor's copy expires, null for the seeded demo. */
+  demo: { expiresAt: string | null } | null;
 }
 
 /** The signed-in person, from the session cookie of the current request. */
@@ -28,6 +30,10 @@ export async function loadViewer(): Promise<Viewer | null> {
   const companies = await listCompanies(db, session.user.id);
   const chosen = getCookie(ORG_COOKIE);
   const company = companies.find((candidate) => candidate.id === chosen) ?? companies[0] ?? null;
+  const demoRow = company
+    ? (await runtime().owner.query<{ demo: boolean; expires: string | null }>(
+        'select s.is_demo as demo, d.expires_at as expires from org_settings s left join demo_sandbox d on d.org_id = s.org_id where s.org_id = $1', [company.id])).rows[0]
+    : undefined;
   return {
     userId: session.user.id,
     name: session.user.name,
@@ -36,6 +42,7 @@ export async function loadViewer(): Promise<Viewer | null> {
     companies,
     company,
     platformAdmin: env.PLATFORM_ADMIN_EMAILS.includes(session.user.email.toLowerCase()),
+    demo: demoRow?.demo ? { expiresAt: demoRow.expires ? new Date(demoRow.expires).toISOString() : null } : null,
   };
 }
 

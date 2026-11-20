@@ -6,6 +6,7 @@ import { monerooGateway, simulatorGateway } from '@/server/adapters.server.ts';
 import { createChariow } from '@/server/chariow.server.ts';
 import { invitationMail } from '@/server/mail.server.ts';
 import { chooseCompany, guarded, loadViewer, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
+import { outboundAllowed } from '@/server/demo.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 
 const act = <T>(work: (actor: core.Actor) => Promise<T>, permission?: core.Permission) =>
@@ -100,7 +101,7 @@ export const inviteMember = createServerFn({ method: 'POST' })
       const url = `${env.APP_BASE_URL}/invite/${invitation.id}`;
       const locale = settings.locale;
       const inviter = (await loadViewer())?.name ?? settings.name;
-      await mailer
+      if (await outboundAllowed(runtime(), actor.orgId)) await mailer
         .send(invitationMail(locale, { to: invitation.email, org: settings.name, inviter, role: data.role, url }, env.APP_BASE_URL))
         .catch((error: unknown) => console.error('[mail] invitation', error));
       return { url };

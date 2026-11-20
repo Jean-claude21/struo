@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { translate } from '@/i18n/index.tsx';
 import { alertText } from '@/server/jobs.server.ts';
 import { invitationMail } from '@/server/mail.server.ts';
+import { outboundAllowed } from '@/server/demo.server.ts';
 import type { Runtime } from '@/server/runtime.server.ts';
 import { forecast } from '@/server/weather.server.ts';
 
@@ -464,7 +465,7 @@ export const CAPABILITIES: Capability[] = [
       await core.updatePortalLink(rt.db, actor, link.id, { contactName: input.contactName, contactEmail: input.contactEmail, contactPhone: input.contactPhone ?? null,
         requireCode: true, showPhotos: true, showPlanning: true, showFinance: true, showDocuments: true, showMessages: true, invited: true });
       const url = `${rt.env.APP_BASE_URL}/portal/${link.token}`;
-      await rt.mailer.send({ to: input.contactEmail, subject: translate(locale, 'clientInvite.subject', { project: project.name, company: settings.name }),
+      if (await outboundAllowed(rt, actor.orgId)) await rt.mailer.send({ to: input.contactEmail, subject: translate(locale, 'clientInvite.subject', { project: project.name, company: settings.name }),
         text: translate(locale, 'clientInvite.message', { name: input.contactName, project: project.name, company: settings.name, url }) });
       return { sent: true, to: input.contactEmail };
     },
@@ -497,7 +498,7 @@ export const CAPABILITIES: Capability[] = [
       const settings = await core.getSettings(rt.db, actor);
       const url = `${rt.env.APP_BASE_URL}/invite/${invitation.id}`;
       const inviter = (await rt.db.query<{ name: string }>('select name from "user" where id = $1', [actor.userId])).rows[0]?.name ?? settings.name;
-      await rt.mailer.send(invitationMail(settings.locale, { to: invitation.email, org: settings.name, inviter, role: input.role, url }, rt.env.APP_BASE_URL))
+      if (await outboundAllowed(rt, actor.orgId)) await rt.mailer.send(invitationMail(settings.locale, { to: invitation.email, org: settings.name, inviter, role: input.role, url }, rt.env.APP_BASE_URL))
         .catch((error: unknown) => console.error('[mail] invitation', error));
       return { invited: invitation.email };
     },

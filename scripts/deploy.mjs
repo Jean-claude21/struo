@@ -255,8 +255,17 @@ try {
 }
 
 if (!args['no-deploy']) {
-  await coolify(`/deploy?uuid=${application.uuid}&force=false`, { method: 'POST' });
-  console.log(`Coolify: deployment requested → ${domain}`);
+  // A restart recreates the container with the variables just written; a « deploy » of the same
+  // image is skipped by Coolify and would leave the old variables running.
+  const restart = await coolify(`/applications/${application.uuid}/restart`, { method: 'POST' });
+  console.log(`Coolify: restart requested → ${domain}`);
+  const deployment = restart?.deployment_uuid;
+  for (let i = 0; deployment && i < 60; i += 1) {
+    await sleep(10_000);
+    const state = await coolify(`/deployments/${deployment}`).catch(() => null);
+    if (state?.status === 'finished') break;
+    if (state?.status === 'failed' || state?.status === 'cancelled-by-user') { console.log(`Coolify: restart ${state.status}`); process.exit(1); }
+  }
   for (let i = 0; i < 60; i += 1) {
     await sleep(10_000);
     try {
