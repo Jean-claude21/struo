@@ -41,7 +41,8 @@ Clicks on the main actions are counted in Umami (`data-umami-event`).
   and is then deleted with its accounts (`demo_sandbox`, migration 0017).
 - A **demo bar** on every page (office, field app, client space): fictional company, until when,
   nothing is sent; « see as » each role; « Créer mon espace » (signs out, opens sign-up).
-- **Guards**: at most 3 copies per visitor per day (salted hash of the address, never the address);
+- **Guards**: at most 10 copies per address per day (mobile operators share addresses; salted hash,
+  never the address) and 150 copies alive at once;
   a demo company sends **no e-mail and no WhatsApp** (reminders, invitations, client invitations are
   recorded only); its assistant has a 30-cent budget; demo companies are excluded from product health.
 - `DEMO_ENABLED=false` turns it off.
@@ -51,5 +52,5 @@ Clicks on the main actions are counted in Umami (`data-umami-event`).
 End-to-end on a local server (14 checks): landing and demo pages render with no missing text; a copy
 opens as manager in 5.8 s when none is ready (instant otherwise), the office shows the demo bar;
 switching to site lead, engineer, accountant and client lands on the field app, the field review,
-finances and the client space of the same copy; a new visitor gets 3 copies and the 4th is refused;
+finances and the client space of the same copy; the per-address limit refuses copies beyond it;
 leaving signs out and opens sign-up; shared photos are served in a copy.
