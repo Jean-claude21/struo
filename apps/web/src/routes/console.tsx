@@ -21,7 +21,7 @@ export const Route = createFileRoute('/console')({
 });
 
 type Data = Awaited<ReturnType<typeof getConsole>>;
-type Tab = 'overview' | 'companies' | 'licenses' | 'journal';
+type Tab = 'overview' | 'health' | 'companies' | 'licenses' | 'journal';
 
 function Console() {
   const { t } = useI18n();
@@ -33,11 +33,13 @@ function Console() {
       <h1>{t('console.title')}</h1>
       <Tabs value={tab} onChange={setTab} items={[
         { value: 'overview', label: t('console2.overview') },
+        { value: 'health', label: t('health.tab') },
         { value: 'companies', label: `${t('console.companies')} · ${data.companies.length}` },
         { value: 'licenses', label: `${t('console2.licenses')} · ${data.products.length}` },
         { value: 'journal', label: t('console2.journal') },
       ]} />
       {tab === 'overview' ? <Overview data={data} /> : null}
+      {tab === 'health' ? <Health data={data} /> : null}
       {tab === 'companies' ? <Companies data={data} /> : null}
       {tab === 'licenses' ? <Licenses data={data} /> : null}
       {tab === 'journal' ? <Journal data={data} /> : null}
@@ -217,5 +219,51 @@ function Journal({ data }: { data: Data }) {
         ))}</tbody></table></div>
       ) : <p className="muted small" style={{ padding: '1rem', margin: 0 }}>{t('ai.page.noJournal')}</p>}
     </Panel>
+  );
+}
+
+/** Product health (spec 041): is Struo used? Real companies only; the north star first. */
+function Health({ data }: { data: Data }) {
+  const { t, locale } = useI18n();
+  const h = data.health;
+  const pct = (value: number | null) => (value === null ? '—' : `${value} %`);
+  const weeks = h.weeks.map((week) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'short' }).format(new Date(`${week.week}T12:00:00`)));
+  const last = h.weeks.at(-1);
+  return (
+    <div className="stack">
+      <Panel title={t('health.northStar')} sub={t('health.northStarSub')}>
+        <div className="grid" style={{ marginBottom: '1rem' }}>
+          <KpiTile label={t('health.validatedThisWeek')} value={last?.validated ?? 0} tone="brand" sub={t('health.reportsThisWeek', { n: last?.reports ?? 0 })} />
+          <KpiTile label={t('health.reportsPerLead')} value={h.usage.reportsPerLead7 ?? '—'} tone={(h.usage.reportsPerLead7 ?? 0) >= 3 ? undefined : 'bad'} sub={t('health.target3')} />
+          <KpiTile label={t('health.activeLeads')} value={h.usage.activeLeads7} sub={t('health.last7')} />
+          <KpiTile label={t('health.sitesReported')} value={pct(h.usage.sitesReportedPct)} sub={t('health.ofActiveSites', { n: h.usage.activeSites })} />
+        </div>
+        <BarChart categories={weeks} locale={locale} label={t('health.northStar')} series={[
+          { values: h.weeks.map((week) => week.reports), color: 'var(--line, #c9c6bd)' },
+          { values: h.weeks.map((week) => week.validated), color: 'var(--brand)' },
+        ]} />
+      </Panel>
+      <Panel title={t('health.activation')} sub={t('health.activationSub', { n: h.cohortSize, signups: h.signups30 })}>
+        <div className="grid">
+          <KpiTile label={t('health.firstReport48h')} value={pct(h.activation.firstReport48hPct)} tone="brand" sub={h.activation.medianHoursToFirstReport === null ? t('health.noReportYet') : t('health.median', { n: h.activation.medianHoursToFirstReport })} />
+          <KpiTile label={t('health.invitedLead')} value={pct(h.activation.invitedLeadPct)} />
+          <KpiTile label={t('health.firstInvoice')} value={pct(h.activation.firstInvoicePct)} />
+          <KpiTile label={t('health.invitedClient')} value={pct(h.activation.invitedClientPct)} />
+        </div>
+      </Panel>
+      <Panel title={t('health.retentionRevenue')}>
+        <div className="grid">
+          <KpiTile label={t('health.week4')} value={pct(h.retention.week4Pct)} sub={t('health.base', { n: h.retention.base })} />
+          <KpiTile label={t('health.trialToPaid')} value={pct(h.conversion.trialToPaidPct)} sub={t('health.trialsOver', { n: h.conversion.trialsOver })} />
+          <KpiTile label={t('health.realCompanies')} value={h.conversion.companies} sub={t('health.demoExcluded')} />
+        </div>
+      </Panel>
+      <Panel title={t('health.tools')}>
+        <ul className="stack tight small" style={{ margin: 0, paddingLeft: '1.1rem' }}>
+          <li>{data.monitoring.errors ? t('health.errorsOn') : t('health.errorsOff')}</li>
+          <li>{data.monitoring.audience ? t('health.audienceOn') : t('health.audienceOff')}</li>
+        </ul>
+      </Panel>
+    </div>
   );
 }

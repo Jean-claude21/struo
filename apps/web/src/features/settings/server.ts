@@ -4,6 +4,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { translate } from '@/i18n/index.tsx';
 import { monerooGateway, simulatorGateway } from '@/server/adapters.server.ts';
 import { createChariow } from '@/server/chariow.server.ts';
+import { invitationMail } from '@/server/mail.server.ts';
 import { chooseCompany, guarded, loadViewer, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 
@@ -98,12 +99,9 @@ export const inviteMember = createServerFn({ method: 'POST' })
       const settings = await core.getSettings(db, actor);
       const url = `${env.APP_BASE_URL}/invite/${invitation.id}`;
       const locale = settings.locale;
+      const inviter = (await loadViewer())?.name ?? settings.name;
       await mailer
-        .send({
-          to: invitation.email,
-          subject: translate(locale, 'digest.invitationSubject', { org: settings.name }),
-          text: translate(locale, 'digest.invitationBody', { org: settings.name, url }),
-        })
+        .send(invitationMail(locale, { to: invitation.email, org: settings.name, inviter, role: data.role, url }, env.APP_BASE_URL))
         .catch((error: unknown) => console.error('[mail] invitation', error));
       return { url };
     }),
@@ -174,7 +172,8 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
     const [companies, plans, revenue, products, redemptions, journal] = await Promise.all([
       core.platformOverview(owner), core.listPlans(db), core.platformRevenue(owner), core.listLicenseProducts(owner),
       core.listAllRedemptions(owner), core.platformJournalList(owner)]);
-    return { companies, plans, revenue, products, redemptions, journal, chariowConfigured: Boolean(env.CHARIOW_API_KEY) };
+    const health = await core.productHealth(owner);
+    return { companies, plans, revenue, products, redemptions, journal, health, chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
   }),
 );
 

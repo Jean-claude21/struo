@@ -27,6 +27,11 @@ export interface Env {
   PLATFORM_MONEROO_SECRET_KEY: string;
   PLATFORM_MONEROO_WEBHOOK_SECRET: string;
   PAYMENTS_SIMULATOR: boolean;
+  /** Monitoring (spec 041): error tracker and audience analytics; empty = off. */
+  SENTRY_DSN: string;
+  UMAMI_WEBSITE_ID: string;
+  UMAMI_SCRIPT_URL: string;
+  APP_VERSION: string;
 }
 
 const read = (name: string, fallback = '') => (process.env[name] ?? fallback).trim();
@@ -74,6 +79,10 @@ export function env(): Env {
     PLATFORM_MONEROO_WEBHOOK_SECRET: read('PLATFORM_MONEROO_WEBHOOK_SECRET'),
     // The payment simulator never runs in production unless explicitly allowed (demo instance).
     PAYMENTS_SIMULATOR: appEnv !== 'production' || read('PAYMENTS_SIMULATOR') === 'true',
+    SENTRY_DSN: read('SENTRY_DSN'),
+    UMAMI_WEBSITE_ID: read('UMAMI_WEBSITE_ID'),
+    UMAMI_SCRIPT_URL: read('UMAMI_SCRIPT_URL'),
+    APP_VERSION: read('APP_VERSION'),
   };
   if (!cached.DATABASE_URL) throw new Error('DATABASE_URL is empty.');
   if (!cached.BETTER_AUTH_SECRET) throw new Error('BETTER_AUTH_SECRET is empty.');

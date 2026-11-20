@@ -145,3 +145,69 @@ export async function setCompanyPlan(owner: Db, orgId: string, planCode: string,
     [orgId, JSON.stringify({ planCode }), by],
   );
 }
+
+/**
+ * Product health (spec 041, owner connection): is the product used? Real companies only (demo
+ * companies excluded). The north-star figure is validated field reports per week; activation is a
+ * first field report within 48 hours of sign-up; usage is reports per active site lead.
+ */
+export async function productHealth(owner: Db) {
+  const weeks = await owner.query<{ week: string; reports: number; validated: number; leads: number; companies: number }>(
+    `with w as (select generate_series(date_trunc('week', now()) - interval '11 weeks', date_trunc('week', now()), interval '1 week') as week)
+     select to_char(w.week, 'YYYY-MM-DD') as week,
+            count(r.id)::int as reports,
+            count(r.id) filter (where r.status = 'validated')::int as validated,
+            count(distinct r.author_id)::int as leads,
+            count(distinct r.org_id)::int as companies
+       from w left join site_report r on r.created_at >= w.week and r.created_at < w.week + interval '1 week'
+             and r.org_id in (select org_id from org_settings where not is_demo)
+      group by w.week order by w.week`,
+  );
+  const cohort = await owner.query<{ orgId: string; createdAt: string; firstReport: string | null; firstInvoice: string | null; hasLead: boolean; invitedClient: boolean; week4: boolean; ageDays: number }>(
+    `select o.id as "orgId", o."createdAt" as "createdAt",
+            (select min(r.created_at) from site_report r where r.org_id = o.id) as "firstReport",
+            (select min(i.created_at) from invoice i where i.org_id = o.id) as "firstInvoice",
+            exists (select 1 from member m where m."organizationId" = o.id and m.role = 'site_lead') as "hasLead",
+            exists (select 1 from portal_link l where l.org_id = o.id) as "invitedClient",
+            exists (select 1 from site_report r where r.org_id = o.id and r.created_at between o."createdAt" + interval '21 days' and o."createdAt" + interval '28 days') as week4,
+            extract(day from now() - o."createdAt")::int as "ageDays"
+       from organization o join org_settings s on s.org_id = o.id
+      where not s.is_demo and o."createdAt" > now() - interval '90 days'`,
+  );
+  const now = await owner.query<{ leads7: number; reports7: number; activeSites: number; sitesReported: number; trialsOver: number; converted: number; companies: number }>(
+    `select (select count(distinct r.author_id) from site_report r join org_settings s on s.org_id = r.org_id where not s.is_demo and r.created_at > now() - interval '7 days')::int as leads7,
+            (select count(*) from site_report r join org_settings s on s.org_id = r.org_id where not s.is_demo and r.created_at > now() - interval '7 days')::int as reports7,
+            (select count(*) from project p join org_settings s on s.org_id = p.org_id where not s.is_demo and p.status = 'active' and p.archived_at is null)::int as "activeSites",
+            (select count(*) from project p join org_settings s on s.org_id = p.org_id where not s.is_demo and p.status = 'active' and p.archived_at is null
+               and exists (select 1 from site_report r where r.project_id = p.id and r.created_at > now() - interval '7 days'))::int as "sitesReported",
+            (select count(*) from org_settings s where not s.is_demo and s.trial_ends_at < now())::int as "trialsOver",
+            (select count(*) from org_settings s where not s.is_demo and s.trial_ends_at < now() and s.paid_until is not null)::int as converted,
+            (select count(*) from org_settings s where not s.is_demo)::int as companies`,
+  );
+  const rows = cohort.rows;
+  const hours = (from: string, to: string | null) => (to ? (new Date(to).getTime() - new Date(from).getTime()) / 3_600_000 : null);
+  const toFirst = rows.map((row) => hours(row.createdAt, row.firstReport)).filter((value): value is number => value !== null).sort((a, b) => a - b);
+  const pct = (part: number, whole: number) => (whole ? Math.round((part * 100) / whole) : null);
+  const old28 = rows.filter((row) => row.ageDays >= 28);
+  const n = now.rows[0]!;
+  return {
+    weeks: weeks.rows,
+    signups30: rows.filter((row) => row.ageDays <= 30).length,
+    cohortSize: rows.length,
+    activation: {
+      firstReport48hPct: pct(rows.filter((row) => { const h = hours(row.createdAt, row.firstReport); return h !== null && h <= 48; }).length, rows.length),
+      medianHoursToFirstReport: toFirst.length ? Math.round(toFirst[Math.floor(toFirst.length / 2)]!) : null,
+      invitedLeadPct: pct(rows.filter((row) => row.hasLead).length, rows.length),
+      firstInvoicePct: pct(rows.filter((row) => row.firstInvoice).length, rows.length),
+      invitedClientPct: pct(rows.filter((row) => row.invitedClient).length, rows.length),
+    },
+    usage: {
+      activeLeads7: n.leads7,
+      reportsPerLead7: n.leads7 ? Math.round((n.reports7 / n.leads7) * 10) / 10 : null,
+      sitesReportedPct: pct(n.sitesReported, n.activeSites),
+      activeSites: n.activeSites,
+    },
+    retention: { week4Pct: pct(old28.filter((row) => row.week4).length, old28.length), base: old28.length },
+    conversion: { trialToPaidPct: pct(n.converted, n.trialsOver), trialsOver: n.trialsOver, companies: n.companies },
+  };
+}

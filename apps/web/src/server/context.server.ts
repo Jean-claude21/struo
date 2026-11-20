@@ -3,6 +3,7 @@ import {
 } from '@struo/core';
 import { getCookie, getRequestHeaders, setCookie } from '@tanstack/react-start/server';
 import { isLocale, LOCALE_COOKIE, localeFromHeaders, type Locale } from '@/i18n/index.tsx';
+import { reportError } from './monitor.server.ts';
 import { runtime } from './runtime.server.ts';
 
 export const ORG_COOKIE = 'struo_org';
@@ -11,6 +12,8 @@ export interface Viewer {
   userId: string;
   name: string;
   email: string;
+  /** Whether the address was confirmed from the e-mailed link (spec 040). */
+  emailVerified: boolean;
   companies: { id: string; name: string; role: Role }[];
   /** The company being worked on (cookie, else the first one). */
   company: { id: string; name: string; role: Role } | null;
@@ -29,6 +32,7 @@ export async function loadViewer(): Promise<Viewer | null> {
     userId: session.user.id,
     name: session.user.name,
     email: session.user.email,
+    emailVerified: Boolean(session.user.emailVerified),
     companies,
     company,
     platformAdmin: env.PLATFORM_ADMIN_EMAILS.includes(session.user.email.toLowerCase()),
@@ -84,7 +88,7 @@ export function toClientError(error: unknown): Error {
     return new Error(Object.keys(error.params).length ? `${error.code}|${JSON.stringify(error.params)}` : error.code);
   }
   if (error instanceof Error && /^[a-z_]+(\|.*)?$/u.test(error.message)) return error;
-  console.error('[server]', error);
+  reportError(error, { where: 'server-fn' });
   return new Error('generic');
 }
 
@@ -92,6 +96,6 @@ export function toClientError(error: unknown): Error {
 export function jsonError(error: unknown): Response {
   if (isMalformedId(error)) return Response.json({ error: 'not_found', params: {} }, { status: 404 });
   if (error instanceof DomainError) return Response.json({ error: error.code, params: error.params }, { status: error.status });
-  console.error('[api]', error);
+  reportError(error, { where: 'api' });
   return Response.json({ error: 'generic' }, { status: 500 });
 }

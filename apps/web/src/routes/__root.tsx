@@ -1,9 +1,10 @@
 /// <reference types="vite/client" />
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { ToastProvider } from '@/components/kit.tsx';
 import { getShell } from '@/features/shell/server.ts';
 import { THEME_BOOT } from '@/lib/theme.ts';
+import { initBrowserMonitoring } from '@/lib/monitor.ts';
 import { I18nProvider, translate } from '@/i18n/index.tsx';
 import appCss from '@/styles.css?url';
 
@@ -31,11 +32,17 @@ export const Route = createRootRoute({
 function Shell({ children }: { children: ReactNode }) {
   const data = Route.useLoaderData();
   const locale = data?.locale ?? 'fr';
+  const userId = data?.viewer?.userId;
+  useEffect(() => { void initBrowserMonitoring(data?.monitoring, userId); }, [data?.monitoring, userId]);
   return (
     <html lang={locale}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <HeadContent />
+        {data?.monitoring?.umami ? (
+          // Audience analytics without cookies (spec 041): pages and named clicks, on this domain only.
+          <script defer src={data.monitoring.umami.src} data-website-id={data.monitoring.umami.id} data-domains={data.monitoring.umami.domain} />
+        ) : null}
       </head>
       <body>
         <I18nProvider locale={locale}>
