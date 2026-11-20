@@ -48,6 +48,7 @@ real external account · ⏳ next.
 | 041 | `041-monitoring` | Error tracking (server, browser, field sync, jobs, e-mails) with alerts and uptime checks, cookieless audience in production, branded error page, « Santé produit » console tab (north star, activation, retention, conversion) | ✅ | `health.test.ts`, probe event received |
 | 042 | `042-demo-landing` | « Clarity » landing (live Today board, what/when/where, professionalism, offline simulator, offer « Démarrage Chantiers Clairs ») and try without an account (private 24 h copy per visitor, every role, demo bar, nothing sent) | ✅ | 14 end-to-end checks; guarantee withdrawn in 045 |
 | 045 | `045-landing-clarity` | Landing « Ce qui est bien géré se voit » (Impeccable), sourced figures and estimate, prices per country currency, call-back requests, screens per role (demo and real use), site map on Today | 🟡 for review | `growth.test.ts`; every demo role walked |
+| 046 | `045-landing-clarity` | Tasks given per site (page and site tab), internal thread per site, document versions kept and downloadable | 🟡 for review | `work.test.ts` |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

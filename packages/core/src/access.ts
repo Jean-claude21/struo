@@ -2,7 +2,7 @@ import { asUser, type Actor, type Db, type Door, type Tx } from './db.ts';
 import { can, isRole, type Permission } from './permissions.ts';
 import { DomainError, forbidden } from './errors.ts';
 
-export { PERMISSIONS, can, isRole, type Permission } from './permissions.ts';
+export { PERMISSIONS, SCREENS, can, homeOf, isRole, screenOf, sees, type Permission, type Screen } from './permissions.ts';
 
 export function ensure(actor: Actor, permission: Permission): void {
   if (!can(actor.role, permission)) throw forbidden();

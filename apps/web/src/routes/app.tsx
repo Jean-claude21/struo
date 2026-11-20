@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   BarChart3, Building2, CalendarRange, ChevronsUpDown, FileText, FolderKanban, HardHat, Home, LogOut, Menu, Monitor, Moon, Palette, Plus,
-  Keyboard, MailWarning, Sparkles, Receipt, Search, Settings, Shield, Sun, UserRound, Users, Wallet, WalletCards, Contact, type LucideIcon,
+  Keyboard, ListChecks, MailWarning, Sparkles, Receipt, Search, Settings, Shield, Sun, UserRound, Users, Wallet, WalletCards, Contact, type LucideIcon,
 } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { CommandPalette } from '@/components/Palette.tsx';
@@ -54,6 +54,7 @@ const WORK: NavItem[] = [
   { to: '/app', key: 'shell.today', icon: Home, exact: true, screen: 'today' },
   { to: '/app/projects', key: 'shell.sites', icon: FolderKanban, screen: 'projects' },
   { to: '/app/planning', key: 'shell.planning', icon: CalendarRange, screen: 'planning' },
+  { to: '/app/tasks', key: 'tasks.nav', icon: ListChecks, screen: 'tasks' },
   { to: '/app/indicators', key: 'kpi.navLabel', icon: BarChart3, screen: 'indicators' },
   { to: '/app/field', key: 'shell.field', icon: HardHat, screen: 'field' },
   { to: '/app/finance', key: 'shell.finance', icon: Wallet, screen: 'finance' },

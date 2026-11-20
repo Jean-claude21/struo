@@ -1,4 +1,4 @@
-import { can } from '@struo/core/permissions';
+import { can, sees } from '@struo/core/permissions';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 import { DocumentDialog, ExpenseDialog, InvoiceDialog, MilestoneDialog, PaymentDialog, ReminderDialog, ReportCard } from '@/components/forms.tsx';
@@ -13,13 +13,14 @@ import { Donut, HBars } from '@/components/charts.tsx';
 import { KpiTile, Panel, Progress as Bar, StatusChip } from '@/components/kit.tsx';
 import { EndHint } from '@/components/SiteBits.tsx';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
+import { NotesThread, TaskBoard } from '@/components/Work.tsx';
 
 export const Route = createFileRoute('/app/projects/$projectId')({
   loader: ({ params }) => getProjectPage({ data: { id: params.projectId } }),
   component: ProjectPage,
 });
 
-type Tab = 'overview' | 'field' | 'finance' | 'expenses' | 'documents' | 'planning' | 'portal' | 'messages';
+type Tab = 'overview' | 'work' | 'field' | 'finance' | 'expenses' | 'documents' | 'planning' | 'portal' | 'messages';
 type Data = Awaited<ReturnType<typeof getProjectPage>>;
 
 function ProjectPage() {
@@ -27,7 +28,7 @@ function ProjectPage() {
   const data = Route.useLoaderData();
   const { project } = data;
   const [tab, setTab] = useState<Tab>('overview');
-  const tabs: Tab[] = ['overview', 'field', ...(can(data.role, 'finance.read') ? (['finance'] as Tab[]) : []), 'expenses', 'documents', 'planning', 'portal', 'messages'];
+  const tabs: Tab[] = ['overview', 'work', 'field', ...(sees(data.role, 'finance') ? (['finance'] as Tab[]) : []), 'expenses', 'documents', 'planning', 'portal', 'messages'];
   const cover = data.reports.flatMap((report) => report.photos)[0];
   const client = data.clients.find((candidate) => candidate.id === project.clientId) ?? null;
   const money = (minor: number) => formatMoney(locale, minor, project.currencyCode);
@@ -64,7 +65,7 @@ function ProjectPage() {
       </div>
       <div className="grid kpi5">
         <KpiTile label={t('projects.budget')} value={money(project.budgetMinor)} sub={project.managerName ?? undefined} />
-        {can(data.role, 'finance.read') ? (
+        {sees(data.role, 'finance') ? (
           <>
             <KpiTile label={t('dashboard.collected')} value={money(project.finance.collectedMinor)} sub={`${project.collectedPct} % · ${t('dashboard.invoiced')} ${project.finance.invoicedPct} %`} />
             <KpiTile label={t('expenses.spent')} value={money(project.finance.spentMinor)} sub={`${project.budgetMinor ? Math.round((project.finance.spentMinor / project.budgetMinor) * 100) : 0} % ${t('projects.budget').toLowerCase()}`} />
@@ -75,6 +76,12 @@ function ProjectPage() {
       </div>
       <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'portal' ? t('clientInvite.tab') : t(`projects.tabs.${value}`) }))} />
       {tab === 'overview' ? <Overview data={data} /> : null}
+      {tab === 'work' ? (
+        <div className="grid-main">
+          <TaskBoard tasks={data.tasks} members={data.members} projectId={project.id} role={data.role} userId={data.userId} />
+          <NotesThread projectId={project.id} notes={data.notes} />
+        </div>
+      ) : null}
       {tab === 'field' ? <FieldTab data={data} /> : null}
       {tab === 'finance' ? <FinanceTab data={data} /> : null}
       {tab === 'expenses' ? <ExpensesTab data={data} /> : null}
@@ -115,7 +122,7 @@ function Overview({ data }: { data: Data }) {
             </div>
           </div>
         </Panel>
-        {can(data.role, 'finance.read') ? (
+        {sees(data.role, 'finance') ? (
           <Panel title={t('projects.budget')}>
             <HBars format={money} items={[
               { label: t('projects.budget'), value: project.budgetMinor, color: 'var(--ink-faint)' },

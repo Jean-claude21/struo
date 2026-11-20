@@ -235,7 +235,11 @@ function Landing() {
   const { viewer } = root.useLoaderData();
   const paid = plans.filter((plan) => plan.code !== 'trial');
   const pro = plans.find((plan) => plan.code === 'pro');
-  const countries = useMemo(() => sortedCountries(locale), [locale]);
+  // Country names come from Intl, which the server and the browser may spell differently: the full
+  // list is built in the browser, the server renders only the current country.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const countries = useMemo(() => (mounted ? sortedCountries(locale) : sortedCountries(locale).filter((item) => item.code === country)), [locale, mounted, country]);
   const list = (key: MessageKey) => t(key).split('|');
   const nav = [
     { href: '#constat', label: t('lp.nav.problem') }, { href: '#comment', label: t('lp.nav.how') },
@@ -418,7 +422,7 @@ function Landing() {
             <div><h3>{t('lp.offer.pricingTitle')}</h3><p>{t('lp.offer.pricingLead')}</p></div>
             <label className="lp-country">{t('lp.offer.country')}
               <select value={country} onChange={(event) => void chooseCountry(event.target.value)}>
-                {countries.map((item) => <option key={item.code} value={item.code}>{item.name} · {item.currency}</option>)}
+                {countries.map((item) => <option key={item.code} value={item.code} suppressHydrationWarning>{item.name} · {item.currency}</option>)}
               </select>
             </label>
           </div>

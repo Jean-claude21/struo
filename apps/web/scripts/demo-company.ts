@@ -641,6 +641,38 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
   }
   log(`client spaces: ${PORTALS.length}`);
 
+  // ---------------------------------------------------------------- tasks and internal threads (spec 046)
+  const TASKS: [string, string, Person, number, 'low' | 'normal' | 'urgent', 'todo' | 'doing' | 'done'][] = [
+    ['KC-01', 'Commander les gouttières restantes', 'jean', 2, 'normal', 'doing'],
+    ['KC-01', 'Préparer le PV de réception partielle', 'jean', 9, 'normal', 'todo'],
+    ['KC-02', 'Relancer le bureau de contrôle pour la dalle R+3', 'mawuli', -2, 'urgent', 'todo'],
+    ['KC-02', 'Vérifier les réservations électricité avant coulage', 'yao', 1, 'urgent', 'doing'],
+    ['KC-03', 'Faire réparer la fuite de la citerne', 'komi', 0, 'urgent', 'doing'],
+    ['KC-03', 'Photos des portes posées pour la commune', 'komi', 3, 'normal', 'todo'],
+    ['KC-04', 'Confirmer la livraison de la charpente métallique', 'mawuli', 5, 'normal', 'todo'],
+    ['KC-05', 'Planifier le passage du plombier', 'edem', 4, 'low', 'todo'],
+    ['KC-05', 'Relancer la situation n°2 de la clinique', 'akossiwa', -1, 'urgent', 'todo'],
+    ['KC-01', 'Envoyer la situation n°3 au client', 'akossiwa', -6, 'normal', 'done'],
+  ];
+  for (const [code, title, who, due, priority, status] of TASKS) {
+    if (!ids[code]) continue;
+    const { id } = await core.createTask(app, actors.jean, { projectId: ids[code], title, assigneeId: userIds[who], dueOn: day(due), priority });
+    if (status !== 'todo') await core.updateTask(app, actors.jean, id, { status });
+  }
+  const THREADS: [string, Person, string, number][] = [
+    ['KC-02', 'mawuli', 'Le bureau de contrôle passe jeudi pour la dalle R+3 : on ne coule pas avant son visa.', -3],
+    ['KC-02', 'yao', 'Ferraillage prêt, il manque 6 barres de 12 : commandées ce matin.', -2],
+    ['KC-03', 'komi', 'Fuite sur la citerne côté classe 4, le plombier vient demain 8 h.', -1],
+    ['KC-03', 'afi', 'OK pour le plombier. Prévenez la commune que la visite de vendredi est maintenue.', -1],
+    ['KC-01', 'jean', 'Le client veut voir les gouttières avant de signer l’étape couverture.', -4],
+  ];
+  for (const [code, who, body, offset] of THREADS) {
+    if (!ids[code]) continue;
+    const { id } = await core.postNote(app, actors[who], { projectId: ids[code], body });
+    await owner.query('update project_note set created_at = $2 where id = $1', [id, at(offset, 17, between(0, 59))]);
+  }
+  log(`tasks: ${TASKS.length}, internal notes: ${THREADS.length}`);
+
   // ---------------------------------------------------------------- the journal follows the real dates
   await owner.query(
     `update journal j set at = x.at from (

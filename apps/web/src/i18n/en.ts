@@ -10,7 +10,7 @@ export const en: Catalog = {
   ...growEn,
   app: {
     name: 'Struo',
-    tagline: 'Your sites, at a glance.',
+    tagline: 'Good management shows.',
     language: 'Language',
     loading: 'Loading…',
     save: 'Save',
@@ -257,6 +257,7 @@ export const en: Catalog = {
     noProjects: 'No project yet. Create the first one or import your spreadsheet.',
     tabs: {
       overview: 'Overview',
+      work: 'Tasks and internal thread',
       field: 'Field',
       finance: 'Finance',
       expenses: 'Expenses',

@@ -152,7 +152,7 @@ function FieldDesk() {
                   <div className="stack" style={{ gap: '.4rem' }}>
                     <span className="row tight muted small"><Mic size={14} />{t(`field.transcriptStatus.${(selected.transcriptStatus ?? 'none') as 'none'}`)}</span>
                     <audio controls preload="none" src={`/api/files/audio/${selected.id}`} style={{ width: '100%' }} />
-                    {selected.transcript ? <blockquote style={{ margin: 0, padding: '.6rem .9rem', borderLeft: '3px solid var(--brand)', background: 'var(--sunken)', borderRadius: 6 }}>{selected.transcript}</blockquote> : null}
+                    {selected.transcript ? <blockquote style={{ margin: 0, padding: '.6rem .9rem', border: '1px solid var(--line)', background: 'var(--sunken)', borderRadius: 6 }}>{selected.transcript}</blockquote> : null}
                   </div>
                 ) : null}
                 <div className="row small muted"><Avatar name={selected.authorName} />{t('field.by', { name: selected.authorName })}

@@ -125,6 +125,13 @@ export async function attachDocumentFile(
 ): Promise<void> {
   ensure(actor, 'documents.write');
   await asActor(db, actor, async (tx) => {
+    // Spec 046: the file being replaced is kept as a previous version, never lost.
+    await tx.query(
+      `insert into document_version (org_id, document_id, storage_key, media_type, size_bytes, replaced_by)
+       select org_id, id, storage_key, media_type, size_bytes, $3 from project_document
+        where id = $1 and org_id = $2 and storage_key is not null and storage_key <> $4`,
+      [id, actor.orgId, actor.userId, file.storageKey],
+    );
     const { rowCount } = await tx.query(
       `update project_document set storage_key = $3, media_type = $4, size_bytes = $5, updated_at = now(),
               status = case when status = 'missing' then 'pending' else status end

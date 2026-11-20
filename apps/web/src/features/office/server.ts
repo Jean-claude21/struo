@@ -72,7 +72,8 @@ export const getProjectPage = createServerFn({ method: 'GET' })
     act(async (actor) => {
       const { db } = runtime();
       const project = await core.getProject(db, actor, data.id);
-      const canFinance = core.can(actor.role, 'finance.read');
+      // Spec 045: money is shown to the roles whose screens include finance.
+      const canFinance = core.sees(actor.role, 'finance');
       const [reports, incidents, invoices, payments, documents, milestones, expenses, messages, links, configuration, clients, members] =
         await Promise.all([
           core.listReports(db, actor, { projectId: data.id, limit: 50 }),
@@ -88,10 +89,12 @@ export const getProjectPage = createServerFn({ method: 'GET' })
           core.listClients(db, actor),
           core.listMembers(db, actor),
         ]);
-      const settings = await core.getSettings(db, actor);
+      const [settings, tasks, notes] = await Promise.all([
+        core.getSettings(db, actor), core.listTasks(db, actor, { projectId: data.id }), core.listNotes(db, actor, data.id),
+      ]);
       return {
         role: actor.role, userId: actor.userId, project, reports, incidents, invoices, payments, documents, milestones,
-        expenses, messages, links, configuration, clients, members, companyName: settings.name,
+        expenses, messages, links, configuration, clients, members, companyName: settings.name, tasks, notes,
       };
     }),
   );
@@ -551,6 +554,42 @@ export const revokePortalLink = createServerFn({ method: 'POST' })
 export const postMessage = createServerFn({ method: 'POST' })
   .validator((input: { projectId: string; body: string }) => input)
   .handler(({ data }) => act((actor) => core.postTeamMessage(runtime().db, actor, data.projectId, data.body)));
+
+// ---------------------------------------------------------------- tasks, internal thread, versions (spec 046)
+
+export const getTasks = createServerFn({ method: 'GET' })
+  .validator((input: { mine?: boolean; open?: boolean } | undefined) => input ?? {})
+  .handler(({ data }) =>
+    act(async (actor) => {
+      const { db } = runtime();
+      const [tasks, projects, members] = await Promise.all([
+        core.listTasks(db, actor, { assigneeId: data.mine ? actor.userId : undefined, open: data.open }),
+        core.listProjects(db, actor, {}),
+        core.listMembers(db, actor),
+      ]);
+      return { role: actor.role, userId: actor.userId, tasks, projects, members };
+    }),
+  );
+
+export const createTask = createServerFn({ method: 'POST' })
+  .validator(any)
+  .handler(({ data }) => act((actor) => core.createTask(runtime().db, actor, data)));
+
+export const updateTask = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; patch: Record<string, unknown> }) => input)
+  .handler(({ data }) => act((actor) => core.updateTask(runtime().db, actor, data.id, data.patch)));
+
+export const removeTask = createServerFn({ method: 'POST' })
+  .validator(idOf)
+  .handler(({ data }) => act((actor) => core.removeTask(runtime().db, actor, data.id)));
+
+export const postNote = createServerFn({ method: 'POST' })
+  .validator((input: { projectId: string; body: string }) => input)
+  .handler(({ data }) => act((actor) => core.postNote(runtime().db, actor, data)));
+
+export const getDocumentVersions = createServerFn({ method: 'GET' })
+  .validator(idOf)
+  .handler(({ data }) => act((actor) => core.listDocumentVersions(runtime().db, actor, data.id)));
 
 // ---------------------------------------------------------------- alerts as text (assistants)
 

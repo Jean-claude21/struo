@@ -2,6 +2,7 @@ import { ReminderDialog } from './forms.tsx';
 import { Badge, DateText, Empty, ErrorText, Money, useAction } from './ui.tsx';
 import { updateDocument, updateMilestone } from '@/features/office/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
+import { DocumentVersions } from './Work.tsx';
 
 type InvoiceView = {
   id: string; projectName: string; clientName: string | null; number: string; kind: string; dueOn: string; currencyCode: string;
@@ -146,6 +147,7 @@ export function DocumentRows({ documents, canWrite, showProject }: { documents: 
                   </a>
                 ) : null}
                 {canWrite ? <UploadButton documentId={document.id} /> : null}
+                {document.hasFile ? <DocumentVersions documentId={document.id} /> : null}
               </td>
               <td>
                 <input
