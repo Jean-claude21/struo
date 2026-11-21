@@ -23,7 +23,7 @@ export interface DocumentRow {
   sharedWithClient: boolean;
   note: string | null;
   /** Spec 048: administrative, technical (drawings, studies) or other. */
-  family: 'admin' | 'technical' | 'other';
+  family: 'admin' | 'technical' | 'contract' | 'other';
 }
 
 export async function listDocuments(db: Db, actor: Actor, filters: { projectId?: string } = {}): Promise<DocumentRow[]> {
@@ -67,13 +67,13 @@ const documentInput = z.object({
   projectId: z.string().uuid(),
   docTypeId: z.string().uuid().nullable().optional(),
   title: z.string().trim().min(1).max(200),
-  status: z.enum(DOCUMENT_STATUSES).default('pending'),
+  status: z.enum(DOCUMENT_STATUSES).optional(),
   reference: z.string().trim().max(120).nullable().optional(),
   issuedOn: dateString.nullable().optional(),
   expiresOn: dateString.nullable().optional(),
   sharedWithClient: z.boolean().default(false),
   note: z.string().trim().max(2000).nullable().optional(),
-  family: z.enum(['admin', 'technical', 'other']).optional(),
+  family: z.enum(['admin', 'technical', 'contract', 'other']).optional(),
 });
 
 export async function addDocument(db: Db, actor: Actor, input: unknown): Promise<{ id: string }> {
@@ -85,9 +85,9 @@ export async function addDocument(db: Db, actor: Actor, input: unknown): Promise
     const { rows } = await tx.query<{ id: string }>(
       `insert into project_document (org_id, project_id, doc_type_id, title, status, reference, issued_on, expires_on,
                                      shared_with_client, note, family)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+       values ($1, $2, $3, $4, coalesce($5, case when $3::uuid is null then 'valid' else 'pending' end), $6, $7, $8, $9, $10,
                coalesce($11, case when exists (select 1 from doc_type where id = $3 and required) then 'admin' else 'other' end)) returning id`,
-      [actor.orgId, data.projectId, data.docTypeId ?? null, data.title, data.status, data.reference ?? null,
+      [actor.orgId, data.projectId, data.docTypeId ?? null, data.title, data.status ?? null, data.reference ?? null,
         data.issuedOn ?? null, data.expiresOn ?? null, data.sharedWithClient, data.note ?? null, data.family ?? null],
     );
     await journal(tx, actor, 'document.add', rows[0]!.id, null, data);

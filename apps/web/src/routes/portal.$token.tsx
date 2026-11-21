@@ -3,17 +3,16 @@
 // finger, payments and messages. Phone first, one main action per screen.
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, Check, CircleCheck, CreditCard, FileText, HardHat, Home, KeyRound, Lock, Mail, MessageCircle, Send, Wallet } from 'lucide-react';
+import { ArrowRight, Check, CircleCheck, FileText, HardHat, Home, KeyRound, Lock, Mail, MessageCircle, Send, Wallet } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { SignaturePad, type SignaturePadHandle } from '@/components/SignaturePad.tsx';
 import { Modal, useToast } from '@/components/kit.tsx';
 import { formatDate, formatMoney } from '@/components/ui.tsx';
-import { getPortal, portalDecideChange, portalMessage, portalPay, portalRequestCode, portalVerifyCode } from '@/features/portal/server.ts';
+import { getPortal, portalDecideChange, portalMessage, portalRequestCode, portalVerifyCode } from '@/features/portal/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 import { usePhotoViewer } from '@/components/PhotoViewer.tsx';
 
 export const Route = createFileRoute('/portal/$token')({
-  validateSearch: (search: Record<string, unknown>): { paid?: string } => (typeof search.paid === 'string' ? { paid: search.paid } : {}),
   loader: async ({ params }) => {
     try {
       return { data: await getPortal({ data: { token: params.token } }) };
@@ -108,7 +107,6 @@ function Gate({ data }: { data: Extract<Loaded, { gate: true }> }) {
 function SpaceView({ data }: { data: Space }) {
   const { t, locale } = useI18n();
   const { token } = Route.useParams();
-  const search = Route.useSearch();
   const router = useRouter();
   const toast = useToast();
   const { view, reports, show } = data;
@@ -120,7 +118,6 @@ function SpaceView({ data }: { data: Space }) {
   const money = (minor: number) => formatMoney(locale, minor, view.project.currency);
   const date = (value: string | null) => formatDate(locale, value);
   const brand = view.company.brandColor ?? undefined;
-  useEffect(() => { if (search.paid) toast({ text: t('clientPortal.paidOk') }); }, [search.paid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const photoUrl = (id: string) => `/api/portal/${token}/file/${id}`;
   const due = view.invoices.filter((invoice) => invoice.balance > 0);
@@ -151,7 +148,7 @@ function SpaceView({ data }: { data: Space }) {
               <h3 style={{ margin: 0 }}>{t('clientReport.portalTitle')}</h3>
               {data.clientReports.slice(0, 6).map((item) => (
                 <Link key={item.id} to="/portal/$token/report/$id" params={{ token, id: item.id }} className="row" style={{ justifyContent: 'space-between' }}>
-                  <span>{date(item.from)} → {date(item.to)}</span><ArrowRight size={16} />
+                  <span className="stack" style={{ gap: '.1rem' }}><span>{date(item.from)} → {date(item.to)}</span>{item.summary ? <span className="small muted trunc">{item.summary}</span> : null}</span><ArrowRight size={16} />
                 </Link>
               ))}
             </section>
@@ -342,17 +339,9 @@ function SignMilestone({ milestone, company, defaultName, onClose, onDone }: {
 }
 
 function Payments({ view, money, date }: { view: Space['view']; money: (minor: number) => string; date: (value: string | null) => string }) {
-  const { t, errorText } = useI18n();
-  const { token } = Route.useParams();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
   const due = view.invoices.filter((invoice) => invoice.balance > 0);
   const paid = view.invoices.filter((invoice) => invoice.balance <= 0);
-  const pay = async (invoiceId: string) => {
-    setBusy(invoiceId); setError(null);
-    try { const { checkoutUrl } = await portalPay({ data: { token, invoiceId } }); window.location.href = checkoutUrl; }
-    catch (caught) { setError(errorText(caught)); setBusy(null); }
-  };
   return (
     <div className="stack loose">
       <h2 style={{ margin: 0 }}>{t('clientPortal.tabPayments')}</h2>
@@ -361,16 +350,8 @@ function Payments({ view, money, date }: { view: Space['view']; money: (minor: n
           <span className="muted small">{invoice.number} · {t(`finance.kinds.${invoice.kind as 'progress'}`)}</span>
           <span style={{ fontSize: '1.9rem', fontWeight: 800 }}>{money(invoice.balance)}</span>
           <span className="small">{t('clientPortal.dueBefore', { date: date(invoice.dueOn) })}</span>
-          {view.canPay ? (
-            <>
-              <span className="small muted">{t('clientPortal.payWith')} : Mobile Money (TMoney, Flooz), carte</span>
-              <button type="button" className="btn block" disabled={busy === invoice.id} onClick={() => void pay(invoice.id)}><CreditCard size={18} />{t('clientPortal.payNow', { amount: money(invoice.balance) })}</button>
-              <span className="faint xsmall">{t('clientPortal.payNote')}</span>
-            </>
-          ) : <div className="notice info small">{t('portal.payUnavailable')}</div>}
         </section>
       )) : <div className="notice ok"><CircleCheck size={18} />{t('clientPortal.nothingToPay')}</div>}
-      {error ? <p className="error" role="alert">{error}</p> : null}
       {paid.length ? (
         <section className="stack" style={{ gap: '.4rem' }}>
           <h3 style={{ margin: 0 }}>{t('clientPortal.history')}</h3>

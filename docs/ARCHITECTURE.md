@@ -57,8 +57,8 @@ sequenceDiagram
 - Every company table has `org_id` and a policy `struo_is_member(org_id)` created in the same
   migration. A test fails if a table with `org_id` lacks row-level security.
 - The application connects as `struo_app` (no `BYPASSRLS`, not superuser). The owner connection is
-  used only for migrations, the platform console, the payment webhooks, the portal payment intents
-  and the daily digest — each scoped explicitly.
+  used only for migrations, the platform console, the subscription payment webhooks, the
+  client portal and the daily jobs — each scoped explicitly.
 - The end-client portal has no account: a token (only its SHA-256 hash is stored) opens
   `security definer` SQL functions that return that one project.
 - An MCP/API key (hash stored) acts as its creator, with their current role, in its company.

@@ -41,7 +41,7 @@ async function createSandbox(rt: Runtime): Promise<string> {
   const tag = randomUUID().slice(0, 8);
   const password = `demo-${randomBytes(18).toString('base64url')}`;
   const result = await seedDemoCompany(
-    { owner: rt.owner, app: rt.db, storage: rt.storage, assetsDir: dir, passwordHash: await hashPassword(password), baseUrl: rt.env.APP_BASE_URL },
+    { owner: rt.owner, app: rt.db, storage: rt.storage, assetsDir: dir, passwordHash: await hashPassword(password), baseUrl: rt.env.APP_BASE_URL, seal: (token) => rt.secrets.seal(token) },
     { name: DEMO_NAME, email: (key) => `${key}.${tag}@demo.struo.test`, replaceExisting: false },
   );
   await rt.owner.query('update org_settings set is_demo = true, ai_policy = $2, ai_budget_cents = $3 where org_id = $1', [result.orgId, 'company', AI_BUDGET_CENTS]);

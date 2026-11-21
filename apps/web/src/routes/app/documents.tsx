@@ -31,7 +31,7 @@ function Documents() {
   const canWrite = can(data.role, 'documents.write');
   const [tab, setTab] = useState<'compliance' | 'technical' | 'library' | 'expiries'>('compliance');
   // Spec 048: drawings, studies and other documents, by site, with their versions.
-  const technical = data.documents.filter((doc) => doc.family !== 'admin');
+  const technical = data.documents.filter((doc) => doc.family === 'technical' || doc.family === 'other');
   const [openId, setOpenId] = useState<string | null>(search.doc ?? null);
   const current = data.documents.find((doc) => doc.id === openId) ?? null;
   const statusLabel = (status: Doc['status']) => t(`documents.statuses.${status}`);
@@ -167,7 +167,7 @@ function Documents() {
             <div className="row"><StatusChip shape={DOC_SHAPE[current.status]} label={statusLabel(current.status)} />{current.required ? <span className="badge">{t('documents.required')}</span> : null}</div>
             <label className="field">{t('families.family')}
               <select defaultValue={current.family} disabled={!canWrite} onChange={(event) => void save(current.id, { family: event.target.value })}>
-                {(['admin', 'technical', 'other'] as const).map((family) => <option key={family} value={family}>{t(`families.${family}`)}</option>)}
+                {(['admin', 'technical', 'contract', 'other'] as const).map((family) => <option key={family} value={family}>{t(`families.${family}`)}</option>)}
               </select>
             </label>
             <label className="field">{t('app.status')}
