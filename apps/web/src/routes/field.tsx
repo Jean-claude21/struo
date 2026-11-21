@@ -5,9 +5,10 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Camera, Check, ChevronRight, ClipboardCheck, CloudRain, CloudSun, FileSignature, FileText, Hammer, HardHat, Home, LogOut, Map as MapIcon,
-  Mic, PackageCheck, RefreshCw, ScanLine, Square, Sun, TriangleAlert, Truck, UserRound, Users, Wind, Wrench, CloudOff, CheckCircle2, X,
+  Mic, PackageCheck, RefreshCw, ScanLine, Square, Sun, TriangleAlert, Truck, UserRound, Users, Wind, Wrench, CloudOff, CheckCircle2, X, MessageCircle, Send,
 } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
+import { PushToggle } from '@/components/PushToggle.tsx';
 import { SignaturePad, type SignaturePadHandle } from '@/components/SignaturePad.tsx';
 import { authClient } from '@/features/auth/client.ts';
 import { AssistantButton, IntelligenceProvider } from '@/components/Intelligence.tsx';
@@ -25,7 +26,7 @@ export const Route = createFileRoute('/field')({
   component: FieldApp,
 });
 
-type Tab = 'home' | 'sites' | 'plans' | 'me';
+type Tab = 'home' | 'sites' | 'plans' | 'office' | 'me';
 type Flow = null | 'report' | 'incident' | 'checklist' | 'delivery' | 'pv' | { done: 'report' | 'checklist' | 'delivery' | 'pv' | 'incident' };
 const INCIDENT_KINDS = [['material_delay', Truck], ['defect', Hammer], ['weather', CloudRain], ['accident', TriangleAlert], ['equipment', Wrench], ['other', ClipboardCheck]] as const;
 const PRIORITIES = ['info', 'important', 'critical'] as const;
@@ -169,10 +170,15 @@ function FieldApp() {
             <p className="faint small">{t('field2.planOffline')}</p>
           </div>
         ) : null}
+        {tab === 'office' && site ? (
+          <OfficeTab site={site} queue={queue} canRequest={Boolean(snapshot?.user.canReport)} onQueued={async () => { setQueue(await outbox()); if (navigator.onLine) await refresh(); }} />
+        ) : null}
         {tab === 'me' ? (
           <div className="stack">
             <h2 style={{ margin: 0 }}>{snapshot?.user.name}</h2>
             <div className="row"><LanguageSwitch /></div>
+            <h3 style={{ margin: '.5rem 0 0' }}>{t('teamPush.title')}</h3>
+            <PushToggle />
             <h3 style={{ margin: '.5rem 0 0' }}>{t('field2.outbox')}</h3>
             {queue.length ? queue.map((item) => (
               <div key={item.id} className="card small">
@@ -196,7 +202,7 @@ function FieldApp() {
         </div>
       ) : null}
       <nav className="field-tabs" aria-label="Struo">
-        {([['home', Home, 'field2.tabHome'], ['sites', HardHat, 'field2.tabSites'], ['plans', MapIcon, 'field2.tabPlans'], ['me', UserRound, 'field2.tabMe']] as const).map(([value, Icon, label]) => (
+        {([['home', Home, 'field2.tabHome'], ['sites', HardHat, 'field2.tabSites'], ['plans', MapIcon, 'field2.tabPlans'], ['office', MessageCircle, 'fieldOffice.tab'], ['me', UserRound, 'field2.tabMe']] as const).map(([value, Icon, label]) => (
           <button key={value} type="button" className={tab === value ? 'on' : ''} onClick={() => setTab(value)} aria-current={tab === value ? 'page' : undefined}>
             <Icon size={22} />{t(label)}
           </button>
@@ -227,6 +233,7 @@ function HomeTab({ snapshot, site, onFlow, onSite }: {
   const others = snapshot.projects.filter((candidate) => candidate.id !== site.id);
   return (
     <div className="stack loose">
+      <PushToggle compact />
       {weather ? (
         <span className={`badge ${weather.wet ? 'warn' : 'ok'}`} style={{ alignSelf: 'flex-start', fontSize: '.88rem', padding: '.3rem .7rem' }}>
           {weather.wet ? <CloudRain size={15} /> : <Sun size={15} />}{weather.text}
@@ -801,6 +808,90 @@ function VoiceRecorder({ voice, onChange }: {
     <div className="stack" style={{ alignItems: 'center', gap: '.4rem' }}>
       <button type="button" className="mic" aria-label={t('field2.dictate')} onClick={() => void start()}><Mic size={34} /></button>
       <span className="small muted">{t('field2.dictate')}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- spec 052: the office, from the field
+
+/** The site's thread with the office, and the material asked for. Written offline too (outbox). */
+function OfficeTab({ site, queue, canRequest, onQueued }: { site: FieldProject; queue: OutboxItem[]; canRequest: boolean; onQueued: () => Promise<void> }) {
+  const { t, locale } = useI18n();
+  const [body, setBody] = useState('');
+  const [asking, setAsking] = useState(false);
+  const when = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+  const day = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'short' }).format(new Date(`${value}T12:00:00`));
+  const waitingNotes = queue.filter((item): item is Extract<OutboxItem, { type: 'note' }> => item.type === 'note' && item.payload.projectId === site.id);
+  const waitingRequests = queue.filter((item): item is Extract<OutboxItem, { type: 'request' }> => item.type === 'request' && item.payload.projectId === site.id);
+  const send = async () => {
+    const text = body.trim();
+    if (!text) return;
+    const id = crypto.randomUUID();
+    await enqueue({ id, type: 'note', createdAt: new Date().toISOString(), attempts: 0, lastError: null, payload: { id, projectId: site.id, body: text }, photos: [] });
+    setBody('');
+    await onQueued();
+  };
+  const ask = async (form: HTMLFormElement) => {
+    const data = new FormData(form);
+    const item = String(data.get('item') ?? '').trim();
+    if (!item) return;
+    const id = crypto.randomUUID();
+    const text = (name: string) => String(data.get(name) ?? '').trim() || null;
+    await enqueue({ id, type: 'request', createdAt: new Date().toISOString(), attempts: 0, lastError: null, payload: { id, projectId: site.id, item, quantity: text('quantity'), neededOn: text('neededOn'), note: text('note') }, photos: [] });
+    form.reset();
+    setAsking(false);
+    await onQueued();
+  };
+  const requests = site.requests ?? [];
+  return (
+    <div className="stack loose">
+      <section className="stack" style={{ gap: '.6rem' }}>
+        <div className="row nowrap"><h2 className="grow" style={{ margin: 0 }}>{t('fieldOffice.material')} · {site.code}</h2></div>
+        {canRequest ? (asking ? (
+          <form className="card stack" onSubmit={(event) => { event.preventDefault(); void ask(event.currentTarget); }}>
+            <label className="field">{t('fieldOffice.item')}<input name="item" required maxLength={200} placeholder={t('fieldOffice.itemPlaceholder')} /></label>
+            <div className="pair">
+              <label className="field">{t('fieldOffice.quantity')}<input name="quantity" maxLength={80} placeholder={t('fieldOffice.quantityPlaceholder')} /></label>
+              <label className="field">{t('fieldOffice.neededOn')}<input name="neededOn" type="date" min={new Date().toISOString().slice(0, 10)} /></label>
+            </div>
+            <label className="field">{t('fieldOffice.note')}<textarea name="note" rows={2} maxLength={1000} /></label>
+            <div className="pair">
+              <button type="button" className="btn secondary" onClick={() => setAsking(false)}>{t('app.cancel')}</button>
+              <button type="submit" className="btn"><Truck size={18} />{t('fieldOffice.send')}</button>
+            </div>
+          </form>
+        ) : <button type="button" className="btn block" onClick={() => setAsking(true)}><Truck size={18} />{t('fieldOffice.ask')}</button>) : null}
+        {waitingRequests.map((item) => (
+          <div key={item.id} className="card small row nowrap"><span className="grow"><b>{item.payload.item}</b>{item.payload.quantity ? ` · ${item.payload.quantity}` : ''}</span><span className="badge warn">{t('field2.waiting')}</span></div>
+        ))}
+        {requests.length ? requests.map((item) => (
+          <div key={item.id} className="card small stack" style={{ gap: '.25rem' }}>
+            <div className="row nowrap"><span className="grow"><b>{item.item}</b>{item.quantity ? ` · ${item.quantity}` : ''}</span>
+              <span className={`badge ${item.status === 'delivered' ? 'ok' : item.status === 'cancelled' ? '' : item.status === 'ordered' ? 'info' : 'warn'}`}>{t(`material.statuses.${item.status}`)}</span></div>
+            {item.neededOn ? <span className="muted">{t('fieldOffice.forDate', { date: day(item.neededOn) })}</span> : null}
+            {item.officeNote ? <span>« {item.officeNote} »</span> : null}
+          </div>
+        )) : !waitingRequests.length ? <p className="muted small" style={{ margin: 0 }}>{t('fieldOffice.noRequest')}</p> : null}
+      </section>
+
+      <section className="stack" style={{ gap: '.6rem' }}>
+        <h2 style={{ margin: 0 }}>{t('fieldOffice.thread')}</h2>
+        <p className="muted small" style={{ margin: 0 }}>{t('fieldOffice.threadHint')}</p>
+        <form className="row nowrap" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+          <input value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} placeholder={t('fieldOffice.write')} aria-label={t('fieldOffice.write')} style={{ flex: 1, minWidth: 0 }} />
+          <button type="submit" className="btn" aria-label={t('fieldOffice.sendNote')}><Send size={18} /></button>
+        </form>
+        {waitingNotes.map((item) => (
+          <div key={item.id} className="message mine"><div className="xsmall muted">{t('field2.waiting')}</div><div style={{ whiteSpace: 'pre-wrap' }}>{item.payload.body}</div></div>
+        ))}
+        {(site.notes ?? []).map((note) => (
+          <div key={note.id} className={`message ${note.mine ? 'mine' : ''}`}>
+            <div className="xsmall muted">{note.authorName} · {when(note.at)}</div>
+            <div style={{ whiteSpace: 'pre-wrap' }}>{note.body}</div>
+          </div>
+        ))}
+        {!site.notes?.length && !waitingNotes.length ? <p className="muted small" style={{ margin: 0 }}>{t('fieldOffice.noNote')}</p> : null}
+      </section>
     </div>
   );
 }

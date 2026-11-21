@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { actorFromRequest, ALLOWED_IMAGE_TYPES } from '@/server/api.server.ts';
 import { jsonError } from '@/server/context.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
+import { authorName, notifyTeam } from '@/server/notify.server.ts';
 
 const MAX_PHOTO = 15 * 1024 * 1024;
 const MAX_AUDIO = 25 * 1024 * 1024;
@@ -50,6 +51,8 @@ export const Route = createFileRoute('/api/field/reports')({
           }
           const result = await submitReport(runtime().db, actor, { ...report, photos, audio });
           if (result.hasAudio) void transcribeLater(actor, result.id, audio!);
+          // Spec 052: the office learns a report waits for its review.
+          if (result.created) void notifyTeam(runtime(), actor, String(report.projectId), 'report', { author: await authorName(runtime(), actor) });
           return Response.json(result, { status: result.created ? 201 : 200 });
         } catch (error) {
           return jsonError(error);

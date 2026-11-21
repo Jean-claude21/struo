@@ -54,6 +54,7 @@ real external account · ⏳ next.
 | 049 | `049-client-report` | Client report in the company look (preview, send, print, weekly, in the client space), e-mail notifications: task given, change order to approve | 🟡 for review | `client-report.test.ts` |
 | 050 | `050-client-report-v2` | No online payment from the client space, validated photos only, « Contract and quote » documents; client report in sections drafted from the facts (assistant or template), chosen photos, frozen when sent, Monday draft to read, PDF, MCP tools | 🟡 for review | `client-trust.test.ts`, `client-report.test.ts` |
 | 051 | `051-client-app` | The client's application: home with new-since-visit and to-do, reports and photos by stage, money and how to pay, « I paid » confirmed by the accountant, e-mail choice, installable space and phone notifications | 🟡 for review | `client-app.test.ts` |
+| 052 | `052-field-office` | Field ↔ office: phone notifications for the team (tasks, reports, incidents, thread, material), field Office tab with the site thread and material requests (offline), office queue of requests | 🟡 for review | `field-office.test.ts` |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

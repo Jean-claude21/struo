@@ -691,6 +691,17 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
     if (status === 'accepted') await core.decideChangeOrder(app, actors.jean, id, { accept: true, decidedBy: site === 'KC-01' ? 'Kodjo Amegah' : 'SCI Les Cocotiers' });
   }
   log(`change orders: ${CHANGES.length}`);
+  // Spec 052: the KC-01 site lead asks for material and writes to the office; the office answers.
+  if (ids['KC-01']) {
+    const cement = randomUUID();
+    await core.createMaterialRequest(app, actors.komi, { id: cement, projectId: ids['KC-01'], item: 'Ciment', quantity: '40 sacs', neededOn: day(2), note: 'Pour le chaînage du pan sud.' });
+    const tiles = randomUUID();
+    await core.createMaterialRequest(app, actors.komi, { id: tiles, projectId: ids['KC-01'], item: 'Tuiles de rive', quantity: '60', neededOn: day(5), note: null });
+    await core.updateMaterialRequest(app, actors.jean, tiles, { status: 'ordered', officeNote: 'Livraison prévue jeudi matin.' });
+    await core.postNote(app, actors.komi, { projectId: ids['KC-01'], body: 'La pluie de ce matin a retardé la pose des liteaux, on reprend cet après-midi.' });
+    await core.postNote(app, actors.jean, { projectId: ids['KC-01'], body: 'Bien noté. Je passe demain à 9 h pour la toiture.' });
+  }
+
   // Spec 051: the KC-01 client reports a transfer on an open invoice; the accountant confirms it.
   {
     const kc01 = portals.find((portal) => portal.code === 'KC-01');

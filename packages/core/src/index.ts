@@ -31,3 +31,4 @@ export * from './crew.ts';
 export * from './changes.ts';
 export * from './reports-client.ts';
 export * from './client-app.ts';
+export * from './material.ts';

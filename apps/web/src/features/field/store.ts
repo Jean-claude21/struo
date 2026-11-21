@@ -15,6 +15,9 @@ export interface FieldProject {
   checklistsToday?: { name: string; completed: boolean }[];
   /** Spec 047: who was ticked on this site the last day. */
   lastCrew?: string[];
+  /** Spec 052: the site's thread with the office (newest first) and the material asked for. */
+  notes?: { id: string; authorName: string; mine: boolean; body: string; at: string }[];
+  requests?: { id: string; item: string; quantity: string | null; neededOn: string | null; status: 'open' | 'ordered' | 'delivered' | 'cancelled'; officeNote: string | null; mine: boolean }[];
 }
 
 export interface FieldSnapshot {
@@ -42,6 +45,24 @@ export interface OutboxPhoto {
 }
 
 export type OutboxItem =
+  | {
+      id: string;
+      type: 'note';
+      createdAt: string;
+      attempts: number;
+      lastError: string | null;
+      payload: { id: string; projectId: string; body: string };
+      photos: [];
+    }
+  | {
+      id: string;
+      type: 'request';
+      createdAt: string;
+      attempts: number;
+      lastError: string | null;
+      payload: { id: string; projectId: string; item: string; quantity: string | null; neededOn: string | null; note: string | null };
+      photos: [];
+    }
   | {
       id: string;
       type: 'report';
@@ -186,6 +207,10 @@ export function syncOutbox(userId?: string): Promise<{ sent: number; failed: num
             for (const photo of item.photos) body.append(`photo:${photo.id}`, photo.blob, `${photo.id}.jpg`);
             if (item.audio) body.append('audio', new Blob([item.audio.blob], { type: item.audio.mediaType }), 'note');
             response = await fetch('/api/field/reports', { method: 'POST', body, credentials: 'same-origin' });
+          } else if (item.type === 'note' || item.type === 'request') {
+            response = await fetch(item.type === 'note' ? '/api/field/notes' : '/api/field/requests', {
+              method: 'POST', body: JSON.stringify(item.payload), headers: { 'content-type': 'application/json' }, credentials: 'same-origin',
+            });
           } else if (item.type === 'checklist') {
             response = await fetch('/api/field/checklists', {
               method: 'POST', body: JSON.stringify(item.payload), headers: { 'content-type': 'application/json' }, credentials: 'same-origin',

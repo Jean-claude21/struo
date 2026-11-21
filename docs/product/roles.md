@@ -46,8 +46,8 @@ Les écrans du gérant, plus l'équipe et les paramètres. ✓
 | Qu'est-ce qui coince ? | Imprévus ouverts, jalons et tâches en retard | ✓ |
 | Qui fait quoi ? | Tâches, planning | ✓ |
 | Qu'est-ce que je dis au client ? | Rapport client rédigé à partir des faits, validé | ✓ (050) |
-| Que demande le terrain ? | — | ✗ demande de matériel : spec 052 |
-| Suis-je prévenu à temps ? | E-mail | ✗ sur le téléphone : spec 052 |
+| Que demande le terrain ? | Accueil et chantier › Demandes de matériel | ✓ (052) |
+| Suis-je prévenu à temps ? | Notifications sur le téléphone (rapports, imprévus, fil, matériel) + e-mail | ✓ (052) |
 
 ## Le chef de chantier (site_lead, app terrain)
 
@@ -58,9 +58,9 @@ Les écrans du gérant, plus l'équipe et les paramètres. ✓
 | Comment je signale un problème ? | Imprévu | ✓ |
 | Mon rapport est-il passé ? | Motif affiché quand il est rejeté | ✓ |
 | Où est le plan ? | Onglet Plans, sans réseau | ✓ |
-| Comment j'écris au bureau ? | — | ✗ fil du chantier : spec 052 |
-| Comment je demande du matériel ? | — | ✗ spec 052 |
-| Suis-je prévenu d'une tâche ? | E-mail | ✗ sur le téléphone : spec 052 |
+| Comment j'écris au bureau ? | App terrain › Bureau › Fil du chantier (hors ligne aussi) | ✓ (052) |
+| Comment je demande du matériel ? | App terrain › Bureau › Demander du matériel | ✓ (052) |
+| Suis-je prévenu d'une tâche ? | Notification sur le téléphone + e-mail | ✓ (052) |
 
 ## Le comptable (accountant)
 

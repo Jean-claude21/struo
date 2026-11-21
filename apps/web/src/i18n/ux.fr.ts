@@ -764,7 +764,7 @@ export const uxFr = {
     planOffline: 'Les plans déjà ouverts restent consultables sans réseau.',
     outbox: 'File d’envoi',
     noOutbox: 'Rien en attente.',
-    kinds: { report: 'Rapport', incident: 'Imprévu', checklist: 'Checklist', delivery: 'Livraison', signature: 'Signature' },
+    kinds: { report: 'Rapport', incident: 'Imprévu', checklist: 'Checklist', delivery: 'Livraison', signature: 'Signature', note: 'Message au bureau', request: 'Demande de matériel' },
     signOut: 'Se déconnecter',
     office: 'Ouvrir le bureau',
     chooseSite: 'Chantier',

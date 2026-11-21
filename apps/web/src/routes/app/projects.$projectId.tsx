@@ -18,6 +18,7 @@ import { usePhotoViewer } from '@/components/PhotoViewer.tsx';
 import { DayJournal } from '@/routes/print.journal.tsx';
 import { ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { ClientReportTab } from '@/components/ClientReportEditor.tsx';
+import { MaterialRequests } from '@/components/MaterialRequests.tsx';
 
 export const Route = createFileRoute('/app/projects/$projectId')({
   validateSearch: (search: Record<string, unknown>): { tab?: string; report?: string } => ({
@@ -87,7 +88,10 @@ function ProjectPage() {
       {tab === 'work' ? (
         <div className="grid-main">
           <TaskBoard tasks={data.tasks} members={data.members} projectId={project.id} role={data.role} userId={data.userId} milestones={data.milestones.map((milestone) => ({ id: milestone.id, name: milestone.name }))} phases={project.phases.map((phase) => ({ id: phase.id, name: phase.name }))} />
-          <NotesThread projectId={project.id} notes={data.notes} />
+          <div className="stack">
+            <MaterialRequests projectId={project.id} canHandle={can(data.role, 'field.review')} />
+            <NotesThread projectId={project.id} notes={data.notes} />
+          </div>
         </div>
       ) : null}
       {tab === 'report' ? <ClientReportTab projectId={project.id} initialId={search.report} /> : null}

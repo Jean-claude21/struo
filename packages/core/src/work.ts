@@ -156,17 +156,19 @@ export async function listNotes(db: Db, actor: Actor, projectId: string): Promis
 }
 
 /** Any member of the company may write in a site's internal thread. */
-export async function postNote(db: Db, actor: Actor, input: unknown): Promise<{ id: string }> {
-  const data = parse(z.object({ projectId: z.string().uuid(), body: z.string().trim().min(1).max(4000) }), input);
+export async function postNote(db: Db, actor: Actor, input: unknown): Promise<{ id: string; created: boolean }> {
+  // Spec 052: a note written in the field carries its own id (sent twice from the outbox, kept once).
+  const data = parse(z.object({ id: z.string().uuid().optional(), projectId: z.string().uuid(), body: z.string().trim().min(1).max(4000) }), input);
   return asActor(db, actor, async (tx) => {
     const project = await tx.query('select 1 from project where id = $1 and org_id = $2', [data.projectId, actor.orgId]);
     if (!project.rowCount) throw notFound();
     const { rows } = await tx.query<{ id: string }>(
-      'insert into project_note (org_id, project_id, author_id, body) values ($1, $2, $3, $4) returning id',
-      [actor.orgId, data.projectId, actor.userId, data.body],
+      'insert into project_note (id, org_id, project_id, author_id, body) values (coalesce($5::uuid, gen_random_uuid()), $1, $2, $3, $4) on conflict (id) do nothing returning id',
+      [actor.orgId, data.projectId, actor.userId, data.body, data.id ?? null],
     );
-    await journal(tx, actor, 'note.post', rows[0]!.id, null, { projectId: data.projectId });
-    return { id: rows[0]!.id };
+    if (!rows[0]) return { id: data.id!, created: false };
+    await journal(tx, actor, 'note.post', rows[0].id, null, { projectId: data.projectId });
+    return { id: rows[0].id, created: true };
   });
 }
 
