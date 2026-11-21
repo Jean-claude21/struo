@@ -6,7 +6,7 @@ import { translate } from '@/i18n/index.tsx';
 import { guarded, requestLocale, requireActor } from '@/server/context.server.ts';
 import { alertText } from '@/server/jobs.server.ts';
 import { outboundAllowed } from '@/server/demo.server.ts';
-import { companyLocale, deliverClientReport, notifyChangeOrderSent, notifyClient, notifyTaskAssigned } from '@/server/notify.server.ts';
+import { authorName, companyLocale, deliverClientReport, notifyChangeOrderSent, notifyClient, notifyTaskAssigned, notifyTeam, threadPeople } from '@/server/notify.server.ts';
 import { draftSections, rewriteSection } from '@/server/report.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 import { forecast, RAIN_LIMIT } from '@/server/weather.server.ts';
@@ -658,7 +658,29 @@ export const removeTask = createServerFn({ method: 'POST' })
 
 export const postNote = createServerFn({ method: 'POST' })
   .validator((input: { projectId: string; body: string }) => input)
-  .handler(({ data }) => act((actor) => core.postNote(runtime().db, actor, data)));
+  .handler(({ data }) => act(async (actor) => {
+    const rt = runtime();
+    const result = await core.postNote(rt.db, actor, data);
+    // Spec 052: who follows the site's thread is told (the field on its phone).
+    void notifyTeam(rt, actor, data.projectId, 'note', { author: await authorName(runtime(), actor), text: data.body.slice(0, 140) }, await threadPeople(rt, actor.orgId, data.projectId));
+    return result;
+  }));
+
+// ---------------------------------------------------------------- material requested from the field (spec 052)
+
+export const getMaterialRequests = createServerFn({ method: 'GET' })
+  .validator((input: { projectId?: string; open?: boolean } | undefined) => input ?? {})
+  .handler(({ data }) => act((actor) => core.listMaterialRequests(runtime().db, actor, data)));
+
+export const updateMaterialRequest = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; status: 'ordered' | 'delivered' | 'cancelled'; officeNote?: string | null }) => input)
+  .handler(({ data }) => act(async (actor) => {
+    const rt = runtime();
+    const done = await core.updateMaterialRequest(rt.db, actor, data.id, { status: data.status, officeNote: data.officeNote ?? null });
+    if (done.requestedBy) {
+      void notifyTeam(rt, actor, done.projectId, 'materialUpdate', { item: done.item, status: translate(await companyLocale(rt, actor.orgId), `material.statuses.${done.status}`) }, [done.requestedBy]);
+    }
+  }));
 
 export const getDocumentVersions = createServerFn({ method: 'GET' })
   .validator(idOf)

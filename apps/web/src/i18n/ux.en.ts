@@ -765,7 +765,7 @@ export const uxEn: typeof uxFr = {
     planOffline: 'Plans already opened stay available offline.',
     outbox: 'Outbox',
     noOutbox: 'Nothing waiting.',
-    kinds: { report: 'Report', incident: 'Incident', checklist: 'Checklist', delivery: 'Delivery', signature: 'Signature' },
+    kinds: { report: 'Report', incident: 'Incident', checklist: 'Checklist', delivery: 'Delivery', signature: 'Signature', note: 'Message to the office', request: 'Material request' },
     signOut: 'Sign out',
     office: 'Open the office',
     chooseSite: 'Site',

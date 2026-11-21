@@ -368,13 +368,12 @@ export async function portalClientReport(owner: Db, token: string, reportId: str
   return link.showPhotos ? report : { ...report, photos: [] };
 }
 
-/** Sites whose company prepares the report every week, with the client's address, the sealed link and who to tell in the office. */
+/** Sites whose company prepares the report every week, with the client's address, the sealed link and who may send it in the office. */
 export async function weeklyReportTargets(owner: Db) {
-  const { rows } = await owner.query<{ orgId: string; projectId: string; projectName: string; projectCode: string; company: string; locale: 'fr' | 'en'; timeZone: string; autoSend: boolean; officeEmail: string | null; email: string; contactName: string | null; tokenEnc: string | null }>(
+  const { rows } = await owner.query<{ orgId: string; projectId: string; projectName: string; projectCode: string; company: string; locale: 'fr' | 'en'; timeZone: string; autoSend: boolean; officeEmails: string[]; email: string; contactName: string | null; tokenEnc: string | null }>(
     `select p.org_id as "orgId", p.id as "projectId", p.name as "projectName", p.code as "projectCode", o.name as company, s.locale, s.time_zone as "timeZone",
             i.report_auto_send as "autoSend",
-            coalesce((select u.email from "user" u where u.id = p.manager_id),
-                     (select u.email from member m join "user" u on u.id = m."userId" where m."organizationId" = p.org_id and m.role = 'owner' order by m."createdAt" limit 1)) as "officeEmail",
+            array(select u.email from member m join "user" u on u.id = m."userId" where m."organizationId" = p.org_id and m.role in ('owner', 'admin', 'engineer') order by m."createdAt" limit 5) as "officeEmails",
             l.contact_email as email, l.contact_name as "contactName", l.token_enc as "tokenEnc"
        from project p join organization o on o.id = p.org_id join org_settings s on s.org_id = p.org_id
        join invoice_settings i on i.org_id = p.org_id and i.report_weekly

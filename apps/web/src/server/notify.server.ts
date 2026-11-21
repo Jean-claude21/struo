@@ -34,6 +34,10 @@ export async function notifyTaskAssigned(rt: Runtime, actor: core.Actor, taskId:
     if (!task || task.userId === actor.userId) return;
     const locale = await companyLocale(rt, actor.orgId);
     const url = `${rt.env.APP_BASE_URL}${task.role === 'site_lead' ? '/field' : '/app/tasks'}`;
+    // Spec 052: on the phone too (the field reads few e-mails).
+    await sendPush(rt, await core.memberPushTargets(rt.owner, actor.orgId, [task.userId]), {
+      title: translate(locale, task.incident ? 'notify.task.titleIncident' : 'notify.task.title'), body: `${task.code} · ${task.title.slice(0, 120)}`, url, tag: `task:${taskId}`,
+    });
     const due = task.dueOn ? new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium' }).format(new Date(`${task.dueOn}T12:00:00`)) : null;
     await rt.mailer.send(mailMessage(locale, task.email, translate(locale, 'notify.task.subject', { title: task.title.slice(0, 80) }), {
       preheader: translate(locale, 'notify.task.preheader', { code: task.code }),
@@ -106,7 +110,7 @@ export async function deliverClientReport(rt: Runtime, actor: core.Actor, id: st
 
 /**
  * The weekly client report (Monday morning, local time) for companies that chose it: the past week,
- * one per site and week. A draft for the site manager to read (e-mailed to them), or — when the
+ * one per site and week. A draft for the office to read (owner, admins, site managers), or — when the
  * company chose so — sent to the client at once.
  */
 export async function runClientReports(rt: Runtime, now: Date, localClock: (timeZone: string, now?: Date) => { hour: number; day: Date }): Promise<number> {
@@ -125,8 +129,8 @@ export async function runClientReports(rt: Runtime, now: Date, localClock: (time
         const base = portalUrl(rt, target.tokenEnc);
         await notifyClient(rt, target.orgId, target.projectId, 'report', { reportId: id });
         if (!(await core.clientOptedOut(rt.owner, target.projectId))) await mailClientReport(rt, { locale: target.locale, to: target.email, contactName: target.contactName, company: target.company, project: target.projectName, from, to_: to, url: base ? `${base}/report/${id}` : null });
-      } else if (target.officeEmail) {
-        await mailReportReady(rt, { locale: target.locale, to: target.officeEmail, code: target.projectCode, project: target.projectName, projectId: target.projectId, from, to_: to });
+      } else {
+        for (const office of target.officeEmails) await mailReportReady(rt, { locale: target.locale, to: office, code: target.projectCode, project: target.projectName, projectId: target.projectId, from, to_: to });
       }
       done++;
     } catch (error) {
@@ -216,4 +220,62 @@ export async function notifyClaimDeclared(rt: Runtime, orgId: string, projectId:
   } catch (error) {
     reportError(error, { where: 'notify:claim' });
   }
+}
+
+// ---------------------------------------------------------------- the team, field and office (spec 052)
+
+export type TeamEvent = 'report' | 'incident' | 'material' | 'note' | 'materialUpdate';
+
+/**
+ * Tells the office of a site (owner, admins, site managers) — or given people — that something came
+ * from the field, on their phones; by e-mail as well for an incident and a material request. Never
+ * the person who did it, never from a demo company, never blocking.
+ */
+export async function notifyTeam(rt: Runtime, actor: core.Actor, projectId: string, event: TeamEvent, params: Record<string, string | number> = {}, only?: string[]): Promise<void> {
+  try {
+    if (!(await outboundAllowed(rt, actor.orgId))) return;
+    const { rows: people } = await rt.owner.query<{ userId: string; email: string; role: string }>(
+      only
+        ? `select u.id as "userId", u.email, m.role from member m join "user" u on u.id = m."userId" where m."organizationId" = $1 and u.id = any($2::text[])`
+        : `select u.id as "userId", u.email, m.role from member m join "user" u on u.id = m."userId" where m."organizationId" = $1 and m.role in ('owner', 'admin', 'engineer')`,
+      only ? [actor.orgId, only] : [actor.orgId]);
+    const targets = people.filter((person) => person.userId !== actor.userId);
+    if (!targets.length) return;
+    const { rows: sites } = await rt.owner.query<{ code: string; name: string }>('select code, name from project where id = $1 and org_id = $2', [projectId, actor.orgId]);
+    const locale = await companyLocale(rt, actor.orgId);
+    const values = { ...params, code: sites[0]?.code ?? '', site: sites[0]?.name ?? '' };
+    const urlFor = (role: string) => `${rt.env.APP_BASE_URL}${role === 'site_lead' ? '/field' : event === 'report' ? '/app/field' : event === 'material' || event === 'note' || event === 'materialUpdate' ? `/app/projects/${projectId}?tab=work` : `/app/projects/${projectId}`}`;
+    for (const person of targets) {
+      await sendPush(rt, await core.memberPushTargets(rt.owner, actor.orgId, [person.userId]), {
+        title: translate(locale, `teamPush.${event}.title`, values), body: translate(locale, `teamPush.${event}.body`, values), url: urlFor(person.role), tag: `${event}:${projectId}`,
+      });
+      if (event === 'incident' || event === 'material') {
+        await rt.mailer.send(mailMessage(locale, person.email, translate(locale, `teamPush.${event}.subject`, values), {
+          preheader: translate(locale, `teamPush.${event}.body`, values),
+          title: translate(locale, `teamPush.${event}.title`, values),
+          paragraphs: [translate(locale, `teamPush.${event}.body`, values)],
+          button: { label: translate(locale, 'teamPush.open'), url: urlFor(person.role) },
+          footnote: translate(locale, 'teamPush.why'),
+        }, rt.env.APP_BASE_URL));
+      }
+    }
+  } catch (error) {
+    reportError(error, { where: `notify:team:${event}` });
+  }
+}
+
+/** Who follows a site's thread: its office, its site lead and whoever wrote in it. */
+export async function threadPeople(rt: Runtime, orgId: string, projectId: string): Promise<string[]> {
+  const { rows } = await rt.owner.query<{ id: string }>(
+    `select distinct m."userId" as id from member m where m."organizationId" = $1 and (
+        m.role in ('owner', 'admin', 'engineer')
+        or m."userId" = (select manager_id from project where id = $2 and org_id = $1)
+        or m."userId" in (select author_id from project_note where project_id = $2 and org_id = $1))`, [orgId, projectId]);
+  return rows.map((row) => row.id);
+}
+
+/** The display name of the person acting (for « Komi sent a report »). */
+export async function authorName(rt: Runtime, actor: core.Actor): Promise<string> {
+  const { rows } = await rt.owner.query<{ name: string }>('select name from "user" where id = $1', [actor.userId]);
+  return rows[0]?.name ?? '';
 }
