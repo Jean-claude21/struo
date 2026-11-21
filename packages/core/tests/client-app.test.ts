@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   clientOptedOut, clientRecipients, confirmPaymentClaim, createInvoice, createPortalLink, createProject, listPaymentClaims, memberPushTargets,
@@ -68,7 +69,8 @@ describe("the client's application (spec 051)", () => {
     await setPortalEmailOptOut(db.owner, token, true);
     expect(await clientOptedOut(db.owner, projectId)).toBe(true);
     expect(await clientRecipients(db.owner, projectId)).toHaveLength(0);
-    const sub = (endpoint: string) => ({ endpoint, keys: { p256dh: 'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM', auth: 'tBHItJI5svbpez7KI4CCXg' } });
+    // Fake browser keys, generated for the test (a real subscription's keys are public anyway).
+    const sub = (endpoint: string) => ({ endpoint, keys: { p256dh: randomBytes(65).toString('base64url'), auth: randomBytes(16).toString('base64url') } });
     await savePortalPush(db.owner, token, sub('https://push.example.test/client-1'));
     expect(await portalPushTargets(db.owner, projectId)).toHaveLength(1);
     await saveMemberPush(db.owner, owner, sub('https://push.example.test/owner-1'));
