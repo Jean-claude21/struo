@@ -47,8 +47,8 @@ async function createSandbox(rt: Runtime): Promise<string> {
   await rt.owner.query('update org_settings set is_demo = true, ai_policy = $2, ai_budget_cents = $3 where org_id = $1', [result.orgId, 'company', AI_BUDGET_CENTS]);
   const accounts: Account[] = result.users.map((user) => ({ key: user.key, role: user.role, email: user.email, id: user.id }));
   const portal = result.portals.find((item) => !item.requireCode)?.token ?? null;
-  await rt.owner.query('insert into demo_sandbox (org_id, accounts, password_enc, portal_token) values ($1, $2, $3, $4)',
-    [result.orgId, JSON.stringify(accounts), rt.secrets.seal(password), portal]);
+  await rt.owner.query('insert into demo_sandbox (org_id, accounts, password_enc, portal_token, version) values ($1, $2, $3, $4, $5)',
+    [result.orgId, JSON.stringify(accounts), rt.secrets.seal(password), portal, rt.env.APP_VERSION || null]);
   return result.orgId;
 }
 
@@ -67,6 +67,11 @@ export async function refillDemoPool(rt: Runtime): Promise<void> {
     try {
       const expired = await rt.owner.query<SandboxRow>(`select org_id, accounts from demo_sandbox where status = 'assigned' and expires_at < now()`);
       for (const row of expired.rows) await deleteSandbox(rt, row).catch((error: unknown) => reportError(error, { where: 'demo:delete', orgId: row.org_id }));
+      // Copies made by an older version, still waiting for a visitor, are made again (no stale demo after a deploy).
+      if (rt.env.APP_VERSION) {
+        const stale = await rt.owner.query<SandboxRow>(`select org_id, accounts from demo_sandbox where status = 'ready' and version is distinct from $1`, [rt.env.APP_VERSION]);
+        for (const row of stale.rows) await deleteSandbox(rt, row).catch((error: unknown) => reportError(error, { where: 'demo:stale', orgId: row.org_id }));
+      }
       const readyCount = async () => (await rt.owner.query<{ n: number }>(`select count(*)::int as n from demo_sandbox where status = 'ready'`)).rows[0]!.n;
       for (let round = 0; round < rt.env.DEMO_POOL && (await readyCount()) < rt.env.DEMO_POOL; round += 1) await createSandbox(rt);
     } finally {
