@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { asActor, ensure, journal, parse } from './access.ts';
 import type { Actor, Db } from './db.ts';
 import { DomainError, notFound } from './errors.ts';
+import { assertFeature } from './founder.ts';
 
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
@@ -13,6 +14,8 @@ export async function createPortalLink(db: Db, actor: Actor, projectId: string, 
   return asActor(db, actor, async (tx) => {
     const project = await tx.query('select 1 from project where id = $1 and org_id = $2', [projectId, actor.orgId]);
     if (!project.rowCount) throw notFound();
+    // Spec 055: the client space is a feature of the company's plan.
+    await assertFeature(tx, actor.orgId, 'portal');
     const { rows } = await tx.query<{ id: string }>(
       'insert into portal_link (org_id, project_id, token_hash, label, created_by) values ($1, $2, $3, $4, $5) returning id',
       [actor.orgId, projectId, hashToken(token), label ?? null, actor.userId],

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { DomainError } from '@struo/core';
+import { DomainError, recordPlatformEvent } from '@struo/core';
 import { ORG_COOKIE } from '@/server/context.server.ts';
 import { accountFor, claimSandbox, DEMO_ROLES, sandboxOfUser, type DemoRole } from '@/server/demo.server.ts';
 import { reportError } from '@/server/monitor.server.ts';
@@ -25,6 +25,8 @@ export const Route = createFileRoute('/api/demo/start')({
           // The proxy appends the real address at the end of the chain; what a visitor sends is ignored.
           const visitor = request.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || request.headers.get('x-real-ip') || 'local';
           const sandbox = (session ? await sandboxOfUser(rt, session.user.id) : null) ?? (await claimSandbox(rt, visitor));
+          // Spec 055: demos opened, by role, for the founder's console.
+          await recordPlatformEvent(rt.owner, { kind: 'demo_opened', name: role });
           if (role === 'client') {
             if (!sandbox.portal_token) return back('unavailable');
             return Response.redirect(new URL(`/portal/${sandbox.portal_token}?demo=1`, rt.env.APP_BASE_URL), 302);

@@ -407,6 +407,7 @@ export const sendReminder = createServerFn({ method: 'POST' })
         const subject = data.body.split('\n')[0]?.replace(/^(Objet|Subject)\s*:\s*/u, '') ?? invoice.number;
         await mailer.send({ to: invoice.client_email, subject, text: data.body });
       }
+      if (data.send && data.channel === 'whatsapp') await core.assertFeature(runtime().owner, actor.orgId, 'whatsapp');
       if (outbound && data.send && data.channel === 'whatsapp' && invoice.client_phone) await messenger.send(invoice.client_phone, data.body);
       return core.recordReminder(db, actor, data.id, { kind: data.kind, channel: data.channel, body: data.body });
     }, 'finance.write'),
@@ -802,7 +803,7 @@ export const getClientReportTab = createServerFn({ method: 'GET' })
     const [contact, reports, look] = await Promise.all([core.portalContact(db, actor, data.projectId), core.listClientReports(db, actor, data.projectId), core.getInvoiceSettings(db, actor)]);
     return {
       contact: contact ? { name: contact.contactName, email: contact.contactEmail, hasLink: Boolean(contact.tokenEnc) } : null,
-      reports, weekly: look.reportWeekly, maxPhotos: look.reportPhotos, canSend: ['owner', 'admin', 'engineer'].includes(actor.role), ai: drafter.configured,
+      reports, weekly: look.reportWeekly, maxPhotos: look.reportPhotos, canSend: ['owner', 'admin', 'engineer'].includes(actor.role), ai: drafter.configured && await core.planIncludes(runtime().owner, actor.orgId, 'ai'),
     };
   }));
 
@@ -813,7 +814,7 @@ export const createClientReport = createServerFn({ method: 'POST' })
     const rt = runtime();
     const { id } = await core.createClientReportDraft(rt.db, actor, data);
     const facts = await core.clientReportFacts(rt.db, actor, id);
-    const { sections } = await draftSections(rt, await companyLocale(rt, actor.orgId), facts);
+    const { sections } = await draftSections(rt, await companyLocale(rt, actor.orgId), facts, actor.orgId);
     await core.updateClientReportDraft(rt.db, actor, id, { sections });
     return { id };
   }));
@@ -836,10 +837,11 @@ export const redraftClientReport = createServerFn({ method: 'POST' })
     const section = (core.REPORT_SECTIONS as readonly string[]).includes(data.section ?? '') ? (data.section as core.ReportSection) : null;
     if (section) {
       if (!rt.drafter.configured) throw new core.DomainError('ai_unavailable', 409);
+      await core.assertFeature(rt.owner, actor.orgId, 'ai');
       const text = await rewriteSection(rt, await companyLocale(rt, actor.orgId), draft.facts, section, String(data.instruction ?? '').slice(0, 400), draft.report.sections[section] ?? null);
       await core.updateClientReportDraft(rt.db, actor, data.id, { sections: { [section]: text } });
     } else {
-      const { sections } = await draftSections(rt, await companyLocale(rt, actor.orgId), draft.facts);
+      const { sections } = await draftSections(rt, await companyLocale(rt, actor.orgId), draft.facts, actor.orgId);
       await core.updateClientReportDraft(rt.db, actor, data.id, { sections });
     }
   }));

@@ -1,4 +1,4 @@
-import { createPool, type Db, type Drafter, type Mailer, type Messenger, type Storage, type Transcriber, type DocumentReader, type Answerer } from '@struo/core';
+import { createPool, recordPlatformEvent, type Db, type Drafter, type Mailer, type Messenger, type Storage, type Transcriber, type DocumentReader, type Answerer } from '@struo/core';
 import { mcp } from '@better-auth/mcp';
 import { betterAuth } from 'better-auth';
 import { jwt } from 'better-auth/plugins';
@@ -151,7 +151,16 @@ export function runtime(): Runtime {
   initMonitoring(environment);
   const db = createPool(environment.DATABASE_URL, 10);
   const owner = createPool(environment.DATABASE_OWNER_URL || environment.DATABASE_URL, 3);
-  const mailer = createMailer(environment);
+  const base = createMailer(environment);
+  // Spec 055: a send that fails is counted for the founder's console (and still reported).
+  const mailer: Mailer = {
+    ...base,
+    configured: base.configured,
+    send: (message) => base.send(message).catch(async (error: unknown) => {
+      await recordPlatformEvent(owner, { kind: 'mail_failed', name: String((error as Error)?.message ?? 'error').slice(0, 80) });
+      throw error;
+    }),
+  };
   current = {
     env: environment,
     db,

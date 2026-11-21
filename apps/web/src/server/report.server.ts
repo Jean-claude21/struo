@@ -1,7 +1,7 @@
 // The client report's prose (spec 050): written by the assistant from the facts when one is
 // configured, else by a plain template from the same facts. The office always reads it before it
 // is sent (unless the company chose to send the weekly report without a reading).
-import type { ReportFacts, ReportSection, ReportSections } from '@struo/core';
+import { planIncludes, type ReportFacts, type ReportSection, type ReportSections } from '@struo/core';
 import { translate, type Locale } from '@/i18n/index.tsx';
 import { reportError } from './monitor.server.ts';
 import type { Runtime } from './runtime.server.ts';
@@ -30,9 +30,10 @@ export function templateSections(locale: Locale, facts: ReportFacts): Required<R
 }
 
 /** All four sections, by the assistant when it is there (falling back to the template on any failure). */
-export async function draftSections(rt: Runtime, locale: Locale, facts: ReportFacts): Promise<{ sections: ReportSections; ai: boolean }> {
+export async function draftSections(rt: Runtime, locale: Locale, facts: ReportFacts, orgId?: string): Promise<{ sections: ReportSections; ai: boolean }> {
   const template = templateSections(locale, facts);
-  if (!rt.drafter.configured) return { sections: template, ai: false };
+  // Spec 055: writing by the assistant is a feature of the company's plan.
+  if (!rt.drafter.configured || (orgId && !(await planIncludes(rt.owner, orgId, 'ai')))) return { sections: template, ai: false };
   try {
     const written = await rt.drafter.reportSections({ locale, facts });
     return { sections: { ...template, ...written, ask: facts.asks.length ? (written.ask ?? template.ask) : '' }, ai: true };

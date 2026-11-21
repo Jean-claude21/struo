@@ -218,6 +218,7 @@ export const uxEn: typeof uxFr = {
     months: "months",
     noLicense: "No licence activated.",
     lastActivity: "Last activity: {date}",
+    description: "Description for the buyer",
     chariowOff: "Chariow is not connected yet: add the API key (CHARIOW_API_KEY, scopes licenses.read and licenses.write) to the secrets, then redeploy.",
     chariowOn: "Chariow is connected: keys pasted by companies are checked and activated.",
     products: "Licence products",
@@ -233,6 +234,7 @@ export const uxEn: typeof uxFr = {
   lic: {
     title: "Pay with a licence",
     how: "Buy a Struo licence on Chariow (mobile money or card), then paste the key you received by e-mail here: the subscription is extended at once.",
+    buy: "Buy",
     storeOff: "Paying with a licence is not open yet.",
     placeholder: "Licence key, e.g. ABC-123-XYZ-789",
     activate: "Activate",

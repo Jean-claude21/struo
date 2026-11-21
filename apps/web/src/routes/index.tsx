@@ -12,6 +12,8 @@ import { formatMoney } from '@/components/ui.tsx';
 import { COUNTRY_COOKIE, sortedCountries } from '@/features/settings/countries.ts';
 import { getPlans, sendContactRequest } from '@/features/settings/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
+import { trackSuccess } from '@/lib/audience.ts';
+import { planWords, Rich } from '@/components/PlanWords.tsx';
 
 export const Route = createFileRoute('/')({
   loader: () => getPlans(),
@@ -204,6 +206,7 @@ function ContactForm() {
     try {
       await sendContactRequest({ data: { name: text('name'), company: text('company'), reach: text('reach'), activeSites: text('sites') ? Number(text('sites')) : null, message: text('message'), website: text('website') } });
       setState('sent');
+      trackSuccess('contact-sent');
     } catch {
       setState('error');
     }
@@ -427,21 +430,21 @@ function Landing() {
             </label>
           </div>
           <div className="lp-plans">
-            {paid.map((plan) => (
-              <article key={plan.code} className={`lp-plan ${plan.code === 'pro' ? 'pro' : ''}`}>
-                <div className="lp-plan-top"><span>{t(`lp.offer.${plan.code}For` as MessageKey)}</span>{plan.code === 'pro' ? <span className="lp-tag solid">{t('lp.offer.recommended')}</span> : null}</div>
-                <h3>{plan.name}</h3>
+            {paid.map((plan) => { const words = planWords(plan, locale); return (
+              <article key={plan.code} className={`lp-plan ${words.highlight ? 'pro' : ''}`}>
+                <div className="lp-plan-top"><span>{words.tagline}</span>{words.highlight ? <span className="lp-tag solid">{t('lp.offer.recommended')}</span> : null}</div>
+                <h3>{words.name}</h3>
                 <p className={`lp-price ${plan.priceMinor > 0 ? '' : 'quote'}`}>{plan.priceMinor > 0 ? <>{formatMoney(locale, plan.priceMinor, plan.currencyCode)} <small>{t('lp.offer.perMonth')}</small></> : t('lp.offer.onQuote')}</p>
                 <ul>
                   <li>{plan.maxUsers ? t('landing.users', { n: plan.maxUsers }) : t('landing.usersUnlimited')}</li>
                   <li>{plan.maxProjects ? t('landing.projects', { n: plan.maxProjects }) : t('landing.projectsUnlimited')}</li>
-                  {list(`lp.offer.plan_${plan.code}` as MessageKey).map((item) => <li key={item}>{item}</li>)}
+                  {words.bullets.map((item) => <li key={item}><Rich text={item} /></li>)}
                 </ul>
                 {plan.code === 'enterprise' || plan.priceMinor === 0
                   ? <a href="#contact" className="lx-btn outline" data-umami-event={`lp-plan-${plan.code}`}>{t('lp.offer.talk')}<ArrowRight size={17} /></a>
-                  : <Link to="/signup" className={`lx-btn ${plan.code === 'pro' ? 'primary' : 'outline'}`} data-umami-event={`lp-plan-${plan.code}`}>{t('lp.offer.trial')}<ArrowRight size={17} /></Link>}
+                  : <Link to="/signup" className={`lx-btn ${words.highlight ? 'primary' : 'outline'}`} data-umami-event={`lp-plan-${plan.code}`}>{t('lp.offer.trial')}<ArrowRight size={17} /></Link>}
               </article>
-            ))}
+            ); })}
           </div>
           <p className="lp-currency">{paid.some((plan) => plan.code !== 'enterprise' && plan.priceMinor === 0) ? t('lp.offer.quoteHint') : t('lp.offer.currencyNote', { currency })}</p>
           <ul className="lp-risk">{list('lp.offer.risk').map((item) => <li key={item}><Check size={16} />{item}</li>)}</ul>

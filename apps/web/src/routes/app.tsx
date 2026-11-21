@@ -14,6 +14,7 @@ import { clearSnapshot } from '@/features/field/store.ts';
 import { getShell, selectCompany } from '@/features/shell/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 import { applyTheme, readTheme, type Theme } from '@/lib/theme.ts';
+import { AnnouncementBar, FeedbackButton } from '@/components/Platform.tsx';
 
 export const Route = createFileRoute('/app')({
   loader: async ({ location }) => {
@@ -252,8 +253,10 @@ function OfficeLayout() {
               <Link to="/app/account" className="btn small secondary" style={{ marginLeft: 'auto' }}>{t('account.bannerAction')}</Link>
             </div>
           ) : null}
+          <AnnouncementBar />
           <Outlet />
         </main>
+        <FeedbackButton />
       </div>
       <nav className="mobile-nav" aria-label={t('ui.menu')}>
         {MOBILE.filter(allowed).map((item) => (

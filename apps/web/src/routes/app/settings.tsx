@@ -14,6 +14,7 @@ import { getLicenseOffer, redeemLicense } from '@/features/settings/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 import { ChecklistSettings } from '@/components/ChecklistSettings.tsx';
 import { ReportSettings } from '@/components/ReportSettings.tsx';
+import { lines, planWords, Rich } from '@/components/PlanWords.tsx';
 
 export const Route = createFileRoute('/app/settings')({
   validateSearch: (search: Record<string, unknown>): { tab?: string } => (typeof search.tab === 'string' ? { tab: search.tab } : {}),
@@ -388,7 +389,7 @@ function SubscriptionTab({ data }: { data: Data }) {
     <div className="stack">
       <section className="card stack">
         <h2>
-          {t('settings.plan')} : <span className="accent">{plan.name}</span>
+          {t('settings.plan')} : <span className="accent">{planWords(plan, locale).name}</span>
         </h2>
         <p>{t('settings.usage', { users, projects })}</p>
         <p className="muted">
@@ -599,7 +600,18 @@ function LicenseSection() {
       <h2>{t('lic.title')}</h2>
       <p className="muted small" style={{ margin: 0 }}>{t('lic.how')}</p>
       {offer?.products.length ? (
-        <div className="row tight">{offer.products.map((product) => <a key={product.productId} className="btn secondary small" href={product.buyUrl!} target="_blank" rel="noreferrer">{product.label}</a>)}</div>
+        <div className="offer-grid">{offer.products.map((product) => {
+          const points = lines(locale === 'en' ? product.descriptionEn || product.description : product.description);
+          return (
+            <article key={product.productId} className={`offer-card ${product.highlight ? 'on' : ''}`}>
+              {product.highlight ? <span className="badge brand">{t('lp.offer.recommended')}</span> : null}
+              <b>{product.label}</b>
+              {product.priceMinor ? <span className="offer-price">{formatMoney(locale, product.priceMinor, offer.currency)}</span> : null}
+              {points.length ? <ul>{points.map((point) => <li key={point}><Rich text={point} /></li>)}</ul> : null}
+              <a className={`btn ${product.highlight ? '' : 'secondary'} small`} href={product.buyUrl!} target="_blank" rel="noreferrer">{t('lic.buy')}</a>
+            </article>
+          );
+        })}</div>
       ) : null}
       {offer && !offer.storeConfigured ? <p className="notice warn small" style={{ margin: 0 }}>{t('lic.storeOff')}</p> : null}
       <form className="row tight nowrap" onSubmit={async (event) => {

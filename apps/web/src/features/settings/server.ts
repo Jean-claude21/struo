@@ -4,7 +4,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { translate } from '@/i18n/index.tsx';
 import { monerooGateway, simulatorGateway } from '@/server/adapters.server.ts';
 import { createChariow } from '@/server/chariow.server.ts';
-import { invitationMail } from '@/server/mail.server.ts';
+import { invitationMail, mailMessage } from '@/server/mail.server.ts';
 import { chooseCompany, guarded, loadViewer, requestCountry, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
 import { COUNTRIES } from './countries.ts';
 import { outboundAllowed } from '@/server/demo.server.ts';
@@ -22,6 +22,7 @@ export const createCompany = createServerFn({ method: 'POST' })
       const viewer = await loadViewer();
       if (!viewer) throw new core.DomainError('not_signed_in', 401);
       const { orgId } = await core.createCompany(runtime().db, viewer.userId, data);
+      await core.recordPlatformEvent(runtime().owner, { kind: 'signup', orgId });
       chooseCompany(orgId);
       return { orgId };
     }),
@@ -166,7 +167,12 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
       core.listAllRedemptions(owner), core.platformJournalList(owner)]);
     const [prices, leads] = await Promise.all([core.listPlanPrices(owner), core.listContactRequests(owner)]);
     const health = await core.productHealth(owner);
-    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
+    // Spec 055: true money, who to call today, where companies stand, whether the platform runs,
+    // the plans as edited, announcements and what users report.
+    const [money, todo, onboarding, runs, editablePlans, announcements, feedback] = await Promise.all([
+      core.founderMoney(owner), core.founderTodo(owner), core.onboardingSteps(owner), core.platformRuns(owner),
+      core.listEditablePlans(owner), core.listAnnouncements(owner), core.listFeedback(owner)]);
+    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
   }),
 );
 
@@ -236,7 +242,76 @@ export const setCompanyPlan = createServerFn({ method: 'POST' })
 
 export const getConsoleCompany = createServerFn({ method: 'GET' })
   .validator((input: { orgId: string }) => input)
-  .handler(({ data }) => guarded(async () => { await requirePlatformAdmin(); return core.platformCompany(runtime().owner, data.orgId); }));
+  .handler(({ data }) => guarded(async () => {
+    await requirePlatformAdmin();
+    const { owner } = runtime();
+    const [company, notes, steps] = await Promise.all([core.platformCompany(owner, data.orgId), core.companyNotes(owner, data.orgId), core.onboardingSteps(owner, data.orgId)]);
+    return { ...company, notes, steps: steps[data.orgId] ?? null };
+  }));
+
+// ---------------------------------------------------------------- the founder's console (spec 055)
+
+export const addCompanyNote = createServerFn({ method: 'POST' })
+  .validator((input: { orgId: string; body: string; nextOn?: string | null; done?: boolean }) => input)
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    if (data.done) await core.clearNoteReminders(runtime().owner, data.orgId);
+    if (data.body?.trim()) await core.addCompanyNote(runtime().owner, viewer.userId, data);
+  }));
+
+export const previewPlan = createServerFn({ method: 'POST' })
+  .validator((input: Record<string, unknown>) => input)
+  .handler(({ data }) => guarded(async () => { await requirePlatformAdmin(); return core.planImpact(runtime().owner, data); }));
+
+export const savePlan = createServerFn({ method: 'POST' })
+  .validator((input: { plan: Record<string, unknown>; confirmCode?: string; note?: string | null }) => input)
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    return core.savePlan(runtime().owner, viewer.userId, data.plan, { confirmCode: data.confirmCode, note: data.note ?? null });
+  }));
+
+export const getPlanRevisions = createServerFn({ method: 'GET' })
+  .validator((input: { code: string }) => input)
+  .handler(({ data }) => guarded(async () => {
+    await requirePlatformAdmin();
+    return (await core.planRevisions(runtime().owner, data.code)).map(({ snapshot, ...rest }) => ({ ...rest, name: String(snapshot.name ?? '') }));
+  }));
+
+export const restorePlan = createServerFn({ method: 'POST' })
+  .validator((input: { id: number; confirmCode?: string }) => input)
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    await core.restorePlanRevision(runtime().owner, viewer.userId, data.id, data.confirmCode);
+  }));
+
+export const createAnnouncement = createServerFn({ method: 'POST' })
+  .validator((input: { title: string; body?: string | null; level?: 'info' | 'warning'; endsOn?: string | null; email?: boolean }) => input)
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    const rt = runtime();
+    const { id } = await core.createAnnouncement(rt.owner, viewer.userId, data);
+    let emailed = 0;
+    if (data.email) {
+      for (const recipient of (await core.announcementRecipients(rt.owner, id)) ?? []) {
+        await rt.mailer.send(mailMessage(recipient.locale, recipient.email, data.title, { preheader: data.title, title: data.title, paragraphs: data.body ? data.body.split('\n').map((line) => line.trim()).filter(Boolean) : [], button: { label: translate(recipient.locale, 'announce.open'), url: `${rt.env.APP_BASE_URL}/app` } }, rt.env.APP_BASE_URL))
+          .then(() => { emailed++; }).catch(() => undefined);
+      }
+    }
+    return { id, emailed };
+  }));
+
+export const endAnnouncement = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.endAnnouncement(runtime().owner, viewer.userId, data.id); }));
+
+export const handleFeedback = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.handleFeedback(runtime().owner, viewer.userId, data.id); }));
+
+/** Any member reports a problem or an idea from the app. */
+export const sendFeedback = createServerFn({ method: 'POST' })
+  .validator((input: { kind: 'problem' | 'idea'; body: string; page?: string | null }) => input)
+  .handler(({ data }) => guarded(async () => { await core.submitFeedback(runtime().db, await requireActor(), data); return { ok: true }; }));
 
 export const consoleCompanyAction = createServerFn({ method: 'POST' })
   .validator((input: { orgId: string; action: 'suspend' | 'reactivate' | 'trial' | 'paid'; reason?: string; days?: number; months?: number }) => input)
@@ -280,8 +355,16 @@ export const redeemLicense = createServerFn({ method: 'POST' })
 export const getLicenseOffer = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { owner, db, env } = runtime();
-    const [products, redemptions] = await Promise.all([core.listLicenseProducts(owner, true), core.myRedemptions(db, actor)]);
-    return { products: products.filter((product) => product.buyUrl), redemptions, storeConfigured: Boolean(env.CHARIOW_API_KEY) };
+    const [products, redemptions, settings] = await Promise.all([core.listLicenseProducts(owner, true), core.myRedemptions(db, actor), core.getSettings(db, actor)]);
+    // Spec 055: each offer with its price in the company's currency (plan price × months) and its plan's words.
+    const plans = await core.listPlansIn(db, settings.currencyCode);
+    return {
+      products: products.filter((product) => product.buyUrl).map((product) => {
+        const plan = plans.find((candidate) => candidate.code === product.planCode);
+        return { ...product, priceMinor: plan && plan.priceMinor > 0 ? plan.priceMinor * product.months : null, plan: plan ?? null };
+      }),
+      currency: settings.currencyCode, redemptions, storeConfigured: Boolean(env.CHARIOW_API_KEY),
+    };
   }),
 );
 

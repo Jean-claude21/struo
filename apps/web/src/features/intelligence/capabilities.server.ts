@@ -524,7 +524,7 @@ export const CAPABILITIES: Capability[] = [
       const from = input.from ?? new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
       const { id: reportId } = await core.createClientReportDraft(rt.db, actor, { projectId: id, from, to });
       const facts = await core.clientReportFacts(rt.db, actor, reportId);
-      const { sections } = await draftSections(rt, await companyLocale(rt, actor.orgId), facts);
+      const { sections } = await draftSections(rt, await companyLocale(rt, actor.orgId), facts, actor.orgId);
       await core.updateClientReportDraft(rt.db, actor, reportId, { sections });
       return { reportId, projectId: id, from, to, sections };
     },

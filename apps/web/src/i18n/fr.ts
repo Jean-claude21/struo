@@ -111,6 +111,8 @@ export const fr = {
     claim_decided: 'Ce paiement a déjà été traité.',
     request_closed: 'Cette demande est déjà livrée ou annulée.',
     bill_closed: 'Cette facture fournisseur est déjà payée ou annulée.',
+    plan_feature: 'Votre formule n’inclut pas cette fonction. Changez de formule dans Paramètres › Abonnement.',
+    plan_confirm_required: 'Des clients payants perdent quelque chose : confirmez en tapant le code de la formule.',
     payment_unavailable: 'Le paiement en ligne n’est pas activé par l’entreprise.',
     report_sent: 'Ce rapport a déjà été envoyé : il est figé.',
     client_email_missing: 'Le client n’a pas d’adresse e-mail : invitez-le depuis l’onglet « Client ».',

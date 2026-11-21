@@ -123,7 +123,7 @@ export async function runClientReports(rt: Runtime, now: Date, localClock: (time
     if (!(await core.markNotified(rt.owner, target.orgId, 'client_report', `${target.projectId}:${from}`, 'email'))) continue;
     try {
       const facts = await core.automaticReportFacts(rt.owner, target.orgId, target.projectId, from, to);
-      const { sections } = await draftSections(rt, target.locale, facts);
+      const { sections } = await draftSections(rt, target.locale, facts, target.orgId);
       const id = await core.saveAutomaticClientReport(rt.owner, { orgId: target.orgId, projectId: target.projectId, from, to, sections, sentTo: target.autoSend ? target.email : null });
       if (target.autoSend) {
         const base = portalUrl(rt, target.tokenEnc);

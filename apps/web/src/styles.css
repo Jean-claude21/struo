@@ -1409,3 +1409,30 @@ input[type='range'] { accent-color: var(--brand); min-height: 32px; padding: 0; 
 .ca-email { justify-content: center; color: var(--ink-soft); padding: .5rem 0 1rem; }
 .cash-table td, .cash-table th { white-space: nowrap; }
 .cash-notes { margin: .8rem 0; padding-left: 1.1rem; display: grid; gap: .25rem; }
+
+/* Spec 055 — licence offers */
+.offer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .7rem; }
+.offer-card { border: 1px solid var(--line); border-radius: 10px; padding: .9rem; display: grid; gap: .45rem; align-content: start; }
+.offer-card.on { border-color: var(--brand); border-width: 2px; }
+.offer-card .lp-tag { justify-self: start; }
+.offer-card ul { margin: 0; padding-left: 1.1rem; font-size: .9rem; display: grid; gap: .2rem; }
+.offer-price { font-size: 1.35rem; font-weight: 800; }
+.offer-card .btn { justify-self: start; margin-top: .2rem; }
+.announce { display: flex; align-items: flex-start; gap: .6rem; margin-bottom: 1rem; }
+.feedback-fab { position: fixed; right: 1rem; bottom: 1rem; z-index: 30; display: inline-flex; align-items: center; gap: .4rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); border-radius: 999px; padding: .45rem .8rem; font: 500 .82rem var(--font); cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.feedback-fab:hover { color: var(--ink); }
+@media (max-width: 760px) { .feedback-fab span { display: none; } .feedback-fab { bottom: 5rem; } }
+
+/* Spec 055 — founder's console */
+.link-btn { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.link-btn:hover b { text-decoration: underline; }
+.steps-dots { display: inline-flex; align-items: center; gap: 3px; }
+.steps-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); display: inline-block; }
+.steps-dots i.on { background: var(--ok); }
+.steps-dots span { margin-left: .3rem; }
+.steps-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+.steps-list li { display: flex; align-items: center; gap: .5rem; color: var(--ink-soft); }
+.steps-list li.on { color: var(--ink); }
+.steps-list li.on svg { color: var(--ok); }
+.steps-list .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); display: inline-block; }
+.plan-admin { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .8rem; }

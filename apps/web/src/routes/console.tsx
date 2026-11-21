@@ -1,8 +1,11 @@
-// The platform console (specs 027, 038): the operator's figures, every company with its detail
-// (members, usage, licences, payments) and gestures (plan, trial, paid period, suspension), the
-// licence products of the store mapped to plans, and the operator's journal.
+// The platform console (specs 027, 038, 055): what to handle today, true figures, every company
+// with where it stands and its detail (members, usage, licences, payments, notes) and gestures
+// (plan, trial, paid period, suspension), the plans edited with care, prices, licence products,
+// whether the platform runs, announcements, what users report, and the operator's journal.
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
+import { Mail, MessageCircle } from 'lucide-react';
+import { Announcements, CompanyNotes, Feedback, PlatformRuns, Plans, Steps, StepsList, Today } from '@/components/ConsoleFounder.tsx';
 import { PublicHeader } from '@/components/PublicHeader.tsx';
 import { Badge, DateText, formatMoney, parseMoney, Tabs } from '@/components/ui.tsx';
 import { COUNTRIES, sortedCountries } from '@/features/settings/countries.ts';
@@ -22,25 +25,38 @@ export const Route = createFileRoute('/console')({
 });
 
 type Data = Awaited<ReturnType<typeof getConsole>>;
-type Tab = 'overview' | 'health' | 'leads' | 'companies' | 'prices' | 'licenses' | 'journal';
+type Tab = 'today' | 'overview' | 'health' | 'platform' | 'leads' | 'companies' | 'plans' | 'prices' | 'licenses' | 'announcements' | 'feedback' | 'journal';
 
 function Console() {
   const { t } = useI18n();
   const data = Route.useLoaderData();
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>('today');
+  const [company, setCompany] = useState<string | null>(null);
+  const realCompanies = data.companies.filter((item) => !item.isDemo);
   return (
     <div className="public" style={{ maxWidth: 1240 }}>
       <PublicHeader signedIn />
       <h1>{t('console.title')}</h1>
       <Tabs value={tab} onChange={setTab} items={[
+        { value: 'today', label: `${t('founder.tab')} · ${data.todo.length}` },
         { value: 'overview', label: t('console2.overview') },
         { value: 'health', label: t('health.tab') },
-        { value: 'companies', label: `${t('console.companies')} · ${data.companies.length}` },
+        { value: 'platform', label: t('founder.platformTab') },
+        { value: 'companies', label: `${t('console.companies')} · ${realCompanies.length}` },
         { value: 'leads', label: `${t('leads.tab')} · ${data.leads.filter((lead) => !lead.handledAt).length}` },
+        { value: 'plans', label: t('plans.tab') },
         { value: 'prices', label: t('prices.tab') },
         { value: 'licenses', label: `${t('console2.licenses')} · ${data.products.length}` },
+        { value: 'announcements', label: t('announce.tab') },
+        { value: 'feedback', label: `${t('feedback.tab')} · ${data.feedback.filter((item) => !item.handledAt).length}` },
         { value: 'journal', label: t('console2.journal') },
       ]} />
+      {tab === 'today' ? <Today todo={data.todo} onOpen={setCompany} /> : null}
+      {tab === 'platform' ? <PlatformRuns runs={data.runs} sentryOn={data.sentryOn} /> : null}
+      {tab === 'plans' ? <Plans plans={data.editablePlans} /> : null}
+      {tab === 'announcements' ? <Announcements items={data.announcements} /> : null}
+      {tab === 'feedback' ? <Feedback items={data.feedback} onOpen={setCompany} /> : null}
+      {company ? <CompanyDrawer orgId={company} plans={data.plans} onClose={() => setCompany(null)} /> : null}
       {tab === 'overview' ? <Overview data={data} /> : null}
       {tab === 'health' ? <Health data={data} /> : null}
       {tab === 'companies' ? <Companies data={data} /> : null}
@@ -57,17 +73,14 @@ function Overview({ data }: { data: Data }) {
   return (
     <div className="stack">
       <div className="grid">
-        <KpiTile label={t('platform.mrr')} value={formatMoney(locale, data.revenue.mrrMinor, 'XOF')} tone="brand" sub={t('platform.paying', { n: data.revenue.paying })} />
-        <KpiTile label={t('platform.companies')} value={data.revenue.companies} sub={t('platform.trials', { n: data.revenue.trials })} />
+        <KpiTile label={t('platform.mrr')} value={data.money.mrr.length ? data.money.mrr.map((row) => formatMoney(locale, row.amountMinor, row.currency)).join(' · ') : formatMoney(locale, 0, 'XOF')} tone="brand" sub={t('platform.paying', { n: data.money.paying })} />
+        <KpiTile label={t('platform.companies')} value={data.money.companies} sub={t('platform.trials', { n: data.money.trials })} />
         <KpiTile label={t('platform.trialsEnding')} value={data.revenue.trialsEnding} tone={data.revenue.trialsEnding ? 'bad' : undefined} />
-        <KpiTile label={t('platform.quiet')} value={data.revenue.quiet.length} sub={t('platform.quietSub')} />
+        <KpiTile label={t('platform.quiet')} value={data.todo.filter((item) => item.kind === 'paying_slowing' || item.kind === 'trial_idle').length} sub={t('platform.quietSub')} />
         <KpiTile label={t('console2.licensesUsed')} value={data.redemptions.length} />
       </div>
-      <Panel title={t('platform.revenue')}>
-        <BarChart categories={data.revenue.months.map((month) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { month: 'short' }).format(new Date(`${month.month}-15T12:00:00`)))}
-          series={[{ values: data.revenue.months.map((month) => month.amount), color: 'var(--brand)' }]} locale={locale} label={t('platform.revenue')} />
-      </Panel>
-      {data.revenue.quiet.length ? (
+      <Revenue data={data} />
+      {data.revenue.quiet.length && false ? (
         <Panel title={t('platform.quiet')} sub={t('platform.quietSub')}>
           {data.revenue.quiet.map((company) => (
             <div key={company.orgId} className="alert-row"><span className="grow"><b>{company.name}</b></span>
@@ -79,23 +92,46 @@ function Overview({ data }: { data: Data }) {
   );
 }
 
+/** Spec 055: revenue per month, one currency at a time (never added across currencies), licences included. */
+function Revenue({ data }: { data: Data }) {
+  const { t, locale } = useI18n();
+  const currencies = [...new Set(data.money.months.map((row) => row.currency))];
+  const [currency, setCurrency] = useState(currencies[0] ?? 'XOF');
+  const months = [...Array(6)].map((_, index) => { const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - 5 + index); return date.toISOString().slice(0, 7); });
+  return (
+    <Panel title={t('platform.revenue')} sub={t('founder.revenueSub')} actions={currencies.length > 1 ? (
+      <select value={currency} onChange={(event) => setCurrency(event.target.value)} style={{ width: 'auto' }} aria-label={t('prices.currency')}>{currencies.map((code) => <option key={code}>{code}</option>)}</select>) : null}>
+      <BarChart categories={months.map((month) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { month: 'short' }).format(new Date(`${month}-15T12:00:00`)))}
+        series={[{ values: months.map((month) => data.money.months.find((row) => row.month === month && row.currency === currency)?.amountMinor ?? 0), color: 'var(--brand)' }]} locale={locale} label={t('platform.revenue')} />
+      {!data.money.months.length ? <p className="small muted" style={{ margin: 0 }}>{t('founder.noRevenue')}</p> : null}
+    </Panel>
+  );
+}
+
 function Companies({ data }: { data: Data }) {
   const { t } = useI18n();
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string | null>(null);
-  const shown = data.companies.filter((company) => !q.trim() || company.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const [demos, setDemos] = useState(false);
+  const shown = data.companies.filter((company) => (demos || !company.isDemo) && (!q.trim() || company.name.toLowerCase().includes(q.trim().toLowerCase())));
   return (
     <div className="stack">
-      <div className="search-in" style={{ width: 280 }}><input value={q} onChange={(event) => setQ(event.target.value)} placeholder={t('ui.search')} aria-label={t('ui.search')} /></div>
+      <div className="row"><div className="search-in" style={{ width: 280 }}><input value={q} onChange={(event) => setQ(event.target.value)} placeholder={t('ui.search')} aria-label={t('ui.search')} /></div>
+        <label className="check small"><input type="checkbox" checked={demos} onChange={(event) => setDemos(event.target.checked)} />{t('founder.showDemos')}</label></div>
       <div className="panel"><div className="table-wrap"><table>
-        <thead><tr><th>{t('clientInvite.contactName')}</th><th>{t('console.created')}</th><th>{t('console.plan')}</th><th>{t('console.users')}</th><th>{t('console.projects')}</th><th>{t('console.reports30')}</th></tr></thead>
+        <thead><tr><th>{t('clientInvite.contactName')}</th><th>{t('console.created')}</th><th>{t('console.plan')}</th><th>{t('console.users')}</th><th>{t('console.projects')}</th><th>{t('console.reports30')}</th><th>{t('founder.stepsTitle')}</th><th /></tr></thead>
         <tbody>{shown.map((company) => (
           <tr key={company.orgId} style={{ cursor: 'pointer' }} onClick={() => setOpen(company.orgId)}>
-            <td><b>{company.name}</b> <span className="muted small">{company.countryCode}</span></td>
+            <td><b>{company.name}</b> <span className="muted small">{company.countryCode}</span>{company.isDemo ? <> <Badge>{t('founder.demo')}</Badge></> : null}{company.suspended ? <> <Badge tone="bad">{t('founder.suspended')}</Badge></> : null}</td>
             <td><DateText value={company.createdAt} /></td>
             <td><span className="badge">{company.planCode}</span></td>
             <td>{company.users}</td><td>{company.projects}</td>
             <td><Badge tone={company.reportsLast30Days > 0 ? 'ok' : 'warn'}>{company.reportsLast30Days}</Badge></td>
+            <td><Steps steps={data.onboarding[company.orgId]} /></td>
+            <td className="nowrap" onClick={(event) => event.stopPropagation()}>
+              {company.ownerEmail ? <a className="btn ghost small" href={`mailto:${company.ownerEmail}`} aria-label={company.ownerEmail}><Mail size={14} /></a> : null}
+              {company.phone ? <a className="btn ghost small" href={`https://wa.me/${company.phone.replace(/[^\d]/gu, '')}`} target="_blank" rel="noreferrer" aria-label="WhatsApp"><MessageCircle size={14} /></a> : null}
+            </td>
           </tr>
         ))}</tbody>
       </table></div></div>
@@ -160,6 +196,8 @@ function CompanyDrawer({ orgId, plans, onClose }: { orgId: string; plans: Data['
                 <div key={item.maskedKey + item.redeemedAt} className="alert-row small"><code>{item.maskedKey}</code><span className="grow">{item.productId} · {item.months} {t('console2.months')}</span><span className="muted">{when(item.redeemedAt)} → {when(item.paidUntil)}</span></div>
               )) : <p className="muted small" style={{ margin: 0 }}>{t('console2.noLicense')}</p>}
           </Panel>
+          <StepsList steps={company.steps} />
+          <CompanyNotes orgId={orgId} notes={company.notes} onSaved={load} />
           <p className="faint xsmall">{t('console2.lastActivity', { date: when(company.usage.lastActivity) })}</p>
         </div>
       ) : null}
@@ -247,10 +285,11 @@ function Licenses({ data }: { data: Data }) {
   const { t, locale, errorText } = useI18n();
   const toast = useToast();
   const router = useRouter();
-  const [form, setForm] = useState({ productId: '', planCode: data.plans[0]?.code ?? '', months: 1, label: '', buyUrl: '' });
+  const empty = { productId: '', planCode: data.plans[0]?.code ?? '', months: 1, label: '', buyUrl: '', description: '', descriptionEn: '', highlight: false, position: 0 };
+  const [form, setForm] = useState(empty);
   const when = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium' }).format(new Date(value));
   const save = async (product = form) => {
-    try { await saveLicenseProduct({ data: { ...product, active: true } }); toast({ text: t('console2.done') }); setForm({ ...form, productId: '', label: '', buyUrl: '' }); await router.invalidate(); }
+    try { await saveLicenseProduct({ data: { ...product, description: product.description || null, descriptionEn: product.descriptionEn || null, active: true } }); toast({ text: t('console2.done') }); setForm(empty); await router.invalidate(); }
     catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
   };
   return (
@@ -262,7 +301,9 @@ function Licenses({ data }: { data: Data }) {
             <div key={product.productId} className="alert-row small">
               <code>{product.productId}</code><b className="grow">{product.label}</b>
               <span>{product.planCode} · {product.months} {t('console2.months')}</span>
+              {product.highlight ? <Badge tone="brand">{t('lp.offer.recommended')}</Badge> : null}
               {product.buyUrl ? <a href={product.buyUrl} target="_blank" rel="noreferrer">{t('console2.buyLink')}</a> : null}
+              <button type="button" className="btn ghost small" onClick={() => setForm({ productId: product.productId, planCode: product.planCode, months: product.months, label: product.label, buyUrl: product.buyUrl ?? '', description: product.description ?? '', descriptionEn: product.descriptionEn ?? '', highlight: product.highlight, position: product.position })}>{t('plans.edit')}</button>
               <button type="button" className="btn ghost small" onClick={async () => { await removeLicenseProduct({ data: { productId: product.productId } }); await router.invalidate(); }}>{t('app.remove')}</button>
             </div>
           ))}
@@ -272,6 +313,11 @@ function Licenses({ data }: { data: Data }) {
             <label className="field">{t('console.plan')}<select value={form.planCode} onChange={(event) => setForm({ ...form, planCode: event.target.value })}>{data.plans.map((plan) => <option key={plan.code} value={plan.code}>{plan.name}</option>)}</select></label>
             <label className="field">{t('console2.duration')}<input type="number" min={1} max={60} value={form.months} onChange={(event) => setForm({ ...form, months: Number(event.target.value) })} /></label>
             <label className="field">{t('console2.buyUrl')}<input value={form.buyUrl} onChange={(event) => setForm({ ...form, buyUrl: event.target.value })} placeholder="https://…" /></label>
+            <label className="field">{t('console2.description')} (FR)<textarea rows={4} maxLength={2000} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+            <label className="field">{t('console2.description')} (EN)<textarea rows={4} maxLength={2000} value={form.descriptionEn} onChange={(event) => setForm({ ...form, descriptionEn: event.target.value })} /></label>
+            <label className="field">{t('plans.position')}<input type="number" min={0} max={100} value={form.position} onChange={(event) => setForm({ ...form, position: Number(event.target.value) })} /></label>
+            <label className="check" style={{ alignSelf: 'end' }}><input type="checkbox" checked={form.highlight} onChange={(event) => setForm({ ...form, highlight: event.target.checked })} />{t('plans.highlight')}</label>
+            <p className="xsmall faint" style={{ gridColumn: '1 / -1', margin: 0 }}>{t('plans.bulletsHint')}</p>
             <div style={{ alignSelf: 'end' }}><button type="submit" className="btn small">{t('console2.addProduct')}</button></div>
           </form>
         </div>

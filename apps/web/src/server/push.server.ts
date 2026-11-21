@@ -29,7 +29,7 @@ export async function sendPush(rt: Runtime, targets: core.PushTarget[], payload:
     } catch (error) {
       const status = (error as { statusCode?: number }).statusCode;
       if (status === 404 || status === 410) await core.removePush(rt.owner, target.endpoint).catch(() => undefined);
-      else reportError(error, { where: 'push:send' });
+      else { reportError(error, { where: 'push:send' }); await core.recordPlatformEvent(rt.owner, { kind: 'push_failed', name: String(status ?? 'error') }); }
     }
   }));
   return delivered;

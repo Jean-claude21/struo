@@ -33,3 +33,4 @@ export * from './reports-client.ts';
 export * from './client-app.ts';
 export * from './material.ts';
 export * from './cash.ts';
+export * from './founder.ts';

@@ -10,6 +10,7 @@ import { addConfigurationItem, createCompany, getConfiguration, removeConfigurat
 import { getShell, selectCompany } from '@/features/shell/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 import { COUNTRIES, countryFromLanguages, DEFAULT_COUNTRY, sortedCountries } from '@/features/settings/countries.ts';
+import { trackSuccess } from '@/lib/audience.ts';
 
 export const Route = createFileRoute('/onboarding')({
   loader: async () => {
@@ -49,7 +50,7 @@ function Onboarding() {
               name: v.name, countryCode: country, currencyCode: v.currencyCode?.toUpperCase(),
               vatBps: Math.round(Number(v.vat?.replace(',', '.')) * 100), retentionBps: Math.round(Number(v.retention?.replace(',', '.')) * 100), locale: v.locale,
             } }), { reload: false });
-            if (done) setStep(2);
+            if (done) { trackSuccess('company-created'); setStep(2); }
           }}>
             <Field label={t('onboarding.companyName')}><input name="name" required minLength={2} autoFocus /></Field>
             <div className="form-grid">

@@ -217,6 +217,7 @@ export const uxFr = {
     months: "mois",
     noLicense: "Aucune licence activée.",
     lastActivity: "Dernière activité : {date}",
+    description: "Description pour l’acheteur",
     chariowOff: "Chariow n’est pas encore branché : ajoutez la clé API (CHARIOW_API_KEY, droits licenses.read et licenses.write) dans les secrets, puis redéployez.",
     chariowOn: "Chariow est branché : les clés collées par les entreprises sont vérifiées et activées.",
     products: "Produits licences",
@@ -232,6 +233,7 @@ export const uxFr = {
   lic: {
     title: "Payer avec une licence",
     how: "Achetez une licence Struo sur Chariow (mobile money ou carte), puis collez ici la clé reçue par e-mail : l’abonnement est prolongé aussitôt.",
+    buy: "Acheter",
     storeOff: "Le paiement par licence n’est pas encore ouvert.",
     placeholder: "Clé de licence, ex. ABC-123-XYZ-789",
     activate: "Activer",

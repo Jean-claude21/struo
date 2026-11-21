@@ -10,10 +10,13 @@ export interface Plan {
   maxUsers: number | null;
   maxProjects: number | null;
   features: string[];
+  /** Spec 055: the words buyers read, edited in the console (null: the catalogue's default). */
+  nameEn?: string | null; tagline?: string | null; taglineEn?: string | null; bullets?: string | null; bulletsEn?: string | null; highlight?: boolean;
 }
 
 const PLAN_COLUMNS = `code, name, price_minor as "priceMinor", currency_code as "currencyCode",
-  max_users as "maxUsers", max_projects as "maxProjects", features`;
+  max_users as "maxUsers", max_projects as "maxProjects", features,
+  name_en as "nameEn", tagline, tagline_en as "taglineEn", bullets, bullets_en as "bulletsEn", highlight`;
 
 export async function listPlans(db: Db): Promise<Plan[]> {
   const { rows } = await db.query<Plan>(`select ${PLAN_COLUMNS} from plan where public order by position`);
@@ -27,7 +30,8 @@ export async function listPlans(db: Db): Promise<Plan[]> {
 export async function listPlansIn(db: Db, currencyCode: string): Promise<Plan[]> {
   const { rows } = await db.query<Plan>(
     `select p.code, p.name, coalesce(pp.price_minor, 0)::int as "priceMinor", $1::text as "currencyCode",
-            p.max_users as "maxUsers", p.max_projects as "maxProjects", p.features
+            p.max_users as "maxUsers", p.max_projects as "maxProjects", p.features,
+            p.name_en as "nameEn", p.tagline, p.tagline_en as "taglineEn", p.bullets, p.bullets_en as "bulletsEn", p.highlight
        from plan p left join plan_price pp on pp.plan_code = p.code and pp.currency_code = $1
       where p.public order by p.position`,
     [currencyCode],
@@ -131,6 +135,7 @@ export interface CompanyOverview {
   users: number;
   projects: number;
   reportsLast30Days: number;
+  isDemo: boolean; paidUntil: string | null; suspended: boolean; ownerEmail: string | null; phone: string | null;
 }
 
 /** Every company, for the platform console. Owner connection only (it crosses companies). */
@@ -141,8 +146,13 @@ export async function platformOverview(owner: Db): Promise<CompanyOverview[]> {
             (select count(*)::int from member m where m."organizationId" = o.id) as users,
             (select count(*)::int from project p where p.org_id = o.id and p.archived_at is null) as projects,
             (select count(*)::int from site_report r where r.org_id = o.id
-               and r.created_at > now() - interval '30 days') as "reportsLast30Days"
-       from organization o join org_settings s on s.org_id = o.id order by o."createdAt" desc`,
+               and r.created_at > now() - interval '30 days') as "reportsLast30Days",
+            s.is_demo as "isDemo", to_char(s.paid_until, 'YYYY-MM-DD') as "paidUntil", s.suspended_at is not null as suspended,
+            (select u.email from member m join "user" u on u.id = m."userId" where m."organizationId" = o.id and m.role = 'owner' order by m."createdAt" limit 1) as "ownerEmail",
+            (select i.phone from invoice_settings i where i.org_id = o.id) as phone
+       from organization o join org_settings s on s.org_id = o.id
+      where not exists (select 1 from demo_sandbox d where d.org_id = o.id)
+      order by o."createdAt" desc`,
   );
   return rows;
 }

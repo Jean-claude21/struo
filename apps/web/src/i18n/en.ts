@@ -112,6 +112,8 @@ export const en: Catalog = {
     claim_decided: 'This payment was already handled.',
     request_closed: 'This request is already delivered or cancelled.',
     bill_closed: 'This supplier bill is already paid or cancelled.',
+    plan_feature: 'Your plan does not include this feature. Change plan in Settings › Subscription.',
+    plan_confirm_required: 'Paying clients lose something: confirm by typing the plan code.',
     payment_unavailable: 'Online payment is not enabled by the company.',
     report_sent: 'This report was already sent: it is frozen.',
     client_email_missing: 'The client has no e-mail address: invite them from the « Client » tab.',

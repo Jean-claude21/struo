@@ -19,12 +19,17 @@ async function platformJournal(owner: Db, adminId: string, command: string, targ
 
 // ---------------------------------------------------------------- licence products
 
-export interface LicenseProduct { productId: string; planCode: string; months: number; label: string; buyUrl: string | null; active: boolean }
+export interface LicenseProduct {
+  productId: string; planCode: string; months: number; label: string; buyUrl: string | null; active: boolean;
+  /** Spec 055: what the buyer reads (one line = one point, **bold**), highlighted offer, order. */
+  description: string | null; descriptionEn: string | null; highlight: boolean; position: number;
+}
 
 export async function listLicenseProducts(owner: Db, onlyActive = false): Promise<LicenseProduct[]> {
   const { rows } = await owner.query<LicenseProduct>(
-    `select product_id as "productId", plan_code as "planCode", months, label, buy_url as "buyUrl", active
-       from platform_license_product ${onlyActive ? 'where active' : ''} order by plan_code, months`);
+    `select product_id as "productId", plan_code as "planCode", months, label, buy_url as "buyUrl", active,
+            description, description_en as "descriptionEn", highlight, position
+       from platform_license_product ${onlyActive ? 'where active' : ''} order by position, plan_code, months`);
   return rows;
 }
 
@@ -35,6 +40,10 @@ const productInput = z.object({
   label: z.string().trim().min(1).max(120),
   buyUrl: z.string().trim().url().startsWith('https://').nullable().optional().or(z.literal('').transform(() => null)),
   active: z.boolean().default(true),
+  description: z.string().trim().max(2000).nullable().optional(),
+  descriptionEn: z.string().trim().max(2000).nullable().optional(),
+  highlight: z.boolean().default(false),
+  position: z.number().int().min(0).max(100).default(0),
 });
 
 export async function saveLicenseProduct(owner: Db, adminId: string, input: unknown): Promise<void> {
@@ -42,9 +51,11 @@ export async function saveLicenseProduct(owner: Db, adminId: string, input: unkn
   const plan = await owner.query('select 1 from plan where code = $1', [data.planCode]);
   if (!plan.rowCount) throw new DomainError('not_found', 404);
   await owner.query(
-    `insert into platform_license_product (product_id, plan_code, months, label, buy_url, active) values ($1, $2, $3, $4, $5, $6)
-     on conflict (product_id) do update set plan_code = excluded.plan_code, months = excluded.months, label = excluded.label, buy_url = excluded.buy_url, active = excluded.active`,
-    [data.productId, data.planCode, data.months, data.label, data.buyUrl ?? null, data.active],
+    `insert into platform_license_product (product_id, plan_code, months, label, buy_url, active, description, description_en, highlight, position)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     on conflict (product_id) do update set plan_code = excluded.plan_code, months = excluded.months, label = excluded.label, buy_url = excluded.buy_url,
+       active = excluded.active, description = excluded.description, description_en = excluded.description_en, highlight = excluded.highlight, position = excluded.position`,
+    [data.productId, data.planCode, data.months, data.label, data.buyUrl ?? null, data.active, data.description || null, data.descriptionEn || null, data.highlight, data.position],
   );
   await platformJournal(owner, adminId, 'license_product.save', data.productId, data);
 }
