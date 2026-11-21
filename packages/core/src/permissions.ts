@@ -21,6 +21,8 @@ export const PERMISSIONS = {
   // Spec 047: the crew register and the subcontracts; day rates are pay, seen by few.
   'crew.write': ['owner', 'admin', 'engineer', 'accountant'],
   'crew.rates': ['owner', 'admin', 'accountant'],
+  // Spec 053: the company's own cash (forecast, supplier bills): the roles that see the Finance screen.
+  'cash.read': ['owner', 'admin', 'accountant'],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

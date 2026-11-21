@@ -837,6 +837,7 @@ export const uxFr = {
       apikeys_manage: 'Clés API et assistants (MCP)',
       crew_write: 'Gérer les ouvriers, présences et sous-traitants',
       crew_rates: 'Voir et modifier les taux journaliers',
+      cash_read: 'Voir la trésorerie et les factures fournisseurs',
     },
   },
   onb: {

@@ -180,7 +180,11 @@ function Manager({ data }: { data: Data }) {
         <div className="grid">
           <KpiTile icon={Wallet} label={t('dashboard.receivable')} value={money(data.finance.receivableMinor)} tone="brand" sub={`${t('dashboard.overdue')} ${money(data.finance.overdueMinor)}`} subTone={data.finance.overdueMinor ? 'bad' : undefined} />
           <KpiTile label={t('today.dueSoon')} value={money(data.finance.dueSoonMinor)} sub={t('today.collectedRate', { pct: data.finance.collectedPct })} />
-          <KpiTile label={t('dashboard.cash')} value={money(data.finance.cashMinor)} tone={data.finance.cashMinor < 0 ? 'bad' : undefined} sub={t('today.cashHint')} />
+          {data.cash ? (
+            <KpiTile label={t('cash.in', { n: 30 })} value={money(data.cash.d30)} tone={data.cash.d30 < 0 ? 'bad' : undefined}
+              sub={data.cash.lowest.balanceMinor < 0 ? t('cash.lowestShort', { amount: money(data.cash.lowest.balanceMinor) }) : t('cash.forecastHint')} subTone={data.cash.lowest.balanceMinor < 0 ? 'bad' : undefined}
+              onClick={() => { window.location.href = '/app/finance?tab=cash'; }} />
+          ) : <KpiTile label={t('dashboard.cash')} value={money(data.finance.cashMinor)} tone={data.finance.cashMinor < 0 ? 'bad' : undefined} sub={t('today.cashHint')} />}
           <KpiTile label={t('today.projectedMargin')} value={data.finance.projectedMarginPct === null ? '—' : `${data.finance.projectedMarginPct} %`}
             tone={data.finance.projectedMarginPct !== null && data.finance.projectedMarginPct < 10 ? 'bad' : undefined}
             sub={t('today.currentMargin', { pct: data.finance.marginPct ?? 0 })} />

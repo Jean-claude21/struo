@@ -838,6 +838,7 @@ export const uxEn: typeof uxFr = {
       apikeys_manage: 'API keys and assistants (MCP)',
       crew_write: 'Manage workers, presences and subcontractors',
       crew_rates: 'See and change day rates',
+      cash_read: 'See the cash forecast and supplier bills',
     },
   },
   onb: {

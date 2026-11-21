@@ -1,5 +1,6 @@
 import { can } from '@struo/core/permissions';
 import { PaymentClaims } from '@/components/PaymentClaims.tsx';
+import { CashForecast } from '@/components/CashForecast.tsx';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { BellRing, Ban, Copy, Download, Eye, FileText, Kanban, Table2, TriangleAlert, Wallet } from 'lucide-react';
@@ -45,7 +46,7 @@ function Finance() {
   const router = useRouter();
   const toast = useToast();
   const ago = useRelative();
-  const [tab, setTab] = useState<'invoices' | 'payments' | 'claims'>(search.tab === 'claims' ? 'claims' : 'invoices');
+  const [tab, setTab] = useState<'invoices' | 'payments' | 'claims' | 'cash'>(search.tab === 'claims' ? 'claims' : search.tab === 'cash' ? 'cash' : 'invoices');
   const [openId, setOpenId] = useState<string | null>(search.invoice ?? null);
   const [paying, setPaying] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<Invoice | null>(null);
@@ -145,7 +146,8 @@ function Finance() {
           ))}
         </div>
       </Panel>
-      <Tabs value={tab} onChange={setTab} items={[{ value: 'invoices', label: `${t('fin.invoicesTab')} · ${data.invoices.length}` }, { value: 'payments', label: `${t('fin.paymentsTab')} · ${data.payments.length}` }, { value: 'claims', label: `${t('claims.tab')} · ${data.claims.filter((claim) => claim.status === 'pending').length}` }]} />
+      <Tabs value={tab} onChange={setTab} items={[{ value: 'invoices', label: `${t('fin.invoicesTab')} · ${data.invoices.length}` }, { value: 'payments', label: `${t('fin.paymentsTab')} · ${data.payments.length}` }, { value: 'claims', label: `${t('claims.tab')} · ${data.claims.filter((claim) => claim.status === 'pending').length}` }, { value: 'cash', label: t('cash.tab') }]} />
+      {tab === 'cash' ? <CashForecast canWrite={canWrite} /> : null}
       {tab === 'claims' ? <PaymentClaims claims={data.claims} canWrite={canWrite} onDone={() => router.invalidate()} /> : null}
       {tab === 'invoices' ? (
         <div>

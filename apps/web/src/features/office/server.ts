@@ -41,6 +41,8 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(() =>
     ]);
     // Spec 051: payments clients declared, waiting for the people who handle money.
     const claims = canFinance ? await core.listPaymentClaims(db, actor, { status: 'pending' }) : [];
+    // Spec 053: where the cash goes, for the roles that see the company's money.
+    const cash = core.can(actor.role, 'cash.read') ? await core.cashForecast(db, actor).catch(() => null) : null;
     const me = members.find((member) => member.userId === actor.userId);
     // Spec 047: who is on the sites today.
     const crew = await core.crewToday(db, actor, new Date().toISOString().slice(0, 10));
@@ -48,7 +50,7 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(() =>
       .map(async (site) => ({ projectId: site.id, code: site.code, location: site.location, days: await forecast(site.latitude!, site.longitude!) })));
     return {
       role: actor.role, name: me?.name ?? '', settings, finance, operations, alerts, projects, activity, subscription,
-      insights: canFinance ? insights : { ...insights, cash: [], risk: [] }, aging, payments, weather, rainLimit: RAIN_LIMIT, crew, claims,
+      insights: canFinance ? insights : { ...insights, cash: [], risk: [] }, aging, payments, weather, rainLimit: RAIN_LIMIT, crew, claims, cash: cash ? { d30: cash.at.d30, lowest: cash.lowest, currency: cash.currency, estimated: cash.start.estimated } : null,
     };
   }),
 );
@@ -587,6 +589,31 @@ export const postMessage = createServerFn({ method: 'POST' })
     void notifyClient(runtime(), actor.orgId, data.projectId, 'message');
     return result;
   }));
+
+// ---------------------------------------------------------------- the money to come (spec 053)
+
+export const getCash = createServerFn({ method: 'GET' }).handler(() =>
+  act(async (actor) => {
+    const { db } = runtime();
+    const [forecast, bills, projects] = await Promise.all([core.cashForecast(db, actor), core.listSupplierBills(db, actor), core.listProjects(db, actor)]);
+    return { forecast, bills, projects: projects.map((project) => ({ id: project.id, code: project.code, name: project.name })) };
+  }, 'cash.read'));
+
+export const createSupplierBill = createServerFn({ method: 'POST' })
+  .validator(any)
+  .handler(({ data }) => act((actor) => core.createSupplierBill(runtime().db, actor, data)));
+
+export const paySupplierBill = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; paidOn?: string }) => input)
+  .handler(({ data }) => act((actor) => core.paySupplierBill(runtime().db, actor, data.id, { paidOn: data.paidOn })));
+
+export const cancelSupplierBill = createServerFn({ method: 'POST' })
+  .validator(idOf)
+  .handler(({ data }) => act((actor) => core.cancelSupplierBill(runtime().db, actor, data.id)));
+
+export const setCashBalance = createServerFn({ method: 'POST' })
+  .validator((input: { amountMinor: number; on: string }) => input)
+  .handler(({ data }) => act((actor) => core.setCashBalance(runtime().db, actor, data)));
 
 // ---------------------------------------------------------------- payments declared by clients (spec 051)
 

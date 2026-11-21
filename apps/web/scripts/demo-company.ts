@@ -691,6 +691,15 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
     if (status === 'accepted') await core.decideChangeOrder(app, actors.jean, id, { accept: true, decidedBy: site === 'KC-01' ? 'Kodjo Amegah' : 'SCI Les Cocotiers' });
   }
   log(`change orders: ${CHANGES.length}`);
+  // Spec 053: the bank balance the owner gave, and supplier bills to pay.
+  await core.setCashBalance(app, boss, { amountMinor: 38_500_000, on: day(-3) });
+  if (ids['KC-01']) {
+    await core.createSupplierBill(app, boss, { projectId: ids['KC-01'], supplier: 'Cimenterie Exemple', label: 'Ciment, livraison du 14', reference: 'FA-3391', category: 'materials', amountMinor: 2_150_000, issuedOn: day(-20), dueOn: day(-2) });
+    await core.createSupplierBill(app, boss, { projectId: ids['KC-01'], supplier: 'Tuiles & Toitures (fictif)', label: 'Tuiles et faîtières', category: 'materials', amountMinor: 4_800_000, issuedOn: day(-5), dueOn: day(12) });
+  }
+  await core.createSupplierBill(app, boss, { supplier: 'Location engins (fictif)', label: 'Mini-pelle, novembre', category: 'equipment', amountMinor: 1_350_000, issuedOn: day(-8), dueOn: day(20) });
+  await core.createSupplierBill(app, boss, { supplier: 'Assurance (fictif)', label: 'Prime décennale, échéance trimestrielle', category: 'fees', amountMinor: 3_200_000, issuedOn: day(-2), dueOn: day(35) });
+
   // Spec 052: the KC-01 site lead asks for material and writes to the office; the office answers.
   if (ids['KC-01']) {
     const cement = randomUUID();
