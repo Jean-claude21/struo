@@ -11,7 +11,7 @@ export function DemoBar({ role, expiresAt }: { role: string; expiresAt: string |
   return (
     <div className="demo-bar" role="region" aria-label={t('demo.barLabel')}>
       <span className="demo-pill">{t('demo.pill')}</span>
-      <span className="demo-text">{until ? t('demo.barText', { until }) : t('demo.barTextShared')}</span>
+      <span className="demo-text" suppressHydrationWarning>{until ? t('demo.barText', { until }) : t('demo.barTextShared')}</span>
       <span className="demo-roles" role="group" aria-label={t('demo.seeAs')}>
         <Eye size={14} aria-hidden />
         {ROLES.map(([value, label]) => (

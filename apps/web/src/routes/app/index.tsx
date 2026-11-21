@@ -40,7 +40,7 @@ function Today() {
       <div className="page-head">
         <div className="grow">
           <h1>{t('dashboard.hello', { name: first })}</h1>
-          <p style={{ textTransform: 'capitalize' }}>{dateLine}</p>
+          <p style={{ textTransform: 'capitalize' }} suppressHydrationWarning>{dateLine}</p>
           {data.subscription.plan.code === 'trial' ? (
             <p className={data.subscription.trialExpired ? 'error' : 'muted small'}>
               {data.subscription.trialExpired ? t('dashboard.trialExpired') : t('dashboard.trialEnds', { date: new Intl.DateTimeFormat(locale).format(new Date(data.subscription.trialEndsAt)) })}
