@@ -104,9 +104,9 @@ export const getPortalReport = createServerFn({ method: 'GET' })
   .handler(({ data }) =>
     guarded(async () => {
       const link = await access(data.token);
-      if (link.requireCode && !link.verified) return null;
+      if (link.requireCode && !link.verified) return { locked: true as const };
       const report = await core.portalClientReport(runtime().owner, data.token, data.id);
-      return report ? { report, orgId: link.orgId } : null;
+      return report ? { report, orgId: link.orgId } : { missing: true as const };
     }),
   );
 

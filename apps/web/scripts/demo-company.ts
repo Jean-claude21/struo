@@ -19,6 +19,8 @@ export interface DemoContext {
   /** Password hash given to every account of the company. */
   passwordHash: string;
   baseUrl: string;
+  /** Seals a client link so the demo's later messages carry it (spec 049). */
+  seal?: (token: string) => string;
   log?: (message: string) => void;
 }
 
@@ -611,6 +613,7 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
   const portals: { code: string; contact: string; token: string; requireCode: boolean }[] = [];
   for (const portal of PORTALS) {
     const link = await core.createPortalLink(app, boss, ids[portal.code]!, portal.contact);
+    if (ctx.seal) await core.sealPortalToken(app, boss, link.id, ctx.seal(link.token));
     portalUrls.push(`${portal.code.padEnd(6)} ${portal.contact.padEnd(40)} ${baseUrl}/portal/${link.token}${['KC-01', 'KC-04'].includes(portal.code) ? '' : '   (code e-mail requis)'}`);
     portals.push({ code: portal.code, contact: portal.contact, token: link.token, requireCode: !['KC-01', 'KC-04'].includes(portal.code) });
     await core.updatePortalLink(app, boss, link.id, {
@@ -688,8 +691,30 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
     if (status === 'accepted') await core.decideChangeOrder(app, actors.jean, id, { accept: true, decidedBy: site === 'KC-01' ? 'Kodjo Amegah' : 'SCI Les Cocotiers' });
   }
   log(`change orders: ${CHANGES.length}`);
-  // Spec 049: last week's client report, already sent to the KC-01 client.
-  if (ids['KC-01']) await core.saveClientReport(app, actors.jean, { projectId: ids['KC-01'], from: day(-7), to: day(-1), note: 'Les gouttières sont posées côté nord ; la couverture avance comme prévu.', sentTo: 'client.demo@struo.test' });
+  // Specs 049–050: last week's client report, written and sent to the KC-01 client; this week's
+  // draft waiting for the office's reading.
+  if (ids['KC-01']) {
+    const sent = await core.createClientReportDraft(app, actors.jean, { projectId: ids['KC-01'], from: day(-7), to: day(-1) });
+    await core.updateClientReportDraft(app, actors.jean, sent.id, {
+      note: 'Les gouttières sont posées côté nord ; la couverture avance comme prévu.',
+      sections: {
+        summary: 'Une bonne semaine sur votre chantier : la couverture avance comme prévu et les gouttières côté nord sont posées. Les intempéries n’ont pas ralenti l’équipe.',
+        done: ['Pose des tuiles sur le pan nord.', 'Pose des gouttières et des descentes d’eau côté nord.', 'Vérification de l’étanchéité après la pluie de jeudi : rien à signaler.'].join('\n'),
+        next: 'La couverture du pan sud, puis la pose des menuiseries extérieures.',
+        ask: '',
+      },
+    });
+    await core.sendClientReportDraft(app, actors.jean, sent.id, 'client.demo@struo.test');
+    const draft = await core.createClientReportDraft(app, actors.jean, { projectId: ids['KC-01'], from: day(-6), to: day(0) });
+    await core.updateClientReportDraft(app, actors.jean, draft.id, {
+      sections: {
+        summary: 'Cette semaine, la couverture du pan sud a commencé. Le chantier avance au rythme prévu.',
+        done: ['Mise en place des liteaux sur le pan sud.', 'Début de la pose des tuiles.'].join('\n'),
+        next: 'Fin de la couverture, puis les menuiseries extérieures.',
+        ask: '',
+      },
+    });
+  }
 
   // ---------------------------------------------------------------- crew, presences, subcontractors (spec 047)
   const CREW: [string, string, number, string][] = [

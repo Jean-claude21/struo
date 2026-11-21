@@ -6,9 +6,10 @@ import { translate, type Locale } from '@/i18n/index.tsx';
 import { outboundAllowed } from './demo.server.ts';
 import { mailMessage } from './mail.server.ts';
 import { reportError } from './monitor.server.ts';
+import { draftSections } from './report.server.ts';
 import type { Runtime } from './runtime.server.ts';
 
-async function companyLocale(rt: Runtime, orgId: string): Promise<Locale> {
+export async function companyLocale(rt: Runtime, orgId: string): Promise<Locale> {
   const { rows } = await rt.owner.query<{ locale: Locale }>('select locale from org_settings where org_id = $1', [orgId]);
   return rows[0]?.locale === 'en' ? 'en' : 'fr';
 }
@@ -85,12 +86,28 @@ export async function mailClientReport(rt: Runtime, input: { locale: Locale; to:
   }, rt.env.APP_BASE_URL));
 }
 
+/** Freezes a draft and e-mails the client a button to it in their space (spec 050). */
+export async function deliverClientReport(rt: Runtime, actor: core.Actor, id: string): Promise<{ id: string; mailed: boolean; withLink: boolean }> {
+  const draft = await core.clientReportDraft(rt.db, actor, id);
+  const contact = await core.portalContact(rt.db, actor, draft.projectId);
+  if (!contact?.contactEmail) throw new core.DomainError('client_email_missing', 422);
+  const report = await core.sendClientReportDraft(rt.db, actor, id, contact.contactEmail);
+  const base = portalUrl(rt, contact.tokenEnc);
+  const outbound = await outboundAllowed(rt, actor.orgId);
+  if (outbound) {
+    await mailClientReport(rt, { locale: await companyLocale(rt, actor.orgId), to: contact.contactEmail, contactName: contact.contactName, company: report.company.name,
+      project: report.project.name, from: report.period.from, to_: report.period.to, url: base ? `${base}/report/${id}` : null });
+  }
+  return { id, mailed: outbound && rt.mailer.configured, withLink: Boolean(base) };
+}
+
 /**
  * The weekly client report (Monday morning, local time) for companies that chose it: the past week,
- * one send per site and week.
+ * one per site and week. A draft for the site manager to read (e-mailed to them), or — when the
+ * company chose so — sent to the client at once.
  */
 export async function runClientReports(rt: Runtime, now: Date, localClock: (timeZone: string, now?: Date) => { hour: number; day: Date }): Promise<number> {
-  let sent = 0;
+  let done = 0;
   for (const target of await core.weeklyReportTargets(rt.owner)) {
     const local = localClock(target.timeZone, now);
     if (local.hour < 7 || local.day.getUTCDay() !== 1) continue;
@@ -98,13 +115,31 @@ export async function runClientReports(rt: Runtime, now: Date, localClock: (time
     const from = new Date(local.day.getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
     if (!(await core.markNotified(rt.owner, target.orgId, 'client_report', `${target.projectId}:${from}`, 'email'))) continue;
     try {
-      const id = await core.saveAutomaticClientReport(rt.owner, { orgId: target.orgId, projectId: target.projectId, from, to, sentTo: target.email });
-      const base = portalUrl(rt, target.tokenEnc);
-      await mailClientReport(rt, { locale: target.locale, to: target.email, contactName: target.contactName, company: target.company, project: target.projectName, from, to_: to, url: base ? `${base}/report/${id}` : null });
-      sent++;
+      const facts = await core.automaticReportFacts(rt.owner, target.orgId, target.projectId, from, to);
+      const { sections } = await draftSections(rt, target.locale, facts);
+      const id = await core.saveAutomaticClientReport(rt.owner, { orgId: target.orgId, projectId: target.projectId, from, to, sections, sentTo: target.autoSend ? target.email : null });
+      if (target.autoSend) {
+        const base = portalUrl(rt, target.tokenEnc);
+        await mailClientReport(rt, { locale: target.locale, to: target.email, contactName: target.contactName, company: target.company, project: target.projectName, from, to_: to, url: base ? `${base}/report/${id}` : null });
+      } else if (target.officeEmail) {
+        await mailReportReady(rt, { locale: target.locale, to: target.officeEmail, code: target.projectCode, project: target.projectName, projectId: target.projectId, from, to_: to });
+      }
+      done++;
     } catch (error) {
       reportError(error, { where: 'job:client-report', orgId: target.orgId });
     }
   }
-  return sent;
+  return done;
+}
+
+/** Tells the site manager the weekly draft waits for their reading. */
+async function mailReportReady(rt: Runtime, input: { locale: Locale; to: string; code: string; project: string; projectId: string; from: string; to_: string }): Promise<void> {
+  const date = (value: string) => new Intl.DateTimeFormat(input.locale === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'long' }).format(new Date(`${value}T12:00:00`));
+  await rt.mailer.send(mailMessage(input.locale, input.to, translate(input.locale, 'reportDraft.readyMail.subject', { code: input.code }), {
+    preheader: translate(input.locale, 'reportDraft.readyMail.preheader'),
+    title: translate(input.locale, 'reportDraft.readyMail.title'),
+    paragraphs: [translate(input.locale, 'reportDraft.readyMail.body', { from: date(input.from), to: date(input.to_), code: input.code, project: input.project })],
+    button: { label: translate(input.locale, 'reportDraft.readyMail.button'), url: `${rt.env.APP_BASE_URL}/app/projects/${input.projectId}?tab=report` },
+    footnote: translate(input.locale, 'reportDraft.readyMail.why'),
+  }, rt.env.APP_BASE_URL));
 }

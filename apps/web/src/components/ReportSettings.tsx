@@ -18,7 +18,7 @@ export function ReportSettings({ canWrite }: { canWrite: boolean }) {
     try { await updateInvoiceSettings({ data: patch as Record<string, unknown> }); toast({ text: t('ui.saved') }); }
     catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
   };
-  const toggle = (key: 'reportShowProgress' | 'reportShowMilestones' | 'reportShowChanges' | 'reportWeekly', label: string) => (
+  const toggle = (key: 'reportShowProgress' | 'reportShowMilestones' | 'reportShowChanges' | 'reportWeekly' | 'reportAutoSend', label: string) => (
     <label className="check"><input type="checkbox" checked={look[key]} disabled={!canWrite} onChange={(event) => void save({ [key]: event.target.checked })} />{label}</label>
   );
   return (
@@ -37,6 +37,7 @@ export function ReportSettings({ canWrite }: { canWrite: boolean }) {
         {toggle('reportShowMilestones', t('clientReport.showMilestones'))}
         {toggle('reportShowChanges', t('clientReport.showChanges'))}
         {toggle('reportWeekly', t('clientReport.weekly'))}
+        {look.reportWeekly ? <div className="stack" style={{ gap: '.2rem', paddingLeft: '1.6rem' }}>{toggle('reportAutoSend', t('clientReport.autoSend'))}<span className="small muted">{t('clientReport.autoSendHint')}</span></div> : null}
         <p className="small muted" style={{ margin: 0 }}>{t('clientReport.lookHint')}</p>
       </div>
     </Panel>

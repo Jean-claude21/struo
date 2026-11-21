@@ -6,7 +6,8 @@ import { translate } from '@/i18n/index.tsx';
 import { guarded, requestLocale, requireActor } from '@/server/context.server.ts';
 import { alertText } from '@/server/jobs.server.ts';
 import { outboundAllowed } from '@/server/demo.server.ts';
-import { mailClientReport, notifyChangeOrderSent, notifyTaskAssigned, portalUrl } from '@/server/notify.server.ts';
+import { companyLocale, deliverClientReport, notifyChangeOrderSent, notifyTaskAssigned } from '@/server/notify.server.ts';
+import { draftSections, rewriteSection } from '@/server/report.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 import { forecast, RAIN_LIMIT } from '@/server/weather.server.ts';
 
@@ -687,43 +688,65 @@ export const getSiteDay = createServerFn({ method: 'GET' })
     return { ...journal, company: settings.name, orgId: actor.orgId };
   }));
 
-// ---------------------------------------------------------------- client report (spec 049)
+// ---------------------------------------------------------------- client report (specs 049–050)
 
 export const getClientReportTab = createServerFn({ method: 'GET' })
   .validator((input: { projectId: string }) => input)
   .handler(({ data }) => act(async (actor) => {
-    const { db } = runtime();
+    const { db, drafter } = runtime();
     const [contact, reports, look] = await Promise.all([core.portalContact(db, actor, data.projectId), core.listClientReports(db, actor, data.projectId), core.getInvoiceSettings(db, actor)]);
     return {
       contact: contact ? { name: contact.contactName, email: contact.contactEmail, hasLink: Boolean(contact.tokenEnc) } : null,
-      reports, weekly: look.reportWeekly, canSend: ['owner', 'admin', 'engineer'].includes(actor.role),
+      reports, weekly: look.reportWeekly, maxPhotos: look.reportPhotos, canSend: ['owner', 'admin', 'engineer'].includes(actor.role), ai: drafter.configured,
     };
   }));
 
-export const previewClientReport = createServerFn({ method: 'GET' })
-  .validator((input: { projectId: string; from: string; to: string; note?: string | null }) => input)
-  .handler(({ data }) => act(async (actor) => {
-    const report = await core.clientReport(runtime().db, actor, data.projectId, { from: data.from, to: data.to }, data.note ?? null);
-    return { report, orgId: actor.orgId };
-  }));
-
-export const sendClientReport = createServerFn({ method: 'POST' })
-  .validator((input: { projectId: string; from: string; to: string; note?: string | null }) => input)
+/** Starts a draft for a period, its prose written from the validated reports (assistant or template). */
+export const createClientReport = createServerFn({ method: 'POST' })
+  .validator((input: { projectId: string; from: string; to: string }) => input)
   .handler(({ data }) => act(async (actor) => {
     const rt = runtime();
-    const contact = await core.portalContact(rt.db, actor, data.projectId);
-    if (!contact?.contactEmail) throw new core.DomainError('client_email_missing', 422);
-    const report = await core.clientReport(rt.db, actor, data.projectId, { from: data.from, to: data.to });
-    const { id } = await core.saveClientReport(rt.db, actor, { ...data, sentTo: contact.contactEmail });
-    const base = portalUrl(rt, contact.tokenEnc);
-    const sent = await outboundAllowed(rt, actor.orgId);
-    if (sent) {
-      const settings = await core.getSettings(rt.db, actor);
-      await mailClientReport(rt, { locale: settings.locale === 'en' ? 'en' : 'fr', to: contact.contactEmail, contactName: contact.contactName, company: report.company.name,
-        project: report.project.name, from: data.from, to_: data.to, url: base ? `${base}/report/${id}` : null });
-    }
-    return { id, mailed: sent && rt.mailer.configured, withLink: Boolean(base) };
+    const { id } = await core.createClientReportDraft(rt.db, actor, data);
+    const facts = await core.clientReportFacts(rt.db, actor, id);
+    const { sections } = await draftSections(rt, await companyLocale(rt, actor.orgId), facts);
+    await core.updateClientReportDraft(rt.db, actor, id, { sections });
+    return { id };
   }));
+
+export const getClientReport = createServerFn({ method: 'GET' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => act(async (actor) => ({ ...(await core.clientReportDraft(runtime().db, actor, data.id)), orgId: actor.orgId })));
+
+export const saveClientReportDraft = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; patch: unknown }) => input)
+  .handler(({ data }) => act((actor) => core.updateClientReportDraft(runtime().db, actor, data.id, data.patch)));
+
+/** Writes all sections again, or rewrites one on the office's instruction. */
+export const redraftClientReport = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; section?: string; instruction?: string }) => input)
+  .handler(({ data }) => act(async (actor) => {
+    const rt = runtime();
+    const draft = await core.clientReportDraft(rt.db, actor, data.id);
+    if (draft.status !== 'draft') throw new core.DomainError('report_sent', 409);
+    const section = (core.REPORT_SECTIONS as readonly string[]).includes(data.section ?? '') ? (data.section as core.ReportSection) : null;
+    if (section) {
+      if (!rt.drafter.configured) throw new core.DomainError('ai_unavailable', 409);
+      const text = await rewriteSection(rt, await companyLocale(rt, actor.orgId), draft.facts, section, String(data.instruction ?? '').slice(0, 400), draft.report.sections[section] ?? null);
+      await core.updateClientReportDraft(rt.db, actor, data.id, { sections: { [section]: text } });
+    } else {
+      const { sections } = await draftSections(rt, await companyLocale(rt, actor.orgId), draft.facts);
+      await core.updateClientReportDraft(rt.db, actor, data.id, { sections });
+    }
+  }));
+
+/** Freezes the draft, then e-mails the client a button to it in their space. */
+export const sendClientReport = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => act(async (actor) => deliverClientReport(runtime(), actor, data.id)));
+
+export const deleteClientReport = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => act((actor) => core.deleteClientReportDraft(runtime().db, actor, data.id)));
 
 // ---------------------------------------------------------------- alerts as text (assistants)
 

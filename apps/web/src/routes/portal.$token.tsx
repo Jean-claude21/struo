@@ -148,7 +148,7 @@ function SpaceView({ data }: { data: Space }) {
               <h3 style={{ margin: 0 }}>{t('clientReport.portalTitle')}</h3>
               {data.clientReports.slice(0, 6).map((item) => (
                 <Link key={item.id} to="/portal/$token/report/$id" params={{ token, id: item.id }} className="row" style={{ justifyContent: 'space-between' }}>
-                  <span>{date(item.from)} → {date(item.to)}</span><ArrowRight size={16} />
+                  <span className="stack" style={{ gap: '.1rem' }}><span>{date(item.from)} → {date(item.to)}</span>{item.summary ? <span className="small muted trunc">{item.summary}</span> : null}</span><ArrowRight size={16} />
                 </Link>
               ))}
             </section>

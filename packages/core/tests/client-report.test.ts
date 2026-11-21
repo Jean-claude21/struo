@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import {
-  addMilestone, clientReport, createPortalLink, createProject, listClientReports, portalClientReport, portalClientReports, portalContact,
-  saveClientReport, sealPortalToken, updateInvoiceSettings, weeklyReportTargets, type Actor,
+  addMilestone, clientReport, clientReportDraft, createClientReportDraft, createPortalLink, createProject, deleteClientReportDraft, getProject, listClientReports,
+  portalClientReport, portalClientReports, portalContact, reviewReport, saveAutomaticClientReport, saveClientReport, sealPortalToken, sendClientReportDraft, submitReport,
+  unknownFigures, updateClientReportDraft, updateInvoiceSettings, weeklyReportTargets, type Actor,
 } from '../src/index.ts';
 import { addMember, createTestCompany, setupDatabase, today, type TestDb } from './helpers.ts';
 
@@ -47,5 +49,50 @@ describe('client report (spec 049)', () => {
     expect((await weeklyReportTargets(db.owner)).some((row) => row.projectId === projectId)).toBe(false);
     await updateInvoiceSettings(db.app, owner, { reportWeekly: true });
     expect((await weeklyReportTargets(db.owner)).find((row) => row.projectId === projectId)).toMatchObject({ email: 'client@example.test', tokenEnc: 'sealed-value' });
+  });
+
+  it('writes a draft in sections, with chosen photos, then freezes it when sent', async () => {
+    const phase = (await getProject(db.app, owner, projectId)).phases[0]!;
+    const photos = [randomUUID(), randomUUID()];
+    const report = { id: randomUUID(), projectId, phaseId: phase.id, progressPct: 30, note: 'Fouilles terminées', takenAt: new Date().toISOString(),
+      photos: photos.map((id) => ({ id, storageKey: `org/${owner.orgId}/${id}.jpg`, mediaType: 'image/jpeg', sizeBytes: 1000, takenAt: new Date().toISOString() })) };
+    await submitReport(db.app, owner, report);
+    await reviewReport(db.app, owner, report.id, { decision: 'validated' });
+    const { id } = await createClientReportDraft(db.app, owner, { projectId, from: today(-7), to: today(0) });
+    let draft = await clientReportDraft(db.app, owner, id);
+    expect(draft).toMatchObject({ status: 'draft' });
+    expect(draft.candidates.filter((photo) => photo.chosen)).toHaveLength(2);
+    expect(draft.facts.notes.map((note) => note.text)).toContain('Fouilles terminées');
+    await updateClientReportDraft(db.app, owner, id, { sections: { summary: 'Les fouilles sont terminées : 30 % du chantier, et 80 % du gros œuvre.' }, photoIds: [photos[0]] });
+    draft = await clientReportDraft(db.app, owner, id);
+    expect(draft.report.photos.map((photo) => photo.id)).toEqual([photos[0]]);
+    expect(draft.warnings.summary).toEqual(['80']);
+    expect(await portalClientReport(db.owner, token, id)).toBeNull();
+    await expect(updateClientReportDraft(db.app, lead, id, { note: 'x' })).rejects.toThrow();
+    await sendClientReportDraft(db.app, owner, id, 'client@example.test');
+    await expect(updateClientReportDraft(db.app, owner, id, { note: 'trop tard' })).rejects.toMatchObject({ code: 'report_sent' });
+    // Frozen: a photo validated after the sending does not appear in what the client sees.
+    const later = { ...report, id: randomUUID(), photos: [{ id: randomUUID(), storageKey: `org/${owner.orgId}/later.jpg`, mediaType: 'image/jpeg', sizeBytes: 1000, takenAt: new Date().toISOString() }] };
+    await submitReport(db.app, owner, later);
+    await reviewReport(db.app, owner, later.id, { decision: 'validated' });
+    const seen = await portalClientReport(db.owner, token, id);
+    expect(seen).toMatchObject({ status: 'sent', sections: { summary: expect.stringContaining('fouilles') } });
+    expect(seen?.photos.map((photo) => photo.id)).toEqual([photos[0]]);
+    expect((await portalClientReports(db.owner, token)).find((row) => row.id === id)?.summary).toContain('fouilles');
+    await expect(deleteClientReportDraft(db.app, owner, id)).rejects.toThrow();
+  });
+  it('prepares the weekly report as a draft unless the company sends it without a reading', async () => {
+    const draftId = await saveAutomaticClientReport(db.owner, { orgId: owner.orgId, projectId, from: today(-7), to: today(-1), sentTo: null, sections: { summary: 'Semaine calme.' } });
+    expect((await clientReportDraft(db.app, owner, draftId)).status).toBe('draft');
+    expect((await portalClientReports(db.owner, token)).some((row) => row.id === draftId)).toBe(false);
+    const sentId = await saveAutomaticClientReport(db.owner, { orgId: owner.orgId, projectId, from: today(-14), to: today(-8), sentTo: 'client@example.test', sections: { summary: 'Envoyé seul.' } });
+    expect((await portalClientReport(db.owner, token, sentId))?.sections.summary).toBe('Envoyé seul.');
+    await deleteClientReportDraft(db.app, owner, draftId);
+    expect((await listClientReports(db.app, owner, projectId)).some((row) => row.id === draftId)).toBe(false);
+  });
+  it('flags figures the facts do not hold', () => {
+    const facts = { progressPct: 45, plannedOn: '2026-12-05', reportsCount: 3 };
+    expect(unknownFigures('Le chantier est à 45 % ; 3 rapports ; la toiture le 5 décembre.', facts)).toEqual([]);
+    expect(unknownFigures('Le chantier est à 60 % et sera livré en 2027.', facts)).toEqual(['60', '2027']);
   });
 });

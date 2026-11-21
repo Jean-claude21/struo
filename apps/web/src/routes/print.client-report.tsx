@@ -1,21 +1,18 @@
-// The client report on paper (spec 049): the office prints it or saves it as PDF.
+// The client report on paper (specs 049–050): the office prints it or saves it as PDF.
 import { createFileRoute } from '@tanstack/react-router';
+import { useEffect } from 'react';
 import { ClientReportView } from '@/components/ClientReportView.tsx';
-import { previewClientReport } from '@/features/office/server.ts';
-
-type Search = { project: string; from: string; to: string; note?: string };
+import { getClientReport } from '@/features/office/server.ts';
 
 export const Route = createFileRoute('/print/client-report')({
-  validateSearch: (search: Record<string, unknown>): Search => ({
-    project: String(search.project ?? ''), from: String(search.from ?? ''), to: String(search.to ?? ''),
-    ...(typeof search.note === 'string' ? { note: search.note } : {}),
-  }),
+  validateSearch: (search: Record<string, unknown>): { id: string } => ({ id: String(search.id ?? '') }),
   loaderDeps: ({ search }) => search,
-  loader: ({ deps }) => previewClientReport({ data: { projectId: deps.project, from: deps.from, to: deps.to, note: deps.note ?? null } }),
+  loader: ({ deps }) => getClientReport({ data: { id: deps.id } }),
   component: ClientReportPrint,
 });
 
 function ClientReportPrint() {
-  const { report, orgId } = Route.useLoaderData();
-  return <div className="print-page"><ClientReportView report={report} orgId={orgId} photoUrl={(id) => `/api/files/photo/${id}`} /></div>;
+  const draft = Route.useLoaderData();
+  useEffect(() => { const handle = window.setTimeout(() => window.print(), 600); return () => window.clearTimeout(handle); }, []);
+  return <div className="print-page"><ClientReportView report={draft.report} orgId={draft.orgId} photoUrl={(id) => `/api/files/photo/${id}`} /></div>;
 }
