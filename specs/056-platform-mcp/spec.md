@@ -3,7 +3,13 @@
 **Branch**: `056-platform-mcp` (base `055-founder-console`) · **Status**: delivered for review
 
 ## The console through MCP
-- Endpoint `/mcp/platform` (Streamable HTTP, stateless). Way in: a **platform key**
+- **OAuth first (056 bis)**: `/mcp/platform` is a second OAuth protected resource (its own metadata
+  at `/.well-known/oauth-protected-resource/mcp/platform`; tokens bound to it). In Claude: add a
+  custom connector with the address, sign in, and on the consent page a platform admin chooses
+  « read only » or « read and gestures » (table `platform_mcp_grant`, migration `0033`). The access
+  stops when the account leaves `PLATFORM_ADMIN_EMAILS` or the connection is revoked in Console › MCP
+  access. A token for the console is refused by the company MCP, and the other way round.
+- Fallback: endpoint `/mcp/platform` (Streamable HTTP, stateless) also takes a **platform key**
   (`Authorization: Bearer struo_pk_…`) created in Console › MCP access, shown once, only its hash
   kept, revocable; its creator must still be in `PLATFORM_ADMIN_EMAILS`.
 - **Read-only keys** (advised for scheduled routines) only get the reading tools (15). Full keys get

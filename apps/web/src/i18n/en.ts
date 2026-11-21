@@ -617,6 +617,9 @@ export const en: Catalog = {
     changePlan: 'To change plan, contact us.',
   },
   oauth: {
+    platformLead: 'Give {client} access to the Struo platform console (figures, companies, plans, announcements). Gestures touching money, a company or everyone will always ask your agreement in the conversation.',
+    platformReadOnly: 'Read only (advised for a routine)',
+    platformNotAdmin: 'This access is for platform admins only.',
     title: '{client} asks for access to Struo',
     lead: '{client} will be able to read and change the data of the chosen company, with your rights. You can revoke this access in Settings → MCP & API.',
     company: 'Company',

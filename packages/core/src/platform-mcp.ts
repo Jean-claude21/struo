@@ -160,3 +160,32 @@ export async function platformBrief(owner: Db) {
     lastSevenDays: week,
   };
 }
+
+// ---------------------------------------------------------------- OAuth connections (spec 056 bis)
+
+/** A platform admin connects an assistant (OAuth client) to the console, read-only or not. */
+export async function grantPlatformMcp(owner: Db, userId: string, clientId: string, readOnly: boolean): Promise<void> {
+  await owner.query(
+    `insert into platform_mcp_grant (user_id, client_id, read_only) values ($1, $2, $3)
+     on conflict (user_id, client_id) do update set read_only = excluded.read_only, created_at = now()`, [userId, clientId.slice(0, 200), readOnly]);
+  await journal(owner, userId, 'platform_mcp.connect', clientId.slice(0, 200), { readOnly });
+}
+
+export async function platformMcpGrant(owner: Db, userId: string, clientId: string): Promise<{ readOnly: boolean; email: string } | null> {
+  const { rows } = await owner.query<{ readOnly: boolean; email: string }>(
+    `select g.read_only as "readOnly", u.email from platform_mcp_grant g join "user" u on u.id = g.user_id where g.user_id = $1 and g.client_id = $2`, [userId, clientId]);
+  return rows[0] ?? null;
+}
+
+export async function listPlatformMcpGrants(owner: Db) {
+  const { rows } = await owner.query<{ userId: string; clientId: string; clientName: string; email: string; readOnly: boolean; createdAt: string }>(
+    `select g.user_id as "userId", g.client_id as "clientId", coalesce(c.name, g.client_id) as "clientName", u.email, g.read_only as "readOnly",
+            to_char(g.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "createdAt"
+       from platform_mcp_grant g join "user" u on u.id = g.user_id left join "oauthClient" c on c."clientId" = g.client_id order by g.created_at desc`);
+  return rows;
+}
+
+export async function revokePlatformMcpGrant(owner: Db, adminId: string, userId: string, clientId: string): Promise<void> {
+  await owner.query('delete from platform_mcp_grant where user_id = $1 and client_id = $2', [userId, clientId]);
+  await journal(owner, adminId, 'platform_mcp.revoke', clientId, { userId });
+}

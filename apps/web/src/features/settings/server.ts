@@ -172,8 +172,8 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
     const [money, todo, onboarding, runs, editablePlans, announcements, feedback] = await Promise.all([
       core.founderMoney(owner), core.founderTodo(owner), core.onboardingSteps(owner), core.platformRuns(owner),
       core.listEditablePlans(owner), core.listAnnouncements(owner), core.listFeedback(owner)]);
-    const [platformKeys, grants] = await Promise.all([core.listPlatformKeys(owner), core.featureGrants(owner)]);
-    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
+    const [platformKeys, grants, oauthConnections] = await Promise.all([core.listPlatformKeys(owner), core.featureGrants(owner), core.listPlatformMcpGrants(owner)]);
+    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, oauthConnections, mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
   }),
 );
 
@@ -379,13 +379,29 @@ export const getConsent = createServerFn({ method: 'GET' })
       const viewer = await loadViewer();
       const params = new URLSearchParams(data.query);
       const clientId = params.get('client_id') ?? '';
-      if (!viewer) return { signedIn: false as const, valid: false, clientId, clientName: clientId, companies: [] };
+      // Spec 056 bis: a request for the platform console (its own resource), not for a company.
+      const platform = params.getAll('resource').some((resource) => resource.replace(/\/$/u, '').endsWith('/mcp/platform'));
+      if (!viewer) return { signedIn: false as const, valid: false, clientId, clientName: clientId, companies: [], platform, platformAdmin: false };
       const { db, env } = runtime();
       const valid = data.query.length > 0 && (await verifyOAuthQueryParams(data.query, env.BETTER_AUTH_SECRET).catch(() => false));
       const { rows } = await db.query<{ name: string | null }>('select name from "oauthClient" where "clientId" = $1', [clientId]);
-      return { signedIn: true as const, valid: Boolean(valid), clientId, clientName: rows[0]?.name || clientId, companies: viewer.companies };
+      return { signedIn: true as const, valid: Boolean(valid), clientId, clientName: rows[0]?.name || clientId, companies: viewer.companies, platform, platformAdmin: Boolean(viewer.platformAdmin) };
     }),
   );
+
+/** Spec 056 bis: a platform admin connects an assistant to the console (read-only or not). */
+export const grantMcpPlatform = createServerFn({ method: 'POST' })
+  .validator((input: { clientId: string; readOnly: boolean }) => ({ clientId: String(input.clientId).slice(0, 200), readOnly: Boolean(input.readOnly) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const viewer = await requirePlatformAdmin();
+      await core.grantPlatformMcp(runtime().owner, viewer.userId, data.clientId, data.readOnly);
+    }),
+  );
+
+export const revokePlatformMcp = createServerFn({ method: 'POST' })
+  .validator((input: { userId: string; clientId: string }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.revokePlatformMcpGrant(runtime().owner, viewer.userId, data.userId, data.clientId); }));
 
 export const grantMcpCompany = createServerFn({ method: 'POST' })
   .validator((input: { clientId: string; orgId: string }) => ({ clientId: String(input.clientId).slice(0, 200), orgId: String(input.orgId) }))
