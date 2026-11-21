@@ -616,6 +616,9 @@ export const fr = {
     changePlan: 'Pour changer de formule, contactez-nous.',
   },
   oauth: {
+    platformLead: 'Donner à {client} l’accès à la console de la plateforme Struo (chiffres, entreprises, formules, annonces). Les gestes qui touchent l’argent, une entreprise ou tout le monde vous demanderont toujours votre accord dans la conversation.',
+    platformReadOnly: 'Lecture seule (conseillé pour une routine)',
+    platformNotAdmin: 'Cet accès est réservé aux administrateurs de la plateforme.',
     title: '{client} demande l’accès à Struo',
     lead: '{client} pourra lire et modifier les données de l’entreprise choisie, avec vos droits. Vous pourrez révoquer cet accès dans Paramètres → MCP & API.',
     company: 'Entreprise',

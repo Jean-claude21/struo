@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   changesSince, createPlatformKey, createPortalLink, createProject, featureGrants, grantFeature, listCompaniesFor, listPlatformKeys, platformBrief,
-  platformKeyOwner, revokeFeatureGrant, revokePlatformKey, type Actor,
+  grantPlatformMcp, listPlatformMcpGrants, platformKeyOwner, platformMcpGrant, revokeFeatureGrant, revokePlatformKey, revokePlatformMcpGrant, type Actor,
 } from '../src/index.ts';
 import { createTestCompany, createUser, setupDatabase, today, type TestDb } from './helpers.ts';
 
@@ -50,5 +50,16 @@ describe('the console through MCP (spec 056)', () => {
     await expect(changesSince(db.owner, 'not a date')).rejects.toThrow();
     const brief = await platformBrief(db.owner);
     expect(brief).toMatchObject({ money: expect.any(Object), todo: expect.any(Object), health: expect.any(Object), platform: expect.any(Object), lastSevenDays: expect.any(Object) });
+  });
+
+  it('connects an assistant to the console through OAuth, read-only or not, until revoked', async () => {
+    expect(await platformMcpGrant(db.owner, admin, 'client-claude')).toBeNull();
+    await grantPlatformMcp(db.owner, admin, 'client-claude', true);
+    expect(await platformMcpGrant(db.owner, admin, 'client-claude')).toMatchObject({ readOnly: true });
+    await grantPlatformMcp(db.owner, admin, 'client-claude', false);
+    expect((await listPlatformMcpGrants(db.owner)).filter((row) => row.clientId === 'client-claude')).toHaveLength(1);
+    expect(await platformMcpGrant(db.owner, admin, 'client-claude')).toMatchObject({ readOnly: false });
+    await revokePlatformMcpGrant(db.owner, admin, admin, 'client-claude');
+    expect(await platformMcpGrant(db.owner, admin, 'client-claude')).toBeNull();
   });
 });

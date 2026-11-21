@@ -113,6 +113,9 @@ function createAuth(environment: Env, db: Db, mailer: Mailer) {
       // person signs in, chooses the company on the consent page, and the client gets a token.
       mcp({
         resource: `${environment.APP_BASE_URL}/mcp`,
+        // Spec 056 bis: the platform console is a second protected resource (platform admins only).
+        resources: [`${environment.APP_BASE_URL}/mcp/platform`],
+        clientRegistrationDefaultResources: [`${environment.APP_BASE_URL}/mcp/platform`],
         loginPage: '/login',
         consentPage: '/oauth/consent',
         allowDynamicClientRegistration: true,

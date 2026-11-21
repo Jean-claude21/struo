@@ -52,7 +52,7 @@ function Console() {
         { value: 'mcp', label: t('pmcp.tab') },
         { value: 'journal', label: t('console2.journal') },
       ]} />
-      {tab === 'mcp' ? <McpAccess keys={data.platformKeys} url={data.mcpUrl} /> : null}
+      {tab === 'mcp' ? <McpAccess keys={data.platformKeys} url={data.mcpUrl} connections={data.oauthConnections} /> : null}
       {tab === 'today' ? <Today todo={data.todo} onOpen={setCompany} /> : null}
       {tab === 'platform' ? <PlatformRuns runs={data.runs} sentryOn={data.sentryOn} /> : null}
       {tab === 'plans' ? <Plans plans={data.editablePlans} /> : null}

@@ -9,7 +9,7 @@ import { EmptyState, KpiTile, Panel, useToast } from './kit.tsx';
 import { lines, Rich } from './PlanWords.tsx';
 import { Badge, formatMoney } from './ui.tsx';
 import {
-  addCompanyNote, createAnnouncement, createPlatformKey, endAnnouncement, getPlanRevisions, grantFeature, handleFeedback, previewPlan, restorePlan, revokeFeature, revokePlatformKey, savePlan,
+  addCompanyNote, createAnnouncement, createPlatformKey, endAnnouncement, revokePlatformMcp, getPlanRevisions, grantFeature, handleFeedback, previewPlan, restorePlan, revokeFeature, revokePlatformKey, savePlan,
 } from '@/features/settings/server.ts';
 import { translate, useI18n } from '@/i18n/index.tsx';
 
@@ -390,7 +390,9 @@ export function Feedback({ items, onOpen }: { items: FeedbackRow[]; onOpen: (org
 
 type KeyRow = { id: string; name: string; masked: string; readOnly: boolean; createdBy: string | null; createdAt: string; lastUsedAt: string | null; revokedAt: string | null };
 
-export function McpAccess({ keys, url }: { keys: KeyRow[]; url: string }) {
+type Connection = { userId: string; clientId: string; clientName: string; email: string; readOnly: boolean; createdAt: string };
+
+export function McpAccess({ keys, url, connections }: { keys: KeyRow[]; url: string; connections: Connection[] }) {
   const { t, locale, errorText } = useI18n();
   const router = useRouter();
   const toast = useToast();
@@ -399,10 +401,27 @@ export function McpAccess({ keys, url }: { keys: KeyRow[]; url: string }) {
   const [shown, setShown] = useState<string | null>(null);
   const when = (value: string | null) => (value ? new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—');
   return (
+    <div className="stack">
+    <Panel title={t('pmcp.oauthTitle')} sub={t('pmcp.oauthSub')}>
+      <div className="stack">
+        <div><b className="small">{t('pmcp.url')}</b><div className="secret" style={{ userSelect: 'all' }}>{url}</div></div>
+        <ol className="small" style={{ margin: 0, paddingLeft: '1.2rem', display: 'grid', gap: '.25rem' }}>
+          <li>{t('pmcp.step1')}</li><li>{t('pmcp.step2')}</li><li>{t('pmcp.step3')}</li>
+        </ol>
+        {connections.length ? (
+          <ul className="claims">{connections.map((item) => (
+            <li key={item.userId + item.clientId}>
+              <div className="row nowrap"><b className="grow">{item.clientName}</b><Badge tone={item.readOnly ? 'ok' : 'warn'}>{item.readOnly ? t('pmcp.ro') : t('pmcp.rw')}</Badge></div>
+              <span className="small muted">{item.email} · {when(item.createdAt)}</span>
+              <button type="button" className="btn ghost small" style={{ justifySelf: 'start' }} onClick={async () => { if (!window.confirm(t('pmcp.revokeConfirm'))) return; await revokePlatformMcp({ data: { userId: item.userId, clientId: item.clientId } }); await router.invalidate(); }}>{t('pmcp.revoke')}</button>
+            </li>
+          ))}</ul>
+        ) : <p className="muted small" style={{ margin: 0 }}>{t('pmcp.noConnection')}</p>}
+      </div>
+    </Panel>
     <div className="grid-main">
       <Panel title={t('pmcp.title')} sub={t('pmcp.sub')}>
         <div className="stack">
-          <div><b className="small">{t('pmcp.url')}</b><div className="secret">{url}</div></div>
           <p className="small muted" style={{ margin: 0 }}>{t('pmcp.how')}</p>
           {shown ? (
             <div className="notice ok stack" style={{ gap: '.3rem' }}>
@@ -431,6 +450,7 @@ export function McpAccess({ keys, url }: { keys: KeyRow[]; url: string }) {
           </li>
         ))}</ul> : <p className="muted small" style={{ padding: '1rem', margin: 0 }}>{t('pmcp.none')}</p>}
       </Panel>
+    </div>
     </div>
   );
 }

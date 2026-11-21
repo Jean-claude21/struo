@@ -2,7 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState } from 'react';
 import { PublicHeader } from '@/components/PublicHeader.tsx';
 import { ErrorText, Field, useAction } from '@/components/ui.tsx';
-import { getConsent, grantMcpCompany } from '@/features/settings/server.ts';
+import { getConsent, grantMcpCompany, grantMcpPlatform } from '@/features/settings/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
 /**
@@ -27,10 +27,13 @@ function Consent() {
   const data = Route.useLoaderData();
   const { run, error, busy } = useAction();
   const [orgId, setOrgId] = useState(data.companies[0]?.id ?? '');
+  const [readOnly, setReadOnly] = useState(false);
   const answer = async (accept: boolean) => {
     const query = window.location.search.slice(1);
     if (accept) {
-      const done = await run(() => grantMcpCompany({ data: { clientId: data.clientId, orgId } }), { reload: false });
+      const done = await run(() => (data.platform
+        ? grantMcpPlatform({ data: { clientId: data.clientId, readOnly } })
+        : grantMcpCompany({ data: { clientId: data.clientId, orgId } })), { reload: false });
       if (!done) return;
     }
     const response = await fetch('/api/auth/oauth2/consent', {
@@ -52,6 +55,15 @@ function Consent() {
           <p className="error">{t('oauth.invalid')}</p>
         ) : (
           <>
+            {data.platform ? (
+              data.platformAdmin ? (
+                <>
+                  <p>{t('oauth.platformLead', { client: data.clientName })}</p>
+                  <label className="check"><input type="checkbox" checked={readOnly} onChange={(event) => setReadOnly(event.target.checked)} />{t('oauth.platformReadOnly')}</label>
+                  <p className="muted small">{readOnly ? t('pmcp.readOnlyHint') : t('pmcp.fullHint')}</p>
+                </>
+              ) : <p className="error">{t('oauth.platformNotAdmin')}</p>
+            ) : (<>
             <p>{t('oauth.lead', { client: data.clientName })}</p>
             <Field label={t('oauth.company')}>
               <select value={orgId} onChange={(event) => setOrgId(event.target.value)}>
@@ -63,12 +75,13 @@ function Consent() {
               </select>
             </Field>
             <p className="muted small">{t('oauth.note')}</p>
+            </>)}
             <ErrorText error={error} />
             <div className="pair">
               <button type="button" className="btn secondary" disabled={busy} onClick={() => void answer(false)}>
                 {t('oauth.refuse')}
               </button>
-              <button type="button" className="btn" disabled={busy || !orgId} onClick={() => void answer(true)}>
+              <button type="button" className="btn" disabled={busy || (data.platform ? !data.platformAdmin : !orgId)} onClick={() => void answer(true)}>
                 {t('oauth.accept')}
               </button>
             </div>
