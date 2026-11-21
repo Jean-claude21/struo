@@ -232,7 +232,7 @@ export function DocumentDialog({
             const done = await run(() =>
               addDocument({
                 data: {
-                  projectId: v.projectId, docTypeId: orNull(v.docTypeId), title: v.title, status: v.status,
+                  projectId: v.projectId, docTypeId: orNull(v.docTypeId), title: v.title, status: v.status || undefined,
                   reference: orNull(v.reference), issuedOn: orNull(v.issuedOn), expiresOn: orNull(v.expiresOn),
                   sharedWithClient: v.sharedWithClient === 'on', family: v.family || undefined,
                 },
@@ -259,11 +259,12 @@ export function DocumentDialog({
             <Field label={t('families.family')}>
               <select name="family" defaultValue="">
                 <option value="">{t('families.auto')}</option>
-                {(['admin', 'technical', 'other'] as const).map((family) => <option key={family} value={family}>{t(`families.${family}`)}</option>)}
+                {(['admin', 'technical', 'contract', 'other'] as const).map((family) => <option key={family} value={family}>{t(`families.${family}`)}</option>)}
               </select>
             </Field>
             <Field label={t('app.status')}>
-              <select name="status" defaultValue="pending">
+              <select name="status" defaultValue="">
+                <option value="">{t('families.auto')}</option>
                 {DOC_STATUSES.map((status) => (
                   <option key={status} value={status}>
                     {t(`documents.statuses.${status}`)}

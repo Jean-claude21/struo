@@ -54,12 +54,11 @@ export const acceptInvitation = createServerFn({ method: 'POST' })
 export const getSettingsPage = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { db, env } = runtime();
-    const [settings, configuration, members, invitations, provider, keys, subscription, connections, subscriptionPayments] = await Promise.all([
+    const [settings, configuration, members, invitations, keys, subscription, connections, subscriptionPayments] = await Promise.all([
       core.getSettings(db, actor),
       core.getConfiguration(db, actor),
       core.listMembers(db, actor),
       core.can(actor.role, 'members.manage') ? core.listInvitations(db, actor) : Promise.resolve([]),
-      core.getPaymentProvider(db, actor),
       core.can(actor.role, 'apikeys.manage') ? core.listApiKeys(db, actor) : Promise.resolve([]),
       core.getSubscription(db, actor),
       core.listMcpConnections(db, actor),
@@ -69,7 +68,7 @@ export const getSettingsPage = createServerFn({ method: 'GET' }).handler(() =>
     const plans = await core.listPlansIn(db, settings.currencyCode);
     const journal = core.can(actor.role, 'org.manage') ? await core.recentActivity(db, actor, 200) : [];
     return {
-      role: actor.role, userId: actor.userId, settings, configuration, members, invitations, provider, keys, subscription, connections, subscriptionPayments, plans, journal,
+      role: actor.role, userId: actor.userId, settings, configuration, members, invitations, keys, subscription, connections, subscriptionPayments, plans, journal,
       platformPayment: platformGatewayCode(),
       baseUrl: env.APP_BASE_URL, orgId: actor.orgId, simulatorAvailable: env.PAYMENTS_SIMULATOR,
     };
@@ -138,21 +137,6 @@ export const setMemberRole = createServerFn({ method: 'POST' })
 export const removeMember = createServerFn({ method: 'POST' })
   .validator((input: { memberId: string }) => input)
   .handler(({ data }) => act((actor) => core.removeMember(runtime().db, actor, data.memberId)));
-
-export const setPaymentProvider = createServerFn({ method: 'POST' })
-  .validator((input: { provider: string; secretKey?: string; webhookSecret?: string; enabled: boolean }) => input)
-  .handler(({ data }) =>
-    act(async (actor) => {
-      const { db, secrets, env } = runtime();
-      const provider = data.provider === 'simulator' && env.PAYMENTS_SIMULATOR ? 'simulator' : 'moneroo';
-      await core.setPaymentProvider(db, actor, {
-        provider,
-        secretEnc: data.secretKey?.trim() ? secrets.seal(data.secretKey.trim()) : null,
-        webhookSecretEnc: data.webhookSecret?.trim() ? secrets.seal(data.webhookSecret.trim()) : null,
-        enabled: Boolean(data.enabled),
-      });
-    }),
-  );
 
 export const createApiKey = createServerFn({ method: 'POST' })
   .validator((input: { name: string }) => input)

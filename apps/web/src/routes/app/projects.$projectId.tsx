@@ -16,7 +16,7 @@ import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 import { NotesThread, TaskBoard } from '@/components/Work.tsx';
 import { usePhotoViewer } from '@/components/PhotoViewer.tsx';
 import { DayJournal } from '@/routes/print.journal.tsx';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { ClientReportView } from '@/components/ClientReportView.tsx';
 
 export const Route = createFileRoute('/app/projects/$projectId')({
@@ -155,6 +155,17 @@ function Overview({ data }: { data: Data }) {
                 <StatusChip shape={document.status === 'valid' ? 'done' : document.status === 'pending' ? 'progress' : document.status === 'missing' ? 'todo' : 'late'} label={t(`documents.statuses.${document.status}`)} /></div>
             ))}
           </div>
+        </Panel>
+        <Panel title={t('families.contractPanel')}>
+          {data.documents.some((document) => document.family === 'contract') ? (
+            <div className="stack" style={{ gap: '.45rem' }}>
+              {data.documents.filter((document) => document.family === 'contract').map((document) => (
+                <div key={document.id} className="row nowrap small"><FileText size={15} />
+                  {document.hasFile ? <a className="grow trunc" href={`/api/files/document/${document.id}`} target="_blank" rel="noreferrer">{document.title}</a> : <span className="grow trunc">{document.title}</span>}
+                  {document.issuedOn ? <span className="faint"><DateText value={document.issuedOn} /></span> : null}</div>
+              ))}
+            </div>
+          ) : <p className="muted small" style={{ margin: 0 }}>{t('families.contractNone')}</p>}
         </Panel>
       </div>
       {journal.length ? (

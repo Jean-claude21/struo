@@ -44,7 +44,7 @@ async function build(q: Query, orgId: string, projectId: string, from: string, t
       ? q.query<{ id: string; takenAt: string; phase: string | null }>(
         `select ph.id, to_char(ph.taken_at, 'YYYY-MM-DD') as "takenAt", x.name as phase from report_photo ph join site_report r on r.id = ph.report_id
            left join project_phase x on x.id = r.phase_id
-          where r.project_id = $1 and r.org_id = $2 and r.status = 'validated' and r.taken_at::date between $3 and $4
+          where r.project_id = $1 and r.org_id = $2 and r.status = 'validated' and ph.shared_with_client and r.taken_at::date between $3 and $4
           order by ph.taken_at desc limit $5`, [projectId, orgId, from, to, settings.reportPhotos])
       : null,
     q.query<{ n: number }>(`select count(*)::int as n from site_report where project_id = $1 and org_id = $2 and status = 'validated' and taken_at::date between $3 and $4`, [projectId, orgId, from, to]),
