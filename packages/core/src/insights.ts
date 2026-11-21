@@ -26,9 +26,12 @@ export async function dashboardInsights(db: Db, actor: Actor, months = 6) {
     const sites = await tx.query<{
       id: string; code: string; name: string; status: string; progressPct: number; collectedPct: number; health: string; coverId: string | null;
       latitude: number | null; longitude: number | null; location: string | null; phases: { name: string; progress: number }[];
+      lastReportAt: string | null; openIncidents: number;
     }>(
       `select p.id, p.code, p.name, p.status, f.progress_pct as "progressPct", f.collected_pct as "collectedPct", f.health,
               p.latitude, p.longitude, p.location,
+              (select max(r.taken_at) from site_report r where r.project_id = p.id) as "lastReportAt",
+              (select count(*)::int from incident i where i.project_id = p.id and i.status = 'open') as "openIncidents",
               (select ph.id from report_photo ph join site_report r on r.id = ph.report_id where r.project_id = p.id order by ph.taken_at desc limit 1) as "coverId",
               coalesce((select json_agg(json_build_object('name', x.name, 'progress', x.progress_pct) order by x.position) from project_phase x where x.project_id = p.id), '[]') as phases
          from project p join project_finance f on f.project_id = p.id

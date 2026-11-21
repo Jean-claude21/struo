@@ -16,7 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashPassword } from 'better-auth/crypto';
 import * as core from '@struo/core';
-import { createStorage } from '../src/server/adapters.server.ts';
+import { createStorage, secretBox } from '../src/server/adapters.server.ts';
 import type { Env } from '../src/server/env.server.ts';
 import { DEMO_NAME, seedDemoCompany } from './demo-company.ts';
 
@@ -40,7 +40,8 @@ const password = process.env.SEED_PASSWORD ?? `demo-${randomBytes(5).toString('h
 const hash = await hashPassword(password);
 
 const result = await seedDemoCompany(
-  { owner, app, storage, assetsDir: path.join(here, 'demo'), passwordHash: hash, baseUrl: process.env.APP_BASE_URL ?? 'http://localhost:3000', log: (message) => console.log(message) },
+  { owner, app, storage, assetsDir: path.join(here, 'demo'), passwordHash: hash, baseUrl: process.env.APP_BASE_URL ?? 'http://localhost:3000',
+    seal: secretBox({ SECRETS_KEY: process.env.SECRETS_KEY, BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET } as unknown as Env).seal, log: (message) => console.log(message) },
   { name: DEMO_NAME, email: (_key, standard) => standard, replaceExisting: true },
 );
 

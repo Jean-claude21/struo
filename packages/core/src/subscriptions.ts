@@ -19,8 +19,12 @@ export async function startSubscriptionPayment(
   }
   return asActor(db, actor, async (tx) => {
     const { rows } = await tx.query<{ price: number; currency: string; name: string }>(
-      'select price_minor as price, currency_code as currency, name from plan where code = $1 and public and price_minor > 0',
-      [input.planCode],
+      // Spec 045: the price in the company's own currency; no price there means not payable online.
+      `select pp.price_minor::int as price, pp.currency_code as currency, p.name
+         from plan p join org_settings s on s.org_id = $2
+         join plan_price pp on pp.plan_code = p.code and pp.currency_code = s.currency_code
+        where p.code = $1 and p.public`,
+      [input.planCode, actor.orgId],
     );
     const plan = rows[0];
     if (!plan) throw new DomainError('plan_not_payable', 422);

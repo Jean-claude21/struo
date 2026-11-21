@@ -10,14 +10,61 @@ export interface Plan {
   maxUsers: number | null;
   maxProjects: number | null;
   features: string[];
+  /** Spec 055: the words buyers read, edited in the console (null: the catalogue's default). */
+  nameEn?: string | null; tagline?: string | null; taglineEn?: string | null; bullets?: string | null; bulletsEn?: string | null; highlight?: boolean;
 }
 
 const PLAN_COLUMNS = `code, name, price_minor as "priceMinor", currency_code as "currencyCode",
-  max_users as "maxUsers", max_projects as "maxProjects", features`;
+  max_users as "maxUsers", max_projects as "maxProjects", features,
+  name_en as "nameEn", tagline, tagline_en as "taglineEn", bullets, bullets_en as "bulletsEn", highlight`;
 
 export async function listPlans(db: Db): Promise<Plan[]> {
   const { rows } = await db.query<Plan>(`select ${PLAN_COLUMNS} from plan where public order by position`);
   return rows;
+}
+
+/**
+ * The public plans priced in one currency (spec 045). A plan without a price in that currency keeps
+ * `priceMinor` 0 and is shown on quote: a price is never converted from another currency.
+ */
+export async function listPlansIn(db: Db, currencyCode: string): Promise<Plan[]> {
+  const { rows } = await db.query<Plan>(
+    `select p.code, p.name, coalesce(pp.price_minor, 0)::int as "priceMinor", $1::text as "currencyCode",
+            p.max_users as "maxUsers", p.max_projects as "maxProjects", p.features,
+            p.name_en as "nameEn", p.tagline, p.tagline_en as "taglineEn", p.bullets, p.bullets_en as "bulletsEn", p.highlight
+       from plan p left join plan_price pp on pp.plan_code = p.code and pp.currency_code = $1
+      where p.public order by p.position`,
+    [currencyCode],
+  );
+  return rows;
+}
+
+export interface PlanPrice { planCode: string; currencyCode: string; priceMinor: number; updatedAt: string }
+
+export async function listPlanPrices(owner: Db): Promise<PlanPrice[]> {
+  const { rows } = await owner.query<PlanPrice>(
+    `select plan_code as "planCode", currency_code as "currencyCode", price_minor::int as "priceMinor", updated_at as "updatedAt"
+       from plan_price order by currency_code, plan_code`);
+  return rows;
+}
+
+/** Sets (or, with null, removes) a plan's price in a currency; the operator's gesture is journaled. */
+export async function setPlanPrice(owner: Db, input: { planCode: string; currencyCode: string; priceMinor: number | null }, by: string): Promise<void> {
+  const currency = input.currencyCode.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) throw new DomainError('invalid_input', 400);
+  if (input.priceMinor !== null && (!Number.isInteger(input.priceMinor) || input.priceMinor <= 0)) throw new DomainError('invalid_input', 400);
+  const { rows } = await owner.query('select 1 from plan where code = $1 and public', [input.planCode]);
+  if (!rows.length) throw new DomainError('not_found', 404);
+  if (input.priceMinor === null) {
+    await owner.query('delete from plan_price where plan_code = $1 and currency_code = $2', [input.planCode, currency]);
+  } else {
+    await owner.query(
+      `insert into plan_price (plan_code, currency_code, price_minor) values ($1, $2, $3)
+       on conflict (plan_code, currency_code) do update set price_minor = excluded.price_minor, updated_at = now()`,
+      [input.planCode, currency, input.priceMinor]);
+  }
+  await owner.query('insert into platform_journal (admin_id, command, target, detail) values ($1, $2, $3, $4)',
+    [by, 'plan_price.set', input.planCode, JSON.stringify({ currencyCode: currency, priceMinor: input.priceMinor })]);
 }
 
 export interface Subscription {
@@ -35,14 +82,16 @@ export interface Subscription {
 export async function getSubscription(db: Db, actor: Actor): Promise<Subscription> {
   return asActor(db, actor, async (tx) => {
     const { rows } = await tx.query(
-      `select p.code, p.name, p.price_minor as "priceMinor", p.currency_code as "currencyCode",
+      `select p.code, p.name, coalesce(pp.price_minor, 0)::int as "priceMinor", s.currency_code as "currencyCode",
               p.max_users as "maxUsers", p.max_projects as "maxProjects", p.features, s.trial_ends_at as "trialEndsAt",
               s.plan_code = 'trial' and s.trial_ends_at < now() as "trialExpired",
               s.paid_until as "paidUntil",
               p.price_minor > 0 and s.plan_code <> 'trial' and (s.paid_until is null or s.paid_until < now()) as "paymentDue",
               (select count(*)::int from member where "organizationId" = s.org_id) as users,
               (select count(*)::int from project where org_id = s.org_id and archived_at is null) as projects
-         from org_settings s join plan p on p.code = s.plan_code where s.org_id = $1`,
+         from org_settings s join plan p on p.code = s.plan_code
+         left join plan_price pp on pp.plan_code = p.code and pp.currency_code = s.currency_code
+        where s.org_id = $1`,
       [actor.orgId],
     );
     const row = rows[0] as Plan & {
@@ -86,6 +135,7 @@ export interface CompanyOverview {
   users: number;
   projects: number;
   reportsLast30Days: number;
+  isDemo: boolean; paidUntil: string | null; suspended: boolean; ownerEmail: string | null; phone: string | null;
 }
 
 /** Every company, for the platform console. Owner connection only (it crosses companies). */
@@ -96,8 +146,13 @@ export async function platformOverview(owner: Db): Promise<CompanyOverview[]> {
             (select count(*)::int from member m where m."organizationId" = o.id) as users,
             (select count(*)::int from project p where p.org_id = o.id and p.archived_at is null) as projects,
             (select count(*)::int from site_report r where r.org_id = o.id
-               and r.created_at > now() - interval '30 days') as "reportsLast30Days"
-       from organization o join org_settings s on s.org_id = o.id order by o."createdAt" desc`,
+               and r.created_at > now() - interval '30 days') as "reportsLast30Days",
+            s.is_demo as "isDemo", to_char(s.paid_until, 'YYYY-MM-DD') as "paidUntil", s.suspended_at is not null as suspended,
+            (select u.email from member m join "user" u on u.id = m."userId" where m."organizationId" = o.id and m.role = 'owner' order by m."createdAt" limit 1) as "ownerEmail",
+            (select i.phone from invoice_settings i where i.org_id = o.id) as phone
+       from organization o join org_settings s on s.org_id = o.id
+      where not exists (select 1 from demo_sandbox d where d.org_id = o.id)
+      order by o."createdAt" desc`,
   );
   return rows;
 }

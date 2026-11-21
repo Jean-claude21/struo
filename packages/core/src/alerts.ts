@@ -10,7 +10,8 @@ export interface Alert {
     | 'milestone_late'
     | 'collection_gap'
     | 'incident_open'
-    | 'reports_to_review';
+    | 'reports_to_review'
+    | 'task_late';
   severity: 'critical' | 'important' | 'info';
   projectId: string | null;
   target: string;
@@ -26,7 +27,16 @@ export async function listAlerts(db: Db, actor: Pick<Actor, 'userId' | 'orgId'>)
       'select kind, severity, project_id, target, params, sort_key from struo_alerts($1)',
       [actor.orgId],
     );
-    return rows
+    // Spec 048: tasks past their due date, with who has them.
+    const tasks = await tx.query<Alert & { sort_key: number; project_id: string | null }>(
+      `select 'task_late' as kind, case when t.priority = 'urgent' then 'critical' else 'important' end as severity,
+              t.project_id, t.id::text as target, (current_date - t.due_on)::int as sort_key,
+              jsonb_build_object('project', p.code, 'title', t.title, 'assignee', coalesce(u.name, '—'), 'days', current_date - t.due_on) as params
+         from project_task t join project p on p.id = t.project_id left join "user" u on u.id = t.assignee_id
+        where t.org_id = $1 and t.status <> 'done' and t.due_on < current_date and p.archived_at is null`,
+      [actor.orgId],
+    );
+    return [...rows, ...tasks.rows]
       .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.sort_key - a.sort_key)
       .map((row) => ({ kind: row.kind, severity: row.severity, projectId: row.project_id, target: row.target, params: row.params }));
   });

@@ -265,8 +265,12 @@ async function createProjectTx(tx: Tx, actor: Actor, data: z.infer<typeof projec
   }
   // One document row per document type: the compliance checklist starts « missing ».
   await tx.query(
-    `insert into project_document (org_id, project_id, doc_type_id, title, status)
-     select org_id, $2, id, name, 'missing' from doc_type where org_id = $1`,
+    `insert into project_document (org_id, project_id, doc_type_id, title, status, family)
+     select org_id, $2, id, name, 'missing',
+            case when name ~* '(contrat|devis|march[ée]|avenant|contract|quote|agreement)' then 'contract'
+                 when name ~* '(plan|coupe|fa[cç]ade|[ée]tude|note de calcul|ferraill|drawing|section)' then 'technical'
+                 else 'admin' end
+       from doc_type where org_id = $1`,
     [actor.orgId, id],
   );
   await journal(tx, actor, 'project.create', id, null, { ...data, code });

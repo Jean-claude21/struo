@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { asActor, ensure, journal, parse, resolveActor } from './access.ts';
 import { asUser, type Actor, type Db } from './db.ts';
 import { DomainError, notFound } from './errors.ts';
+import { assertFeature } from './founder.ts';
 import { hashToken } from './portal.ts';
 
 const PREFIX = 'struo_sk_';
@@ -13,6 +14,8 @@ export async function createApiKey(db: Db, actor: Actor, name: unknown): Promise
   const label = parse(z.string().trim().min(1).max(80), name);
   const key = `${PREFIX}${randomBytes(24).toString('base64url')}`;
   return asActor(db, actor, async (tx) => {
+    // Spec 055: API keys and MCP connections are a feature of the company's plan.
+    await assertFeature(tx, actor.orgId, 'mcp');
     const { rows } = await tx.query<{ id: string }>(
       'insert into api_key (org_id, name, prefix, key_hash, user_id) values ($1, $2, $3, $4, $5) returning id',
       [actor.orgId, label, key.slice(0, PREFIX.length + 4), hashToken(key), actor.userId],

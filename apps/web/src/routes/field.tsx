@@ -5,9 +5,10 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Camera, Check, ChevronRight, ClipboardCheck, CloudRain, CloudSun, FileSignature, FileText, Hammer, HardHat, Home, LogOut, Map as MapIcon,
-  Mic, PackageCheck, RefreshCw, ScanLine, Square, Sun, TriangleAlert, Truck, UserRound, Wind, Wrench, CloudOff, CheckCircle2, X,
+  Mic, PackageCheck, RefreshCw, ScanLine, Square, Sun, TriangleAlert, Truck, UserRound, Users, Wind, Wrench, CloudOff, CheckCircle2, X, MessageCircle, Send,
 } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
+import { PushToggle } from '@/components/PushToggle.tsx';
 import { SignaturePad, type SignaturePadHandle } from '@/components/SignaturePad.tsx';
 import { authClient } from '@/features/auth/client.ts';
 import { AssistantButton, IntelligenceProvider } from '@/components/Intelligence.tsx';
@@ -17,6 +18,7 @@ import {
   clearSnapshot,
 } from '@/features/field/store.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
+import { updateTask } from '@/features/office/server.ts';
 
 export const Route = createFileRoute('/field')({
   ssr: false,
@@ -24,7 +26,7 @@ export const Route = createFileRoute('/field')({
   component: FieldApp,
 });
 
-type Tab = 'home' | 'sites' | 'plans' | 'me';
+type Tab = 'home' | 'sites' | 'plans' | 'office' | 'me';
 type Flow = null | 'report' | 'incident' | 'checklist' | 'delivery' | 'pv' | { done: 'report' | 'checklist' | 'delivery' | 'pv' | 'incident' };
 const INCIDENT_KINDS = [['material_delay', Truck], ['defect', Hammer], ['weather', CloudRain], ['accident', TriangleAlert], ['equipment', Wrench], ['other', ClipboardCheck]] as const;
 const PRIORITIES = ['info', 'important', 'critical'] as const;
@@ -168,10 +170,15 @@ function FieldApp() {
             <p className="faint small">{t('field2.planOffline')}</p>
           </div>
         ) : null}
+        {tab === 'office' && site ? (
+          <OfficeTab site={site} queue={queue} canRequest={Boolean(snapshot?.user.canReport)} onQueued={async () => { setQueue(await outbox()); if (navigator.onLine) await refresh(); }} />
+        ) : null}
         {tab === 'me' ? (
           <div className="stack">
             <h2 style={{ margin: 0 }}>{snapshot?.user.name}</h2>
             <div className="row"><LanguageSwitch /></div>
+            <h3 style={{ margin: '.5rem 0 0' }}>{t('teamPush.title')}</h3>
+            <PushToggle />
             <h3 style={{ margin: '.5rem 0 0' }}>{t('field2.outbox')}</h3>
             {queue.length ? queue.map((item) => (
               <div key={item.id} className="card small">
@@ -195,7 +202,7 @@ function FieldApp() {
         </div>
       ) : null}
       <nav className="field-tabs" aria-label="Struo">
-        {([['home', Home, 'field2.tabHome'], ['sites', HardHat, 'field2.tabSites'], ['plans', MapIcon, 'field2.tabPlans'], ['me', UserRound, 'field2.tabMe']] as const).map(([value, Icon, label]) => (
+        {([['home', Home, 'field2.tabHome'], ['sites', HardHat, 'field2.tabSites'], ['plans', MapIcon, 'field2.tabPlans'], ['office', MessageCircle, 'fieldOffice.tab'], ['me', UserRound, 'field2.tabMe']] as const).map(([value, Icon, label]) => (
           <button key={value} type="button" className={tab === value ? 'on' : ''} onClick={() => setTab(value)} aria-current={tab === value ? 'page' : undefined}>
             <Icon size={22} />{t(label)}
           </button>
@@ -226,6 +233,7 @@ function HomeTab({ snapshot, site, onFlow, onSite }: {
   const others = snapshot.projects.filter((candidate) => candidate.id !== site.id);
   return (
     <div className="stack loose">
+      <PushToggle compact />
       {weather ? (
         <span className={`badge ${weather.wet ? 'warn' : 'ok'}`} style={{ alignSelf: 'flex-start', fontSize: '.88rem', padding: '.3rem .7rem' }}>
           {weather.wet ? <CloudRain size={15} /> : <Sun size={15} />}{weather.text}
@@ -239,7 +247,7 @@ function HomeTab({ snapshot, site, onFlow, onSite }: {
         </div>
         <div className="stack" style={{ padding: '0 1rem 1rem', gap: '.5rem' }}>
           <b>{t('field2.myActions')}</b>
-          {(snapshot.templates ?? []).filter((template) => template.required).map((template) => (
+          {(snapshot.templates ?? []).filter((template) => appliesToday(template, site)).map((template) => (
             <button key={template.id} type="button" className={`check-row ${done.has(template.name) ? 'on' : ''}`} onClick={() => onFlow('checklist', template.id)} disabled={done.has(template.name)}>
               <span className="box">{done.has(template.name) ? <Check size={16} /> : null}</span>
               <span className="grow">{done.has(template.name) ? t('field2.checklistDone', { name: template.name }) : t('field2.checklistTodo', { name: template.name })}</span>
@@ -249,7 +257,15 @@ function HomeTab({ snapshot, site, onFlow, onSite }: {
           {toFix.map((report) => (
             <div key={report.id} className="notice small"><TriangleAlert size={16} />{t('field2.toFix', { note: report.reviewNote ?? '' })}</div>
           ))}
+          {(snapshot.tasks ?? []).filter((task) => task.projectId === site.id).map((task) => <FieldTask key={task.id} task={task} />)}
           {site.openIncidents ? <div className="notice bad small"><TriangleAlert size={16} />{t('field2.openIncidents', { n: site.openIncidents })}</div> : null}
+          {(snapshot.templates ?? []).filter((template) => template.mode === 'on_demand').length ? (
+            <div className="chips">
+              {(snapshot.templates ?? []).filter((template) => template.mode === 'on_demand').map((template) => (
+                <button key={template.id} type="button" className="chip" onClick={() => onFlow('checklist', template.id)}><ClipboardCheck size={15} />{template.name}</button>
+              ))}
+            </div>
+          ) : null}
           <div className="pair" style={{ marginTop: '.25rem' }}>
             <button type="button" className="btn secondary small" onClick={() => onFlow('delivery')}><ScanLine size={16} />{t('field2.scan')}</button>
             <button type="button" className="btn secondary small" onClick={() => onFlow('pv')}><FileSignature size={16} />{t('field2.sign')}</button>
@@ -333,6 +349,39 @@ function PhotoPicker({ photos, setPhotos, gps, site }: {
 
 // ---------------------------------------------------------------- T4–T6: report in four steps
 
+/**
+ * Spec 048: the checklists of the day on a site: the daily ones, and those tied to a phase under way
+ * there (started, not finished). On-demand checklists are offered as buttons.
+ */
+function appliesToday(template: { required: boolean; mode?: string; phaseName?: string | null }, site: FieldProject): boolean {
+  if (template.mode === 'on_demand') return false;
+  if (template.mode === 'phase') {
+    const wanted = (template.phaseName ?? '').trim().toLowerCase();
+    return site.phases.some((phase) => phase.name.trim().toLowerCase() === wanted && phase.progressPct > 0 && phase.progressPct < 100);
+  }
+  return template.required;
+}
+
+/** A task given to the site lead (spec 046): mark it done when the network is there. */
+function FieldTask({ task }: { task: { id: string; title: string; dueOn: string | null; status: string; priority: string } }) {
+  const { t } = useI18n();
+  const [state, setState] = useState<'open' | 'sending' | 'done' | 'offline'>('open');
+  const late = task.dueOn !== null && task.dueOn < new Date().toISOString().slice(0, 10);
+  const finish = async () => {
+    if (!navigator.onLine) { setState('offline'); return; }
+    setState('sending');
+    try { await updateTask({ data: { id: task.id, patch: { status: 'done' } } }); setState('done'); } catch { setState('offline'); }
+  };
+  return (
+    <div className={`check-row ${state === 'done' ? 'on' : ''}`}>
+      <button type="button" className="box" aria-label={t('tasks.statuses.done')} disabled={state === 'done' || state === 'sending'} onClick={() => void finish()}>{state === 'done' ? <Check size={16} /> : null}</button>
+      <span className="grow">{task.title}{task.priority === 'urgent' ? <b className="bad-text"> · {t('tasks.priorities.urgent')}</b> : null}
+        {state === 'offline' ? <span className="faint small" style={{ display: 'block' }}>{t('crew.taskNeedsNetwork')}</span> : null}</span>
+      {task.dueOn ? <span className={`small ${late ? 'bad-text' : 'faint'}`}>{task.dueOn.slice(8, 10)}/{task.dueOn.slice(5, 7)}</span> : null}
+    </div>
+  );
+}
+
 function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: FieldSnapshot; initialSite: FieldProject; onCancel: () => void; onSaved: () => Promise<void> }) {
   const { t } = useI18n();
   const [step, setStep] = useState(1);
@@ -347,6 +396,10 @@ function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: Fi
   const [gps, setGps] = useState<{ latitude: number; longitude: number } | null | undefined>(undefined);
   const [voice, setVoice] = useState<{ blob: Blob; mediaType: string; seconds: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Spec 047: who is present today, starting from the crew of the last day on this site.
+  const workers = snapshot.workers ?? [];
+  const [crew, setCrew] = useState<Set<string>>(() => new Set((site.lastCrew ?? []).filter((id) => workers.some((worker) => worker.id === id))));
+  const toggleCrew = (id: string) => setCrew((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   useEffect(() => { void currentPosition().then(setGps); }, []);
   const labels = [t('field2.steps.site'), t('field2.steps.photos'), t('field2.steps.progress'), t('field2.steps.send')];
   const value = progress ?? phase?.progressPct ?? 0;
@@ -356,7 +409,7 @@ function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: Fi
     const weatherText = weather ? `[${t(`field2.${weather}` as MessageKey)}] ` : '';
     await enqueue({
       id, type: 'report', createdAt: now(), attempts: 0, lastError: null,
-      payload: { id, projectId: site.id, phaseId, progressPct: phaseId ? value : null, note: `${weatherText}${note.trim()}`.trim() || null, latitude: gps?.latitude ?? null, longitude: gps?.longitude ?? null, takenAt: now() },
+      payload: { id, projectId: site.id, phaseId, progressPct: phaseId ? value : null, note: `${weatherText}${note.trim()}`.trim() || null, latitude: gps?.latitude ?? null, longitude: gps?.longitude ?? null, takenAt: now(), workerIds: [...crew] },
       photos: photos.map(({ url: _url, ...photo }) => photo),
       audio: voice,
     });
@@ -368,7 +421,7 @@ function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: Fi
       <FlowHeader title={t('field2.newReport')} onClose={onCancel} step={step} total={4} labels={labels} />
       <div className="field-body">
         {step === 1 ? snapshot.projects.map((candidate) => (
-          <button key={candidate.id} type="button" className={`site-card ${candidate.id === siteId ? 'selected' : ''}`} onClick={() => { setSiteId(candidate.id); setPhaseId(null); setProgress(null); }}>
+          <button key={candidate.id} type="button" className={`site-card ${candidate.id === siteId ? 'selected' : ''}`} onClick={() => { setSiteId(candidate.id); setPhaseId(null); setProgress(null); setCrew(new Set((candidate.lastCrew ?? []).filter((id) => workers.some((worker) => worker.id === id)))); }}>
             <span className="grow"><strong>{candidate.code} · {candidate.name}</strong><div className="muted small">{candidate.location ?? ''}</div></span><strong>{candidate.progressPct} %</strong>
           </button>
         )) : null}
@@ -399,6 +452,21 @@ function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: Fi
               </div>
             ) : null}
             <div className="stack" style={{ gap: '.5rem' }}>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <b>{t('crew.presentToday', { n: crew.size })}</b>
+                {workers.length ? <button type="button" className="btn ghost small" onClick={() => setCrew(crew.size ? new Set() : new Set(workers.map((worker) => worker.id)))}>{crew.size ? t('crew.none') : t('crew.all')}</button> : null}
+              </div>
+              {workers.length ? (
+                <div className="chips">
+                  {[...workers].sort((a, b) => Number((site.lastCrew ?? []).includes(b.id)) - Number((site.lastCrew ?? []).includes(a.id))).map((worker) => (
+                    <button key={worker.id} type="button" className={`chip ${crew.has(worker.id) ? 'selected' : ''}`} aria-pressed={crew.has(worker.id)} onClick={() => toggleCrew(worker.id)}>
+                      {crew.has(worker.id) ? <Check size={14} /> : null}{worker.name}{worker.trade ? <span className="faint small"> · {worker.trade}</span> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : <span className="muted small">{t('crew.noWorkersField')}</span>}
+            </div>
+            <div className="stack" style={{ gap: '.5rem' }}>
               <VoiceRecorder voice={voice} onChange={setVoice} />
               <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={t('fieldApp.observationPlaceholder')} maxLength={4000} rows={3} />
             </div>
@@ -419,6 +487,7 @@ function ReportFlow({ snapshot, initialSite, onCancel, onSaved }: { snapshot: Fi
             {photos.length ? <div className="thumbs">{photos.map((photo) => <img key={photo.id} src={photo.url} alt="" />)}</div> : null}
             {phase ? <span className="badge brand" style={{ alignSelf: 'flex-start' }}>{phase.name} : {phase.progressPct} % → {value} %</span> : null}
             {voice ? <span className="row tight small"><Mic size={14} />{t('fieldApp.voiceNote', { seconds: voice.seconds })}</span> : null}
+            {crew.size ? <span className="row tight small"><Users size={14} />{t('crew.presentToday', { n: crew.size })}</span> : null}
             {note ? <p style={{ margin: 0 }}>{note}</p> : null}
             <span className="faint small row tight"><CloudOff size={14} />{t('field2.worksOffline')}</span>
           </div>
@@ -739,6 +808,90 @@ function VoiceRecorder({ voice, onChange }: {
     <div className="stack" style={{ alignItems: 'center', gap: '.4rem' }}>
       <button type="button" className="mic" aria-label={t('field2.dictate')} onClick={() => void start()}><Mic size={34} /></button>
       <span className="small muted">{t('field2.dictate')}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- spec 052: the office, from the field
+
+/** The site's thread with the office, and the material asked for. Written offline too (outbox). */
+function OfficeTab({ site, queue, canRequest, onQueued }: { site: FieldProject; queue: OutboxItem[]; canRequest: boolean; onQueued: () => Promise<void> }) {
+  const { t, locale } = useI18n();
+  const [body, setBody] = useState('');
+  const [asking, setAsking] = useState(false);
+  const when = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+  const day = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'short' }).format(new Date(`${value}T12:00:00`));
+  const waitingNotes = queue.filter((item): item is Extract<OutboxItem, { type: 'note' }> => item.type === 'note' && item.payload.projectId === site.id);
+  const waitingRequests = queue.filter((item): item is Extract<OutboxItem, { type: 'request' }> => item.type === 'request' && item.payload.projectId === site.id);
+  const send = async () => {
+    const text = body.trim();
+    if (!text) return;
+    const id = crypto.randomUUID();
+    await enqueue({ id, type: 'note', createdAt: new Date().toISOString(), attempts: 0, lastError: null, payload: { id, projectId: site.id, body: text }, photos: [] });
+    setBody('');
+    await onQueued();
+  };
+  const ask = async (form: HTMLFormElement) => {
+    const data = new FormData(form);
+    const item = String(data.get('item') ?? '').trim();
+    if (!item) return;
+    const id = crypto.randomUUID();
+    const text = (name: string) => String(data.get(name) ?? '').trim() || null;
+    await enqueue({ id, type: 'request', createdAt: new Date().toISOString(), attempts: 0, lastError: null, payload: { id, projectId: site.id, item, quantity: text('quantity'), neededOn: text('neededOn'), note: text('note') }, photos: [] });
+    form.reset();
+    setAsking(false);
+    await onQueued();
+  };
+  const requests = site.requests ?? [];
+  return (
+    <div className="stack loose">
+      <section className="stack" style={{ gap: '.6rem' }}>
+        <div className="row nowrap"><h2 className="grow" style={{ margin: 0 }}>{t('fieldOffice.material')} · {site.code}</h2></div>
+        {canRequest ? (asking ? (
+          <form className="card stack" onSubmit={(event) => { event.preventDefault(); void ask(event.currentTarget); }}>
+            <label className="field">{t('fieldOffice.item')}<input name="item" required maxLength={200} placeholder={t('fieldOffice.itemPlaceholder')} /></label>
+            <div className="pair">
+              <label className="field">{t('fieldOffice.quantity')}<input name="quantity" maxLength={80} placeholder={t('fieldOffice.quantityPlaceholder')} /></label>
+              <label className="field">{t('fieldOffice.neededOn')}<input name="neededOn" type="date" min={new Date().toISOString().slice(0, 10)} /></label>
+            </div>
+            <label className="field">{t('fieldOffice.note')}<textarea name="note" rows={2} maxLength={1000} /></label>
+            <div className="pair">
+              <button type="button" className="btn secondary" onClick={() => setAsking(false)}>{t('app.cancel')}</button>
+              <button type="submit" className="btn"><Truck size={18} />{t('fieldOffice.send')}</button>
+            </div>
+          </form>
+        ) : <button type="button" className="btn block" onClick={() => setAsking(true)}><Truck size={18} />{t('fieldOffice.ask')}</button>) : null}
+        {waitingRequests.map((item) => (
+          <div key={item.id} className="card small row nowrap"><span className="grow"><b>{item.payload.item}</b>{item.payload.quantity ? ` · ${item.payload.quantity}` : ''}</span><span className="badge warn">{t('field2.waiting')}</span></div>
+        ))}
+        {requests.length ? requests.map((item) => (
+          <div key={item.id} className="card small stack" style={{ gap: '.25rem' }}>
+            <div className="row nowrap"><span className="grow"><b>{item.item}</b>{item.quantity ? ` · ${item.quantity}` : ''}</span>
+              <span className={`badge ${item.status === 'delivered' ? 'ok' : item.status === 'cancelled' ? '' : item.status === 'ordered' ? 'info' : 'warn'}`}>{t(`material.statuses.${item.status}`)}</span></div>
+            {item.neededOn ? <span className="muted">{t('fieldOffice.forDate', { date: day(item.neededOn) })}</span> : null}
+            {item.officeNote ? <span>« {item.officeNote} »</span> : null}
+          </div>
+        )) : !waitingRequests.length ? <p className="muted small" style={{ margin: 0 }}>{t('fieldOffice.noRequest')}</p> : null}
+      </section>
+
+      <section className="stack" style={{ gap: '.6rem' }}>
+        <h2 style={{ margin: 0 }}>{t('fieldOffice.thread')}</h2>
+        <p className="muted small" style={{ margin: 0 }}>{t('fieldOffice.threadHint')}</p>
+        <form className="row nowrap" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+          <input value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} placeholder={t('fieldOffice.write')} aria-label={t('fieldOffice.write')} style={{ flex: 1, minWidth: 0 }} />
+          <button type="submit" className="btn" aria-label={t('fieldOffice.sendNote')}><Send size={18} /></button>
+        </form>
+        {waitingNotes.map((item) => (
+          <div key={item.id} className="message mine"><div className="xsmall muted">{t('field2.waiting')}</div><div style={{ whiteSpace: 'pre-wrap' }}>{item.payload.body}</div></div>
+        ))}
+        {(site.notes ?? []).map((note) => (
+          <div key={note.id} className={`message ${note.mine ? 'mine' : ''}`}>
+            <div className="xsmall muted">{note.authorName} · {when(note.at)}</div>
+            <div style={{ whiteSpace: 'pre-wrap' }}>{note.body}</div>
+          </div>
+        ))}
+        {!site.notes?.length && !waitingNotes.length ? <p className="muted small" style={{ margin: 0 }}>{t('fieldOffice.noNote')}</p> : null}
+      </section>
     </div>
   );
 }

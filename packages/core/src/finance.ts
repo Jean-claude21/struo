@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { asActor, ensure, journal, parse } from './access.ts';
-import type { Actor, Db } from './db.ts';
+import type { Actor, Db, Tx } from './db.ts';
 import { DomainError, notFound } from './errors.ts';
 import { nextInvoiceNumber, readSettings, type InvoiceSettings } from './invoicing.ts';
 
@@ -211,28 +211,42 @@ export async function recordReminder(db: Db, actor: Actor, invoiceId: string, in
 }
 
 /** Everything a printable invoice needs, read from the database. */
+async function buildInvoiceDocument(tx: Pick<Tx, 'query'>, orgId: string, id: string): Promise<InvoiceDocument> {
+  const { rows } = await tx.query(
+    `select i.*, b.paid_minor, b.balance_minor, p.code as project_code, p.name as project_name, p.location,
+            c.name as client_name, c.address as client_address, c.email as client_email, c.phone as client_phone,
+            o.name as company_name, s.country_code
+       from invoice i join project p on p.id = i.project_id left join client c on c.id = p.client_id
+       join organization o on o.id = i.org_id join org_settings s on s.org_id = i.org_id
+       left join invoice_balance b on b.invoice_id = i.id
+      where i.id = $1 and i.org_id = $2`,
+    [id, orgId],
+  );
+  const row = rows[0];
+  if (!row) throw notFound();
+  const lines = (await tx.query(
+    `select kind, section, designation, unit, quantity_milli, unit_price_minor, contract_minor, cumulative_bps, previous_minor, amount_minor
+       from invoice_line where invoice_id = $1 order by position`, [id])).rows;
+  const adjustments = (await tx.query('select label, rate_bps, base, amount_minor from invoice_adjustment where invoice_id = $1 order by position', [id])).rows;
+  const settings = await readSettings(tx as Tx, orgId);
+  return { ...row, lines, adjustments, settings } as InvoiceDocument;
+}
+
 export async function invoiceDocument(db: Db, actor: Actor, id: string) {
   ensure(actor, 'finance.read');
-  return asActor(db, actor, async (tx) => {
-    const { rows } = await tx.query(
-      `select i.*, b.paid_minor, b.balance_minor, p.code as project_code, p.name as project_name, p.location,
-              c.name as client_name, c.address as client_address, c.email as client_email, c.phone as client_phone,
-              o.name as company_name, s.country_code
-         from invoice i join project p on p.id = i.project_id left join client c on c.id = p.client_id
-         join organization o on o.id = i.org_id join org_settings s on s.org_id = i.org_id
-         left join invoice_balance b on b.invoice_id = i.id
-        where i.id = $1 and i.org_id = $2`,
-      [id, actor.orgId],
-    );
-    const row = rows[0];
-    if (!row) throw notFound();
-    const lines = (await tx.query(
-      `select kind, section, designation, unit, quantity_milli, unit_price_minor, contract_minor, cumulative_bps, previous_minor, amount_minor
-         from invoice_line where invoice_id = $1 order by position`, [id])).rows;
-    const adjustments = (await tx.query('select label, rate_bps, base, amount_minor from invoice_adjustment where invoice_id = $1 order by position', [id])).rows;
-    const settings = await readSettings(tx, actor.orgId);
-    return { ...row, lines, adjustments, settings } as InvoiceDocument;
-  });
+  return asActor(db, actor, (tx) => buildInvoiceDocument(tx, actor.orgId, id));
+}
+
+/**
+ * Spec 056: an issued invoice of the link's site, for the client to open and save as PDF (platform
+ * connection, keyed by the token; only when the link shows finance).
+ */
+export async function portalInvoiceDocument(owner: Db, tokenHash: string, id: string): Promise<InvoiceDocument | null> {
+  const { rows } = await owner.query<{ orgId: string }>(
+    `select l.org_id as "orgId" from portal_link l join invoice i on i.project_id = l.project_id and i.org_id = l.org_id
+      where l.token_hash = $1 and l.revoked_at is null and l.show_finance and i.id = $2 and i.status = 'issued'`, [tokenHash, id]);
+  if (!rows[0]) return null;
+  return buildInvoiceDocument(owner as unknown as Pick<Tx, 'query'>, rows[0].orgId, id);
 }
 
 export interface InvoiceDocument {

@@ -29,7 +29,6 @@ function Demo() {
       <div className="lx-top"><div className="lx-wrap"><PublicHeader signedIn={Boolean(viewer)} /></div></div>
       <section className="lx-section lx-demo">
         <div className="lx-wrap">
-          <p className="lx-eyebrow"><span />{t('demo.page.eyebrow')}</p>
           <h1 className="lx-narrow">{t('demo.page.title')}</h1>
           <p className="lx-lead lx-narrow">{t('demo.page.lead')}</p>
           {error ? <p className="notice lx-narrow" role="alert">{t(error === 'limit' ? 'demo.page.errLimit' : 'demo.page.errUnavailable')}</p> : null}

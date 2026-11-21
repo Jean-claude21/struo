@@ -23,6 +23,9 @@ export interface Env {
   OPENAI_SIWC_CLIENT_SECRET: string;
   /** The platform's Chariow store (subscriptions sold as licences, spec 038). */
   CHARIOW_API_KEY: string;
+  /** Web Push (spec 051): the application's VAPID key pair. Empty: no phone notifications. */
+  VAPID_PUBLIC_KEY: string;
+  VAPID_PRIVATE_KEY: string;
   JOBS_ENABLED: boolean;
   PLATFORM_MONEROO_SECRET_KEY: string;
   PLATFORM_MONEROO_WEBHOOK_SECRET: string;
@@ -77,6 +80,8 @@ export function env(): Env {
     OPENAI_SIWC_CLIENT_ID: read('OPENAI_SIWC_CLIENT_ID'),
     OPENAI_SIWC_CLIENT_SECRET: read('OPENAI_SIWC_CLIENT_SECRET'),
     CHARIOW_API_KEY: read('CHARIOW_API_KEY'),
+    VAPID_PUBLIC_KEY: read('VAPID_PUBLIC_KEY'),
+    VAPID_PRIVATE_KEY: read('VAPID_PRIVATE_KEY'),
     JOBS_ENABLED: read('JOBS_ENABLED', 'true') !== 'false',
     PLATFORM_MONEROO_SECRET_KEY: read('PLATFORM_MONEROO_SECRET_KEY'),
     PLATFORM_MONEROO_WEBHOOK_SECRET: read('PLATFORM_MONEROO_WEBHOOK_SECRET'),

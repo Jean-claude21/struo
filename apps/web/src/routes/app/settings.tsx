@@ -7,11 +7,14 @@ import { PERMISSIONS, type Permission } from '@struo/core/permissions';
 import { Avatar, PageHeader, Panel } from '@/components/kit.tsx';
 import {
   addConfigurationItem, createApiKey, getSettingsPage, inviteMember, removeConfigurationItem, removeMember, revokeApiKey,
-  eraseCompany, paySubscription, revokeInvitation, revokeMcpConnection, setMemberRole, setPaymentProvider, updateSettings,
+  eraseCompany, paySubscription, revokeInvitation, revokeMcpConnection, setMemberRole, updateSettings,
 } from '@/features/settings/server.ts';
 import { InvoiceLookSettings } from '@/components/InvoiceLookSettings.tsx';
 import { getLicenseOffer, redeemLicense } from '@/features/settings/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
+import { ChecklistSettings } from '@/components/ChecklistSettings.tsx';
+import { ReportSettings } from '@/components/ReportSettings.tsx';
+import { lines, planWords, Rich } from '@/components/PlanWords.tsx';
 
 export const Route = createFileRoute('/app/settings')({
   validateSearch: (search: Record<string, unknown>): { tab?: string } => (typeof search.tab === 'string' ? { tab: search.tab } : {}),
@@ -19,7 +22,7 @@ export const Route = createFileRoute('/app/settings')({
   component: Settings,
 });
 
-type Tab = 'company' | 'invoicing' | 'configuration' | 'members' | 'roles' | 'payments' | 'integrations' | 'subscription' | 'journal' | 'data';
+type Tab = 'company' | 'invoicing' | 'report' | 'configuration' | 'checklists' | 'members' | 'roles' | 'integrations' | 'subscription' | 'journal' | 'data';
 type Data = Awaited<ReturnType<typeof getSettingsPage>>;
 
 function Settings() {
@@ -27,18 +30,19 @@ function Settings() {
   const data = Route.useLoaderData();
   const search = Route.useSearch();
   const [tab, setTab] = useState<Tab>((search.tab as Tab | undefined) ?? 'company');
-  const tabs: Tab[] = ['company', ...(can(data.role, 'finance.read') ? ['invoicing' as Tab] : []), 'configuration', 'members', 'roles', 'payments', 'integrations', 'subscription', ...(data.journal.length ? ['journal' as Tab] : []), 'data'];
+  const tabs: Tab[] = ['company', ...(can(data.role, 'finance.read') ? ['invoicing' as Tab, 'report' as Tab] : []), 'configuration', 'checklists', 'members', 'roles', 'integrations', 'subscription', ...(data.journal.length ? ['journal' as Tab] : []), 'data'];
   return (
     <div className="stack">
       <PageHeader title={t('settings.title')} text={data.settings.name} />
-      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'roles' ? t('set2.roles') : value === 'journal' ? t('set2.journal') : value === 'invoicing' ? t('inv.settingsTab') : t(`settings.${value}`) }))} />
+      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'checklists' ? t('checklists.title') : value === 'report' ? t('clientReport.tab') : value === 'roles' ? t('set2.roles') : value === 'journal' ? t('set2.journal') : value === 'invoicing' ? t('inv.settingsTab') : t(`settings.${value}`) }))} />
       {tab === 'company' ? <CompanyTab data={data} /> : null}
       {tab === 'invoicing' ? <InvoiceLookSettings canWrite={can(data.role, 'finance.write')} /> : null}
       {tab === 'configuration' ? <ConfigurationTab data={data} /> : null}
+      {tab === 'checklists' ? <ChecklistSettings /> : null}
+      {tab === 'report' ? <ReportSettings canWrite={can(data.role, 'finance.write')} /> : null}
       {tab === 'members' ? <MembersTab data={data} /> : null}
       {tab === 'roles' ? <RolesTab /> : null}
       {tab === 'journal' ? <JournalTab data={data} /> : null}
-      {tab === 'payments' ? <PaymentsTab data={data} /> : null}
       {tab === 'integrations' ? <IntegrationsTab data={data} /> : null}
       {tab === 'subscription' ? <SubscriptionTab data={data} /> : null}
       {tab === 'data' ? <DataTab data={data} /> : null}
@@ -283,56 +287,6 @@ function MembersTab({ data }: { data: Data }) {
   );
 }
 
-function PaymentsTab({ data }: { data: Data }) {
-  const { t } = useI18n();
-  const { run, error, busy } = useAction();
-  const [saved, setSaved] = useState(false);
-  const editable = can(data.role, 'org.manage');
-  return (
-    <form
-      className="card stack"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        const v = formData(event.currentTarget);
-        setSaved(false);
-        const done = await run(() =>
-          setPaymentProvider({ data: { provider: v.provider ?? 'moneroo', secretKey: v.secretKey, webhookSecret: v.webhookSecret, enabled: v.enabled === 'on' } }),
-        );
-        if (done) setSaved(true);
-      }}
-    >
-      <h2>{t('settings.payments')}</h2>
-      <p className="muted">{t('settings.providerHelp')}</p>
-      <fieldset disabled={!editable} className="stack" style={{ border: 0, padding: 0, margin: 0 }}>
-        <Field label={t('settings.provider')}>
-          <select name="provider" defaultValue={data.provider?.provider ?? 'moneroo'}>
-            <option value="moneroo">Moneroo (TMoney, Flooz, cartes…)</option>
-            {data.simulatorAvailable ? <option value="simulator">Simulator (test)</option> : null}
-          </select>
-        </Field>
-        <Field label={t('settings.secretKey')} hint={data.provider?.hasSecret ? t('settings.keepSecret') : undefined}>
-          <input name="secretKey" type="password" autoComplete="off" />
-        </Field>
-        <Field label={t('settings.webhookSecret')} hint={data.provider?.hasWebhookSecret ? t('settings.keepSecret') : undefined}>
-          <input name="webhookSecret" type="password" autoComplete="off" />
-        </Field>
-        <div>
-          <div className="small muted">{t('settings.webhookUrl')}</div>
-          <div className="secret">{`${data.baseUrl}/api/payments/webhook/moneroo/${data.orgId}`}</div>
-        </div>
-        <label className="check">
-          <input type="checkbox" name="enabled" defaultChecked={data.provider?.enabled ?? true} /> {t('settings.enabled')}
-        </label>
-        <ErrorText error={error} />
-        {saved ? <p className="notice ok">{t('app.saved')}</p> : null}
-        <button className="btn" disabled={busy}>
-          {t('app.save')}
-        </button>
-      </fieldset>
-    </form>
-  );
-}
-
 function IntegrationsTab({ data }: { data: Data }) {
   const { t } = useI18n();
   const { run, error, busy } = useAction();
@@ -435,7 +389,7 @@ function SubscriptionTab({ data }: { data: Data }) {
     <div className="stack">
       <section className="card stack">
         <h2>
-          {t('settings.plan')} : <span className="accent">{plan.name}</span>
+          {t('settings.plan')} : <span className="accent">{planWords(plan, locale).name}</span>
         </h2>
         <p>{t('settings.usage', { users, projects })}</p>
         <p className="muted">
@@ -646,7 +600,18 @@ function LicenseSection() {
       <h2>{t('lic.title')}</h2>
       <p className="muted small" style={{ margin: 0 }}>{t('lic.how')}</p>
       {offer?.products.length ? (
-        <div className="row tight">{offer.products.map((product) => <a key={product.productId} className="btn secondary small" href={product.buyUrl!} target="_blank" rel="noreferrer">{product.label}</a>)}</div>
+        <div className="offer-grid">{offer.products.map((product) => {
+          const points = lines(locale === 'en' ? product.descriptionEn || product.description : product.description);
+          return (
+            <article key={product.productId} className={`offer-card ${product.highlight ? 'on' : ''}`}>
+              {product.highlight ? <span className="badge brand">{t('lp.offer.recommended')}</span> : null}
+              <b>{product.label}</b>
+              {product.priceMinor ? <span className="offer-price">{formatMoney(locale, product.priceMinor, offer.currency)}</span> : null}
+              {points.length ? <ul>{points.map((point) => <li key={point}><Rich text={point} /></li>)}</ul> : null}
+              <a className={`btn ${product.highlight ? '' : 'secondary'} small`} href={product.buyUrl!} target="_blank" rel="noreferrer">{t('lic.buy')}</a>
+            </article>
+          );
+        })}</div>
       ) : null}
       {offer && !offer.storeConfigured ? <p className="notice warn small" style={{ margin: 0 }}>{t('lic.storeOff')}</p> : null}
       <form className="row tight nowrap" onSubmit={async (event) => {

@@ -7,7 +7,7 @@ import {
   submitReport, financeSummary, operationsSummary, recentActivity, listProjects, listMilestones, gantt, listExpenses,
   marginByProject, complianceByProject, listReports, listIncidents, listPayments, listClients, getSettings, getSubscription,
   getConfiguration, listMembers, fieldSnapshot, listApiKeys, listPortalLinks, listMessages, reportAudioLocation, setReportTranscript, grantMcpCompany, actorFromMcpGrant, revokeMcpConnection, listMcpConnections,
-  startSubscriptionPayment, settleSubscriptionPayment, listSubscriptionPayments, accountingExport, companyExport, eraseCompany, createPaymentIntent, settlePaymentIntent, toMinor, type Actor,
+  startSubscriptionPayment, settleSubscriptionPayment, listSubscriptionPayments, accountingExport, companyExport, eraseCompany, toMinor, type Actor,
 } from '../src/index.ts';
 import { addMember, createTestCompany, setupDatabase, today, type TestDb } from './helpers.ts';
 
@@ -137,16 +137,6 @@ describe('client portal (spec 010)', () => {
     expect(await portalView(db.app, token)).toBeNull();
   });
 
-  it('turns a succeeded online payment into one payment, once', async () => {
-    const { id: projectId } = await createProject(db.app, owner, { name: 'Paiement en ligne', status: 'active' });
-    const { id: invoiceId } = await createInvoice(db.app, owner, { projectId, kind: 'advance', amountMinor: 500_000, dueOn: today(10) });
-    const intentId = await createPaymentIntent(db.owner, { orgId: owner.orgId, invoiceId, provider: 'simulator', amountMinor: 590_000, currencyCode: 'XOF' });
-    const outcome = { intentId, status: 'succeeded' as const, amountMinor: 590_000, currencyCode: 'XOF' };
-    expect(await settlePaymentIntent(db.owner, outcome)).toBe('applied');
-    expect(await settlePaymentIntent(db.owner, outcome)).toBe('ignored');
-    const [invoice] = await listInvoices(db.app, owner, { projectId });
-    expect(invoice?.balanceMinor).toBe(0);
-  });
 });
 
 describe('MCP keys (spec 011)', () => {

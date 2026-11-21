@@ -1,6 +1,7 @@
-import { companyKpis, digestRecipients, getSettings, listAlerts, markNotified, reportRecipients, resolveActor, type Alert } from '@struo/core';
+import { companyKpis, digestRecipients, recordPlatformEvent, getSettings, listAlerts, markNotified, reportRecipients, resolveActor, type Alert } from '@struo/core';
 import { translate } from '@/i18n/index.tsx';
 import { refillDemoPool } from './demo.server.ts';
+import { runClientReports } from './notify.server.ts';
 import { monitorJob, reportError } from './monitor.server.ts';
 import type { Runtime } from './runtime.server.ts';
 
@@ -170,10 +171,17 @@ export function startJobs(rt: Runtime): void {
   const tick = () => {
     monitorJob('struo-jobs', '*/15 * * * *', async () => {
       // Demo copies (spec 042): delete the expired ones, keep a few ready for the next visitors.
-      await refillDemoPool(rt).catch((error: unknown) => reportError(error, { where: 'job:demo' }));
+      // Spec 055: every run is noted (ok or failed) for the founder's console.
+      const run = async (name: string, work: () => Promise<unknown>) => {
+        try { const result = await work(); await recordPlatformEvent(rt.owner, { kind: 'job', name, ok: true, detail: typeof result === 'number' ? { done: result } : null }); }
+        catch (error) { reportError(error, { where: `job:${name}` }); await recordPlatformEvent(rt.owner, { kind: 'job', name, ok: false, detail: { error: String((error as Error)?.message ?? error).slice(0, 200) } }); }
+      };
+      await run('demo', () => refillDemoPool(rt));
       // The digest and the reports leave from 7:00 in each company's own time zone.
-      await runDigest(rt).catch((error: unknown) => reportError(error, { where: 'job:digest' }));
-      await runReports(rt).catch((error: unknown) => reportError(error, { where: 'job:reports' }));
+      await run('digest', () => runDigest(rt));
+      await run('reports', () => runReports(rt));
+      // Spec 049: the weekly client report, Monday morning, for the companies that chose it.
+      await run('client-reports', () => runClientReports(rt, new Date(), localClock));
     }).catch((error: unknown) => reportError(error, { where: 'jobs' }));
   };
   setTimeout(tick, 30_000).unref?.();

@@ -3,7 +3,6 @@ import { createServerFn } from '@tanstack/react-start';
 import { getCookie, setCookie } from '@tanstack/react-start/server';
 import { translate } from '@/i18n/index.tsx';
 import { guarded } from '@/server/context.server.ts';
-import { monerooGateway, simulatorGateway } from '@/server/adapters.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 
 const tokenOf = (input: unknown) => {
@@ -43,11 +42,27 @@ export const getPortal = createServerFn({ method: 'GET' })
           maskedEmail: link.contactEmail ? core.maskEmail(link.contactEmail) : null,
         };
       }
-      const reports = link.show.photos ? await core.portalReports(db, data.token) : [];
+      const { owner, env } = runtime();
+      // Spec 051: when the client came before (« new since your visit »), their e-mail choice.
+      const visit = await core.portalVisit(owner, data.token);
+      const [reports, changeOrders, clientReports, news, money, howToPay, claims] = await Promise.all([
+        // Raw field reports only when the company chose to show them (spec 051).
+        link.show.photos && visit.showFieldReports ? core.portalReports(db, data.token) : Promise.resolve([]),
+        // Spec 048: the change orders sent to the client, to accept or refuse.
+        link.show.finance ? core.portalChangeOrders(db, data.token) : Promise.resolve([]),
+        // Spec 049: the reports the company sent.
+        core.portalClientReports(owner, data.token),
+        core.portalNews(owner, data.token, visit.since),
+        core.portalMoney(owner, data.token),
+        link.show.finance ? core.portalPaymentInstructions(owner, data.token) : Promise.resolve(null),
+        link.show.finance ? core.portalPaymentClaims(owner, data.token) : Promise.resolve([]),
+      ]);
       return {
         gate: false as const,
         show: link.show,
         contactName: link.contactName,
+        since: visit.since, news, money, howToPay, claims, emailOptOut: visit.emailOptOut, showFieldReports: visit.showFieldReports,
+        pushKey: env.VAPID_PUBLIC_KEY || null,
         view: {
           ...view,
           photos: link.show.photos ? view.photos : [],
@@ -57,6 +72,8 @@ export const getPortal = createServerFn({ method: 'GET' })
           messages: link.show.messages ? view.messages : [],
         },
         reports,
+        changeOrders,
+        clientReports,
       };
     }),
   );
@@ -93,6 +110,28 @@ export const portalVerifyCode = createServerFn({ method: 'POST' })
     }),
   );
 
+/** Spec 049: one client report, in the company's look (only on a confirmed device). */
+export const getPortalReport = createServerFn({ method: 'GET' })
+  .validator((input: { token: string; id: string }) => ({ token: tokenOf(input), id: String(input.id) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const link = await access(data.token);
+      if (link.requireCode && !link.verified) return { locked: true as const };
+      const report = await core.portalClientReport(runtime().owner, data.token, data.id);
+      return report ? { report, orgId: link.orgId } : { missing: true as const };
+    }),
+  );
+
+export const portalDecideChange = createServerFn({ method: 'POST' })
+  .validator((input: { token: string; id: string; accept: boolean; signer: string }) => ({ token: tokenOf(input), id: String(input.id), accept: Boolean(input.accept), signer: String(input.signer) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const link = await access(data.token);
+      if (!link.verified || !link.show.finance) throw new core.DomainError('forbidden', 403);
+      return core.portalDecideChangeOrder(runtime().db, data.token, data);
+    }),
+  );
+
 export const portalMessage = createServerFn({ method: 'POST' })
   .validator((input: { token: string; body: string }) => ({ token: tokenOf(input), body: String(input.body) }))
   .handler(({ data }) =>
@@ -103,76 +142,41 @@ export const portalMessage = createServerFn({ method: 'POST' })
     }),
   );
 
-/**
- * Starts an online payment: the company's own provider account (Moneroo) or the simulator in test.
- * Returns the address of the checkout page.
- */
-export const portalPay = createServerFn({ method: 'POST' })
-  .validator((input: { token: string; invoiceId: string }) => ({ token: tokenOf(input), invoiceId: String(input.invoiceId) }))
+
+/** Spec 051: the client's phone accepts notifications for this link. */
+export const portalSubscribePush = createServerFn({ method: 'POST' })
+  .validator((input: { token: string; subscription: unknown }) => ({ token: tokenOf(input), subscription: input.subscription }))
   .handler(({ data }) =>
     guarded(async () => {
       const link = await access(data.token);
-      if (!link.verified || !link.show.finance) throw new core.DomainError('forbidden', 403);
-      const { owner, env, secrets } = runtime();
-      const context = await core.portalPaymentContext(owner, data.token, data.invoiceId);
-      const gateway =
-        context.provider === 'simulator'
-          ? env.PAYMENTS_SIMULATOR
-            ? simulatorGateway(env.APP_BASE_URL)
-            : null
-          : context.secretEnc
-            ? monerooGateway(secrets.open(context.secretEnc), '')
-            : null;
-      if (!gateway) throw new core.DomainError('payment_unavailable', 409);
-      const intentId = await core.createPaymentIntent(owner, {
-        orgId: context.orgId, invoiceId: data.invoiceId, provider: gateway.code, amountMinor: context.balance, currencyCode: context.currency,
-      });
-      const checkout = await gateway.initiate({
-        amountMinor: context.balance,
-        currencyCode: context.currency,
-        reference: context.number,
-        description: `${context.number}`,
-        returnUrl: `${env.APP_BASE_URL}/portal/${data.token}?paid=1`,
-        customer: { email: context.clientEmail ?? 'client@example.invalid', name: context.clientName ?? 'Client' },
-        metadata: { intent_id: intentId, invoice: context.number },
-      });
-      await core.attachPaymentIntent(owner, intentId, checkout.providerRef, checkout.checkoutUrl);
-      return { checkoutUrl: checkout.checkoutUrl };
+      if (!link.verified) throw new core.DomainError('forbidden', 403);
+      await core.savePortalPush(runtime().owner, data.token, data.subscription);
+      return { ok: true };
     }),
   );
 
-/** The simulator's checkout page data (test environments only). */
-export const getSimulatedPayment = createServerFn({ method: 'GET' })
-  .validator((input: { intentId: string }) => ({ intentId: String(input.intentId) }))
+/** Spec 051: the client chooses whether they receive news by e-mail. */
+export const portalSetEmail = createServerFn({ method: 'POST' })
+  .validator((input: { token: string; optOut: boolean }) => ({ token: tokenOf(input), optOut: Boolean(input.optOut) }))
   .handler(({ data }) =>
     guarded(async () => {
-      const { owner, env } = runtime();
-      if (!env.PAYMENTS_SIMULATOR || !/^[0-9a-f-]{36}$/iu.test(data.intentId)) throw new core.DomainError('not_found', 404);
-      const { rows } = await owner.query<{ amount: number; currency: string; status: string; token_hint: string | null }>(
-        `select amount_minor as amount, currency_code as currency, status, null as token_hint
-           from payment_intent where id = $1 and provider = 'simulator'`,
-        [data.intentId],
-      );
-      if (!rows[0]) throw new core.DomainError('not_found', 404);
-      return rows[0];
+      const link = await access(data.token);
+      if (!link.verified) throw new core.DomainError('forbidden', 403);
+      await core.setPortalEmailOptOut(runtime().owner, data.token, data.optOut);
+      return { ok: true };
     }),
   );
 
-export const settleSimulatedPayment = createServerFn({ method: 'POST' })
-  .validator((input: { intentId: string; outcome: string }) => ({
-    intentId: String(input.intentId), outcome: input.outcome === 'succeeded' ? ('succeeded' as const) : ('failed' as const),
-  }))
+/** Spec 056: one issued invoice of the client's site, to print or save as PDF (confirmed device only). */
+export const getPortalInvoice = createServerFn({ method: 'GET' })
+  .validator((input: { token: string; id: string }) => ({ token: tokenOf(input), id: String(input.id) }))
   .handler(({ data }) =>
     guarded(async () => {
-      const { owner, env } = runtime();
-      if (!env.PAYMENTS_SIMULATOR || !/^[0-9a-f-]{36}$/iu.test(data.intentId)) throw new core.DomainError('not_found', 404);
-      const { rows } = await owner.query<{ amount: number; currency: string }>(
-        `select amount_minor as amount, currency_code as currency from payment_intent where id = $1 and provider = 'simulator'`,
-        [data.intentId],
-      );
-      if (!rows[0]) throw new core.DomainError('not_found', 404);
-      return core.settlePaymentIntent(owner, {
-        intentId: data.intentId, status: data.outcome, amountMinor: rows[0].amount, currencyCode: rows[0].currency,
-      });
+      const link = await access(data.token);
+      if (link.requireCode && !link.verified) return { locked: true, invoice: null, logo: null };
+      if (!/^[0-9a-f-]{36}$/iu.test(data.id)) return { locked: false, invoice: null, logo: null };
+      const invoice = await core.portalInvoiceDocument(runtime().owner, core.hashToken(data.token), data.id);
+      const logo = invoice?.settings.logoKey ? `/api/files/logo/${invoice.org_id}?v=${encodeURIComponent(invoice.settings.logoKey.slice(-12))}` : null;
+      return { locked: false, invoice, logo };
     }),
   );

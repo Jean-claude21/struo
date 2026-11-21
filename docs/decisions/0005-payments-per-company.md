@@ -1,6 +1,12 @@
 # 0005 — Online payments go to each company's own account
 
-Date: 2026-11-19 · Status: accepted
+Date: 2026-11-19 · Status: superseded (2026-11-21)
+
+> **Superseded.** Companies collect payment their own way; Struo no longer takes payments from the
+> client space (spec 050). The client sees what is due and how to pay (the company's own
+> instructions), and can declare a payment the company confirms (spec 051). The `payment_intent` and
+> `org_payment_provider` tables are kept for history only. The platform's own subscription payment is
+> unaffected.
 
 ## Context
 
