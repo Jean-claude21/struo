@@ -4,7 +4,7 @@
 import { can, type Role } from '@struo/core/permissions';
 import { Link, useRouter } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
-import { CalendarClock, Check, Circle, CircleDot, Download, History, ListChecks, MessagesSquare, Trash2 } from 'lucide-react';
+import { CalendarClock, Check, Circle, CircleDot, Download, Flag, History, Layers, ListChecks, MessagesSquare, Trash2, TriangleAlert } from 'lucide-react';
 import { Avatar, EmptyState, Panel, Seg, useRelative, useToast } from './kit.tsx';
 import { DateText } from './ui.tsx';
 import { createTask, getDocumentVersions, postNote, removeTask, updateTask } from '@/features/office/server.ts';
@@ -15,6 +15,7 @@ type Priority = 'low' | 'normal' | 'urgent';
 export type Task = {
   id: string; projectId: string; projectCode: string; projectName: string; title: string; note: string | null;
   assigneeId: string | null; assigneeName: string | null; dueOn: string | null; priority: Priority; status: Status; late: boolean;
+  milestoneName?: string | null; phaseName?: string | null; incidentId?: string | null;
 };
 type Member = { userId: string; name: string; role: string };
 type Project = { id: string; code: string; name: string };
@@ -22,16 +23,21 @@ type Project = { id: string; code: string; name: string };
 const NEXT: Record<Status, Status> = { todo: 'doing', doing: 'done', done: 'todo' };
 const ICON = { todo: Circle, doing: CircleDot, done: Check } as const;
 
-export function TaskBoard({ tasks, members, projects, projectId, role, userId }: {
+export function TaskBoard({ tasks, members, projects, projectId, role, userId, milestones, phases }: {
   tasks: Task[]; members: Member[]; projects?: Project[]; projectId?: string; role: Role; userId: string;
+  /** On a site: what a task may serve in its planning (spec 048). */
+  milestones?: { id: string; name: string }[]; phases?: { id: string; name: string }[];
 }) {
   const { t, errorText } = useI18n();
   const router = useRouter();
   const toast = useToast();
   const writer = can(role, 'projects.write');
-  const [filter, setFilter] = useState<'open' | 'mine' | 'done'>('open');
+  const [filter, setFilter] = useState<'open' | 'week' | 'mine' | 'done'>('open');
+  const weekEnd = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   const [busy, setBusy] = useState(false);
-  const shown = tasks.filter((task) => (filter === 'done' ? task.status === 'done' : task.status !== 'done') && (filter !== 'mine' || task.assigneeId === userId));
+  const shown = tasks.filter((task) => (filter === 'done' ? task.status === 'done' : task.status !== 'done')
+    && (filter !== 'mine' || task.assigneeId === userId)
+    && (filter !== 'week' || (task.dueOn !== null && task.dueOn <= weekEnd)));
   const run = async (work: () => Promise<unknown>, done?: string) => {
     try { await work(); if (done) toast({ text: done }); await router.invalidate(); return true; }
     catch (caught) { toast({ text: errorText(caught), kind: 'err' }); return false; }
@@ -44,6 +50,7 @@ export function TaskBoard({ tasks, members, projects, projectId, role, userId }:
     const ok = await run(() => createTask({ data: {
       projectId: projectId ?? value('projectId'), title: value('title'), assigneeId: value('assigneeId') || null,
       dueOn: value('dueOn') || null, priority: value('priority') || 'normal',
+      ...(milestones ? { milestoneId: value('milestoneId') || null } : {}), ...(phases ? { phaseId: value('phaseId') || null } : {}),
     } }), t('tasks.created'));
     setBusy(false);
     if (ok) form.reset();
@@ -53,6 +60,7 @@ export function TaskBoard({ tasks, members, projects, projectId, role, userId }:
     <Panel title={t('tasks.title')} sub={t('tasks.sub')} flush
       actions={<Seg label={t('tasks.filter')} value={filter} onChange={setFilter} items={[
         { value: 'open', label: t('tasks.open', { n: tasks.filter((task) => task.status !== 'done').length }) },
+        { value: 'week', label: t('tasks.week') },
         { value: 'mine', label: t('tasks.mine') },
         { value: 'done', label: t('tasks.done') },
       ]} />}>
@@ -73,6 +81,18 @@ export function TaskBoard({ tasks, members, projects, projectId, role, userId }:
           <select name="priority" aria-label={t('tasks.priority')} defaultValue="normal">
             {(['low', 'normal', 'urgent'] as const).map((value) => <option key={value} value={value}>{t(`tasks.priorities.${value}`)}</option>)}
           </select>
+          {milestones?.length ? (
+            <select name="milestoneId" aria-label={t('tasks.milestone')} defaultValue="">
+              <option value="">{t('tasks.noMilestone')}</option>
+              {milestones.map((milestone) => <option key={milestone.id} value={milestone.id}>{milestone.name}</option>)}
+            </select>
+          ) : null}
+          {phases?.length ? (
+            <select name="phaseId" aria-label={t('tasks.phase')} defaultValue="">
+              <option value="">{t('tasks.noPhase')}</option>
+              {phases.map((phase) => <option key={phase.id} value={phase.id}>{phase.name}</option>)}
+            </select>
+          ) : null}
           <button type="submit" className="btn small" disabled={busy}>{t('tasks.add')}</button>
         </form>
       ) : null}
@@ -92,6 +112,8 @@ export function TaskBoard({ tasks, members, projects, projectId, role, userId }:
                     {projectId ? null : <Link to="/app/projects/$projectId" params={{ projectId: task.projectId }}>{task.projectCode}</Link>}
                     <span className={`task-status ${task.status}`}>{t(`tasks.statuses.${task.status}`)}</span>
                     {task.priority === 'urgent' ? <span className="task-urgent">{t('tasks.priorities.urgent')}</span> : null}
+                    {task.incidentId ? <span className="task-urgent"><TriangleAlert size={12} />{t('tasks.fromIncident')}</span> : null}
+                    {task.milestoneName ? <span><Flag size={12} />{task.milestoneName}</span> : task.phaseName ? <span><Layers size={12} />{task.phaseName}</span> : null}
                     {task.dueOn ? <span className={task.late ? 'task-late' : undefined}><CalendarClock size={12} /><DateText value={task.dueOn} /></span> : null}
                   </span>
                 </div>

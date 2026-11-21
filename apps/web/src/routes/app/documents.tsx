@@ -1,7 +1,7 @@
 import { can } from '@struo/core/permissions';
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
 import { useState } from 'react';
-import { CalendarClock, FolderOpen, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { CalendarClock, FolderOpen, Ruler, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { DocumentDialog } from '@/components/forms.tsx';
 import { UploadButton } from '@/components/tables.tsx';
 import { Drawer, KpiTile, PageHeader, Panel, Seg, StatusChip, useToast, type Shape } from '@/components/kit.tsx';
@@ -29,7 +29,9 @@ function Documents() {
   const router = useRouter();
   const toast = useToast();
   const canWrite = can(data.role, 'documents.write');
-  const [tab, setTab] = useState<'compliance' | 'library' | 'expiries'>(search.doc ? 'compliance' : 'compliance');
+  const [tab, setTab] = useState<'compliance' | 'technical' | 'library' | 'expiries'>('compliance');
+  // Spec 048: drawings, studies and other documents, by site, with their versions.
+  const technical = data.documents.filter((doc) => doc.family !== 'admin');
   const [openId, setOpenId] = useState<string | null>(search.doc ?? null);
   const current = data.documents.find((doc) => doc.id === openId) ?? null;
   const statusLabel = (status: Doc['status']) => t(`documents.statuses.${status}`);
@@ -78,6 +80,7 @@ function Documents() {
       </div>
       <Seg label={t('documents.title')} value={tab} onChange={setTab} items={[
         { value: 'compliance', label: t('docs.complianceTab'), icon: ShieldCheck },
+        { value: 'technical', label: `${t('families.tab')} · ${technical.length}`, icon: Ruler },
         { value: 'library', label: `${t('docs.libraryTab')} · ${data.files.length}`, icon: FolderOpen },
         { value: 'expiries', label: `${t('docs.expiriesTab')} · ${soon.length + expired.length + toFix.length}`, icon: CalendarClock },
       ]} />
@@ -119,6 +122,24 @@ function Documents() {
             </table>
           </div>
         </Panel>
+      ) : tab === 'technical' ? (
+        <Panel title={t('families.tab')} sub={t('families.sub')} flush>
+          {technical.length ? (
+            <div className="table-wrap"><table>
+              <thead><tr><th>{t('app.project')}</th><th>{t('documents.titleField')}</th><th>{t('families.family')}</th><th>{t('documents.file')}</th><th /></tr></thead>
+              <tbody>{technical.map((doc) => (
+                <tr key={doc.id}>
+                  <td className="nowrap"><b>{doc.projectCode}</b></td>
+                  <td>{doc.title}</td>
+                  <td><span className="badge">{t(`families.${doc.family}`)}</span></td>
+                  <td>{doc.hasFile ? <a href={`/api/files/document/${doc.id}`} target="_blank" rel="noreferrer">{t('docs.viewFile')}</a> : <span className="faint small">{t('docs.noFile')}</span>}
+                    {doc.hasFile ? <DocumentVersions documentId={doc.id} /> : null}</td>
+                  <td className="right"><button type="button" className="btn secondary small" onClick={() => setOpenId(doc.id)}>{t('docs.edit')}</button></td>
+                </tr>
+              ))}</tbody>
+            </table></div>
+          ) : <p className="muted" style={{ padding: '1rem' }}>{t('families.none')}</p>}
+        </Panel>
       ) : tab === 'library' ? (
         <FileExplorer items={files} sites={data.projects}
           kindLabels={{ photo: t('docs.kinds.photo'), audio: t('docs.kinds.audio'), document: t('docs.kinds.document'), invoice: t('docs.kinds.invoice'), sheet: t('docs.kinds.sheet') }} />
@@ -144,6 +165,11 @@ function Documents() {
         {current ? (
           <div className="stack loose">
             <div className="row"><StatusChip shape={DOC_SHAPE[current.status]} label={statusLabel(current.status)} />{current.required ? <span className="badge">{t('documents.required')}</span> : null}</div>
+            <label className="field">{t('families.family')}
+              <select defaultValue={current.family} disabled={!canWrite} onChange={(event) => void save(current.id, { family: event.target.value })}>
+                {(['admin', 'technical', 'other'] as const).map((family) => <option key={family} value={family}>{t(`families.${family}`)}</option>)}
+              </select>
+            </label>
             <label className="field">{t('app.status')}
               <select defaultValue={current.status === 'expired' ? 'valid' : current.status} disabled={!canWrite} onChange={(event) => void save(current.id, { status: event.target.value })}>
                 {(['missing', 'pending', 'valid', 'to_fix'] as const).map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}

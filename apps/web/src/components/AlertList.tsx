@@ -6,7 +6,7 @@ import { useI18n } from '@/i18n/index.tsx';
 // What each role acts on: the site people do not chase invoices, the accountant does not review reports.
 const FOR_ROLE: Record<string, Alert['kind'][] | null> = {
   owner: null, admin: null,
-  engineer: ['milestone_late', 'incident_open', 'reports_to_review', 'document_expired', 'document_expiring', 'document_to_fix'],
+  engineer: ['milestone_late', 'incident_open', 'task_late', 'reports_to_review', 'document_expired', 'document_expiring', 'document_to_fix'],
   site_lead: ['incident_open', 'milestone_late', 'reports_to_review'],
   accountant: ['invoice_overdue', 'collection_gap', 'document_expired', 'document_expiring', 'document_to_fix'],
 };
@@ -20,6 +20,7 @@ function target(alert: Alert): string {
     case 'milestone_late': return '/app/planning';
     case 'incident_open': return '/app/field?tab=incidents';
     case 'reports_to_review': return '/app/field';
+    case 'task_late': return '/app/tasks';
     default: return alert.projectId ? `/app/projects/${alert.projectId}` : '/app';
   }
 }

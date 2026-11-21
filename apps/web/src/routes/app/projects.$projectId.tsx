@@ -1,10 +1,10 @@
 import { can, sees } from '@struo/core/permissions';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DocumentDialog, ExpenseDialog, InvoiceDialog, MilestoneDialog, PaymentDialog, ReminderDialog, ReportCard } from '@/components/forms.tsx';
 import { Badge, DateText, Empty, ErrorText, Field, formData, formatMoney, Kpi, Money, parseMoney, Progress, Tabs, useAction } from '@/components/ui.tsx';
 import {
-  addPhase, archiveProject, createPortalLink, getProjectPage, postMessage, removePhase, resolveIncident, revokePortalLink,
+  addPhase, archiveProject, createChangeOrder, createPortalLink, decideChangeOrder, getProjectPage, getSiteDay, invoiceChangeOrder, sendChangeOrder, postMessage, removePhase, resolveIncident, revokePortalLink,
   updateDocument, updateMilestone, updatePhase, updateProject,
 } from '@/features/office/server.ts';
 import { DocumentRows, InvoiceTable, MilestoneRows } from '@/components/tables.tsx';
@@ -15,13 +15,15 @@ import { EndHint } from '@/components/SiteBits.tsx';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 import { NotesThread, TaskBoard } from '@/components/Work.tsx';
 import { usePhotoViewer } from '@/components/PhotoViewer.tsx';
+import { DayJournal } from '@/routes/print.journal.tsx';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export const Route = createFileRoute('/app/projects/$projectId')({
   loader: ({ params }) => getProjectPage({ data: { id: params.projectId } }),
   component: ProjectPage,
 });
 
-type Tab = 'overview' | 'work' | 'labour' | 'field' | 'finance' | 'expenses' | 'documents' | 'planning' | 'portal' | 'messages';
+type Tab = 'overview' | 'journal' | 'work' | 'changes' | 'labour' | 'field' | 'finance' | 'expenses' | 'documents' | 'planning' | 'portal' | 'messages';
 type Data = Awaited<ReturnType<typeof getProjectPage>>;
 
 function ProjectPage() {
@@ -29,7 +31,7 @@ function ProjectPage() {
   const data = Route.useLoaderData();
   const { project } = data;
   const [tab, setTab] = useState<Tab>('overview');
-  const tabs: Tab[] = ['overview', 'work', ...(sees(data.role, 'crew') ? (['labour'] as Tab[]) : []), 'field', ...(sees(data.role, 'finance') ? (['finance'] as Tab[]) : []), 'expenses', 'documents', 'planning', 'portal', 'messages'];
+  const tabs: Tab[] = ['overview', 'journal', 'work', 'changes', ...(sees(data.role, 'crew') ? (['labour'] as Tab[]) : []), 'field', ...(sees(data.role, 'finance') ? (['finance'] as Tab[]) : []), 'expenses', 'documents', 'planning', 'portal', 'messages'];
   const cover = data.reports.flatMap((report) => report.photos)[0];
   const client = data.clients.find((candidate) => candidate.id === project.clientId) ?? null;
   const money = (minor: number) => formatMoney(locale, minor, project.currencyCode);
@@ -75,14 +77,16 @@ function ProjectPage() {
         ) : null}
         <KpiTile label={t('projects.compliance')} value={project.compliancePct === null ? '—' : `${project.compliancePct} %`} tone={(project.compliancePct ?? 100) < 75 ? 'bad' : undefined} />
       </div>
-      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'portal' ? t('clientInvite.tab') : value === 'labour' ? t('crew.tab') : t(`projects.tabs.${value}`) }))} />
+      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'portal' ? t('clientInvite.tab') : value === 'labour' ? t('crew.tab') : value === 'changes' ? t('changes.tab') : value === 'journal' ? t('journal.tab') : t(`projects.tabs.${value}`) }))} />
       {tab === 'overview' ? <Overview data={data} /> : null}
       {tab === 'work' ? (
         <div className="grid-main">
-          <TaskBoard tasks={data.tasks} members={data.members} projectId={project.id} role={data.role} userId={data.userId} />
+          <TaskBoard tasks={data.tasks} members={data.members} projectId={project.id} role={data.role} userId={data.userId} milestones={data.milestones.map((milestone) => ({ id: milestone.id, name: milestone.name }))} phases={project.phases.map((phase) => ({ id: phase.id, name: phase.name }))} />
           <NotesThread projectId={project.id} notes={data.notes} />
         </div>
       ) : null}
+      {tab === 'journal' ? <JournalTab projectId={project.id} /> : null}
+      {tab === 'changes' ? <ChangesTab data={data} /> : null}
       {tab === 'labour' ? <LabourTab data={data} /> : null}
       {tab === 'field' ? <FieldTab data={data} /> : null}
       {tab === 'finance' ? <FinanceTab data={data} /> : null}
@@ -712,5 +716,103 @@ function LabourTab({ data }: { data: Data }) {
         ) : <p className="muted small" style={{ margin: 0, padding: '1rem' }}>{t('crew.noSubcontracts')}</p>}
       </Panel>
     </div>
+  );
+}
+
+/** Spec 048: extra work with its price, accepted by the client, then invoiced. */
+function ChangesTab({ data }: { data: Data }) {
+  const { t, locale } = useI18n();
+  const { run, error, busy } = useAction();
+  const [deciding, setDeciding] = useState<string | null>(null);
+  const money = (minor: number) => formatMoney(locale, minor, data.project.currencyCode);
+  const writer = data.role !== 'site_lead';
+  const canInvoice = can(data.role, 'finance.write');
+  const due = () => { const date = new Date(); date.setDate(date.getDate() + 30); return date.toISOString().slice(0, 10); };
+  const c = data.contract;
+  const shape = { draft: 'todo', sent: 'review', accepted: 'done', refused: 'late' } as const;
+  return (
+    <div className="stack">
+      <div className="grid">
+        <KpiTile label={t('changes.budget')} value={money(c.budgetMinor)} />
+        <KpiTile label={t('changes.accepted')} value={money(c.acceptedMinor)} sub={c.daysAdded ? t('changes.daysAdded', { n: c.daysAdded }) : undefined} />
+        <KpiTile label={t('changes.pending')} value={money(c.pendingMinor)} tone={c.pendingMinor ? 'bad' : undefined} />
+        <KpiTile label={t('changes.total')} value={money(c.totalMinor)} tone="brand" />
+      </div>
+      <Panel title={t('changes.title')} sub={t('changes.sub')}>
+        <div className="stack">
+          {writer ? (
+            <form className="task-add" style={{ padding: 0, border: 0 }} onSubmit={async (event) => {
+              event.preventDefault();
+              const form = event.currentTarget;
+              const v = formData(form);
+              const amount = parseMoney(v.amount ?? '', data.project.currencyCode);
+              if (!amount) return;
+              const done = await run(() => createChangeOrder({ data: { projectId: data.project.id, title: v.title, description: v.description || null, amountMinor: amount, daysAdded: Number(v.days || 0) } }));
+              if (done !== undefined) form.reset();
+            }}>
+              <input name="title" required maxLength={200} placeholder={t('changes.titleField')} aria-label={t('changes.titleField')} />
+              <input name="description" maxLength={4000} placeholder={t('changes.description')} aria-label={t('changes.description')} />
+              <input name="amount" required inputMode="decimal" placeholder={t('changes.amount', { currency: data.project.currencyCode })} aria-label={t('changes.amount', { currency: data.project.currencyCode })} />
+              <input name="days" type="number" min={0} max={3650} placeholder={t('changes.days')} aria-label={t('changes.days')} />
+              <button type="submit" className="btn small" disabled={busy}>{t('changes.add')}</button>
+            </form>
+          ) : null}
+          <ErrorText error={error} />
+          {data.changeOrders.length ? (
+            <div className="table-wrap"><table>
+              <thead><tr><th>{t('changes.number')}</th><th>{t('changes.titleField')}</th><th className="right">{t('changes.amountShort')}</th><th>{t('app.status')}</th><th /></tr></thead>
+              <tbody>{data.changeOrders.map((order) => (
+                <tr key={order.id}>
+                  <td className="num">{order.number}</td>
+                  <td><b>{order.title}</b>{order.description ? <div className="small muted">{order.description}</div> : null}{order.daysAdded ? <div className="small muted">{t('changes.daysAdded', { n: order.daysAdded })}</div> : null}</td>
+                  <td className="right num">{money(order.amountMinor)}</td>
+                  <td><StatusChip shape={shape[order.status]} label={t(`changes.statuses.${order.status}`)} />{order.decidedBy ? <div className="small muted">{order.decidedBy}</div> : null}</td>
+                  <td className="right">
+                    <div className="row tight" style={{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      {writer && order.status === 'draft' ? <button type="button" className="btn secondary small" disabled={busy} onClick={() => void run(() => sendChangeOrder({ data: { id: order.id } }))}>{t('changes.send')}</button> : null}
+                      {writer && (order.status === 'draft' || order.status === 'sent') ? (deciding === order.id ? (
+                        <form className="row tight nowrap" onSubmit={async (event) => {
+                          event.preventDefault();
+                          const v = formData(event.currentTarget);
+                          const done = await run(() => decideChangeOrder({ data: { id: order.id, accept: v.verdict === 'accept', decidedBy: v.name ?? '' } }));
+                          if (done !== undefined) setDeciding(null);
+                        }}>
+                          <input name="name" required maxLength={120} placeholder={t('changes.decidedBy')} aria-label={t('changes.decidedBy')} style={{ width: 150 }} />
+                          <select name="verdict" aria-label={t('app.status')} style={{ width: 'auto' }}><option value="accept">{t('changes.statuses.accepted')}</option><option value="refuse">{t('changes.statuses.refused')}</option></select>
+                          <button type="submit" className="btn small" disabled={busy}>{t('app.save')}</button>
+                        </form>
+                      ) : <button type="button" className="btn ghost small" onClick={() => setDeciding(order.id)}>{t('changes.answer')}</button>) : null}
+                      {canInvoice && order.status === 'accepted' && !order.invoiceId ? <button type="button" className="btn small" disabled={busy} onClick={() => void run(() => invoiceChangeOrder({ data: { id: order.id, dueOn: due() } }))}>{t('changes.invoice')}</button> : null}
+                      {order.invoiceId ? <span className="badge ok">{t('changes.invoiced')}</span> : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table></div>
+          ) : <p className="muted small" style={{ margin: 0 }}>{t('changes.none')}</p>}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+/** Spec 048: one page per day of the site, from what is already recorded. */
+function JournalTab({ projectId }: { projectId: string }) {
+  const { t } = useI18n();
+  const [day, setDay] = useState(() => new Date().toISOString().slice(0, 10));
+  const [journal, setJournal] = useState<Awaited<ReturnType<typeof getSiteDay>> | null>(null);
+  useEffect(() => { let live = true; setJournal(null); void getSiteDay({ data: { projectId, day } }).then((value) => { if (live) setJournal(value); }); return () => { live = false; }; }, [projectId, day]);
+  const shift = (days: number) => { const date = new Date(`${day}T12:00:00`); date.setDate(date.getDate() + days); setDay(date.toISOString().slice(0, 10)); };
+  return (
+    <Panel title={t('journal.title')} actions={(
+      <div className="row tight">
+        <button type="button" className="icon-btn" onClick={() => shift(-1)} aria-label={t('journal.prev')}><ChevronLeft size={16} /></button>
+        <input type="date" value={day} onChange={(event) => setDay(event.target.value)} aria-label={t('journal.day')} style={{ width: 'auto' }} />
+        <button type="button" className="icon-btn" onClick={() => shift(1)} aria-label={t('journal.next')}><ChevronRight size={16} /></button>
+        <a className="btn secondary small" href={`/print/journal?project=${projectId}&day=${day}`} target="_blank" rel="noreferrer">{t('journal.print')}</a>
+      </div>
+    )}>
+      {journal ? <DayJournal data={journal} /> : <p className="muted">…</p>}
+    </Panel>
   );
 }

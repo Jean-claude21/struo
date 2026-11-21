@@ -221,6 +221,7 @@ export const en: Catalog = {
     milestone_late: 'Milestone "{name}" ({project}): {days} d late',
     collection_gap: '{project}: progress {progress} % but collected {collected} %',
     incident_open: 'Incident ({project}): {description}',
+    task_late: 'Late task ({project}): {title} · {assignee}, {days} d',
     reports_to_review: '{count} field report(s) to review',
     severity: { critical: 'Critical', important: 'Important', info: 'Info' },
   },

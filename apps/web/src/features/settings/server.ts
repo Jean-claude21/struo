@@ -186,6 +186,25 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
   }),
 );
 
+// ---------------------------------------------------------------- checklists (spec 048)
+
+export const getChecklistSettings = createServerFn({ method: 'GET' }).handler(() =>
+  guarded(async () => {
+    const actor = await requireActor();
+    const { db } = runtime();
+    const [templates, configuration] = await Promise.all([core.listChecklistTemplates(db, actor), core.getConfiguration(db, actor)]);
+    return { templates, phaseNames: [...new Set((configuration.phases as { name: string }[]).map((phase) => phase.name))], canWrite: core.can(actor.role, 'projects.write') };
+  }),
+);
+
+export const saveChecklistTemplate = createServerFn({ method: 'POST' })
+  .validator((input: { id: string | null; template: Record<string, unknown> }) => input)
+  .handler(({ data }) => guarded(async () => core.saveChecklistTemplate(runtime().db, await requireActor(), data.id, data.template)));
+
+export const archiveChecklistTemplate = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => guarded(async () => core.archiveChecklistTemplate(runtime().db, await requireActor(), data.id)));
+
 /** Spec 045: a prospect asks to be called back (public, no account). A filled honeypot is dropped. */
 export const sendContactRequest = createServerFn({ method: 'POST' })
   .validator((input: { name: string; company: string; reach: string; activeSites: number | null; message: string; website?: string }) => input)

@@ -44,6 +44,8 @@ export const getPortal = createServerFn({ method: 'GET' })
         };
       }
       const reports = link.show.photos ? await core.portalReports(db, data.token) : [];
+      // Spec 048: the change orders sent to the client, to accept or refuse.
+      const changeOrders = link.show.finance ? await core.portalChangeOrders(db, data.token) : [];
       return {
         gate: false as const,
         show: link.show,
@@ -57,6 +59,7 @@ export const getPortal = createServerFn({ method: 'GET' })
           messages: link.show.messages ? view.messages : [],
         },
         reports,
+        changeOrders,
       };
     }),
   );
@@ -90,6 +93,16 @@ export const portalVerifyCode = createServerFn({ method: 'POST' })
         path: '/', httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365, secure: runtime().env.APP_BASE_URL.startsWith('https://'),
       });
       return { ok: true };
+    }),
+  );
+
+export const portalDecideChange = createServerFn({ method: 'POST' })
+  .validator((input: { token: string; id: string; accept: boolean; signer: string }) => ({ token: tokenOf(input), id: String(input.id), accept: Boolean(input.accept), signer: String(input.signer) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const link = await access(data.token);
+      if (!link.verified || !link.show.finance) throw new core.DomainError('forbidden', 403);
+      return core.portalDecideChangeOrder(runtime().db, data.token, data);
     }),
   );
 

@@ -22,6 +22,8 @@ export interface DocumentRow {
   hasFile: boolean;
   sharedWithClient: boolean;
   note: string | null;
+  /** Spec 048: administrative, technical (drawings, studies) or other. */
+  family: 'admin' | 'technical' | 'other';
 }
 
 export async function listDocuments(db: Db, actor: Actor, filters: { projectId?: string } = {}): Promise<DocumentRow[]> {
@@ -30,7 +32,7 @@ export async function listDocuments(db: Db, actor: Actor, filters: { projectId?:
       `select d.id, d.project_id as "projectId", p.code as "projectCode", p.name as "projectName",
               d.doc_type_id as "docTypeId", t.name as "typeName", d.title, ds.required, ds.status, d.reference,
               d.issued_on as "issuedOn", d.expires_on as "expiresOn", ds.days_left as "daysLeft",
-              d.storage_key is not null as "hasFile", d.shared_with_client as "sharedWithClient", d.note
+              d.storage_key is not null as "hasFile", d.shared_with_client as "sharedWithClient", d.note, d.family
          from project_document d join document_status ds on ds.document_id = d.id
          join project p on p.id = d.project_id left join doc_type t on t.id = d.doc_type_id
         where d.org_id = $1 and p.archived_at is null and ($2::uuid is null or d.project_id = $2)
@@ -71,6 +73,7 @@ const documentInput = z.object({
   expiresOn: dateString.nullable().optional(),
   sharedWithClient: z.boolean().default(false),
   note: z.string().trim().max(2000).nullable().optional(),
+  family: z.enum(['admin', 'technical', 'other']).optional(),
 });
 
 export async function addDocument(db: Db, actor: Actor, input: unknown): Promise<{ id: string }> {
@@ -81,10 +84,11 @@ export async function addDocument(db: Db, actor: Actor, input: unknown): Promise
     if (!project.rowCount) throw notFound();
     const { rows } = await tx.query<{ id: string }>(
       `insert into project_document (org_id, project_id, doc_type_id, title, status, reference, issued_on, expires_on,
-                                     shared_with_client, note)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning id`,
+                                     shared_with_client, note, family)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+               coalesce($11, case when exists (select 1 from doc_type where id = $3 and required) then 'admin' else 'other' end)) returning id`,
       [actor.orgId, data.projectId, data.docTypeId ?? null, data.title, data.status, data.reference ?? null,
-        data.issuedOn ?? null, data.expiresOn ?? null, data.sharedWithClient, data.note ?? null],
+        data.issuedOn ?? null, data.expiresOn ?? null, data.sharedWithClient, data.note ?? null, data.family ?? null],
     );
     await journal(tx, actor, 'document.add', rows[0]!.id, null, data);
     return { id: rows[0]!.id };
@@ -99,7 +103,7 @@ export async function updateDocument(db: Db, actor: Actor, id: string, input: un
   const raw = (input ?? {}) as Record<string, unknown>;
   const columns: Record<string, string> = {
     docTypeId: 'doc_type_id', title: 'title', status: 'status', reference: 'reference', issuedOn: 'issued_on',
-    expiresOn: 'expires_on', sharedWithClient: 'shared_with_client', note: 'note',
+    expiresOn: 'expires_on', sharedWithClient: 'shared_with_client', note: 'note', family: 'family',
   };
   const entries = Object.entries(data).filter(([key, value]) => value !== undefined && key in raw && columns[key]);
   await asActor(db, actor, async (tx) => {

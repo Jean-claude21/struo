@@ -220,6 +220,7 @@ export const fr = {
     milestone_late: 'Jalon « {name} » ({project}) : {days} j de retard',
     collection_gap: '{project} : avancement {progress} % mais encaissé {collected} %',
     incident_open: 'Imprévu ({project}) : {description}',
+    task_late: 'Tâche en retard ({project}) : {title} · {assignee}, {days} j',
     reports_to_review: '{count} rapport(s) terrain à valider',
     severity: { critical: 'Critique', important: 'Important', info: 'Info' },
   },

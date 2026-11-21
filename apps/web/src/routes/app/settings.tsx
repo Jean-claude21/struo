@@ -12,6 +12,7 @@ import {
 import { InvoiceLookSettings } from '@/components/InvoiceLookSettings.tsx';
 import { getLicenseOffer, redeemLicense } from '@/features/settings/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
+import { ChecklistSettings } from '@/components/ChecklistSettings.tsx';
 
 export const Route = createFileRoute('/app/settings')({
   validateSearch: (search: Record<string, unknown>): { tab?: string } => (typeof search.tab === 'string' ? { tab: search.tab } : {}),
@@ -19,7 +20,7 @@ export const Route = createFileRoute('/app/settings')({
   component: Settings,
 });
 
-type Tab = 'company' | 'invoicing' | 'configuration' | 'members' | 'roles' | 'payments' | 'integrations' | 'subscription' | 'journal' | 'data';
+type Tab = 'company' | 'invoicing' | 'configuration' | 'checklists' | 'members' | 'roles' | 'payments' | 'integrations' | 'subscription' | 'journal' | 'data';
 type Data = Awaited<ReturnType<typeof getSettingsPage>>;
 
 function Settings() {
@@ -27,14 +28,15 @@ function Settings() {
   const data = Route.useLoaderData();
   const search = Route.useSearch();
   const [tab, setTab] = useState<Tab>((search.tab as Tab | undefined) ?? 'company');
-  const tabs: Tab[] = ['company', ...(can(data.role, 'finance.read') ? ['invoicing' as Tab] : []), 'configuration', 'members', 'roles', 'payments', 'integrations', 'subscription', ...(data.journal.length ? ['journal' as Tab] : []), 'data'];
+  const tabs: Tab[] = ['company', ...(can(data.role, 'finance.read') ? ['invoicing' as Tab] : []), 'configuration', 'checklists', 'members', 'roles', 'payments', 'integrations', 'subscription', ...(data.journal.length ? ['journal' as Tab] : []), 'data'];
   return (
     <div className="stack">
       <PageHeader title={t('settings.title')} text={data.settings.name} />
-      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'roles' ? t('set2.roles') : value === 'journal' ? t('set2.journal') : value === 'invoicing' ? t('inv.settingsTab') : t(`settings.${value}`) }))} />
+      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'checklists' ? t('checklists.title') : value === 'roles' ? t('set2.roles') : value === 'journal' ? t('set2.journal') : value === 'invoicing' ? t('inv.settingsTab') : t(`settings.${value}`) }))} />
       {tab === 'company' ? <CompanyTab data={data} /> : null}
       {tab === 'invoicing' ? <InvoiceLookSettings canWrite={can(data.role, 'finance.write')} /> : null}
       {tab === 'configuration' ? <ConfigurationTab data={data} /> : null}
+      {tab === 'checklists' ? <ChecklistSettings /> : null}
       {tab === 'members' ? <MembersTab data={data} /> : null}
       {tab === 'roles' ? <RolesTab /> : null}
       {tab === 'journal' ? <JournalTab data={data} /> : null}

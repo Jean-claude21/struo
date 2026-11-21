@@ -234,7 +234,7 @@ export function DocumentDialog({
                 data: {
                   projectId: v.projectId, docTypeId: orNull(v.docTypeId), title: v.title, status: v.status,
                   reference: orNull(v.reference), issuedOn: orNull(v.issuedOn), expiresOn: orNull(v.expiresOn),
-                  sharedWithClient: v.sharedWithClient === 'on',
+                  sharedWithClient: v.sharedWithClient === 'on', family: v.family || undefined,
                 },
               }),
             );
@@ -254,6 +254,12 @@ export function DocumentDialog({
                     {type.name}
                   </option>
                 ))}
+              </select>
+            </Field>
+            <Field label={t('families.family')}>
+              <select name="family" defaultValue="">
+                <option value="">{t('families.auto')}</option>
+                {(['admin', 'technical', 'other'] as const).map((family) => <option key={family} value={family}>{t(`families.${family}`)}</option>)}
               </select>
             </Field>
             <Field label={t('app.status')}>
