@@ -22,7 +22,7 @@ export interface FieldSnapshot {
   user: { id?: string; name: string; role: string; canReport: boolean };
   company: { name: string };
   projects: FieldProject[];
-  templates?: { id: string; name: string; items: string[]; required: boolean }[];
+  templates?: { id: string; name: string; items: string[]; required: boolean; mode?: 'daily' | 'phase' | 'on_demand'; phaseName?: string | null }[];
   rainLimit?: number;
   scanAvailable?: boolean;
   toFix?: { id: string; projectCode: string; note: string | null; reviewNote: string | null; takenAt: string }[];

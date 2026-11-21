@@ -31,7 +31,8 @@ export const Route = createFileRoute('/api/field/snapshot')({
           const projects = await Promise.all(snapshot.projects.map(async (project) => ({
             ...project,
             weather: project.status === 'active' && project.latitude !== null && project.longitude !== null ? await forecast(project.latitude, project.longitude) : [],
-            plans: documents.filter((document) => document.projectId === project.id && document.hasFile).map((document) => ({ id: document.id, title: document.title })),
+            // Spec 048: the field works only with the technical documents (drawings, studies).
+            plans: documents.filter((document) => document.projectId === project.id && document.hasFile && document.family === 'technical').map((document) => ({ id: document.id, title: document.title })),
             openIncidents: incidents.filter((incident) => incident.projectId === project.id && incident.status !== 'resolved').length,
             checklistsToday: runs.filter((run) => run.projectId === project.id && run.doneAt.slice(0, 10) === today).map((run) => ({ name: run.name, completed: run.completed })),
           })));

@@ -8,7 +8,7 @@ import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { SignaturePad, type SignaturePadHandle } from '@/components/SignaturePad.tsx';
 import { Modal, useToast } from '@/components/kit.tsx';
 import { formatDate, formatMoney } from '@/components/ui.tsx';
-import { getPortal, portalMessage, portalPay, portalRequestCode, portalVerifyCode } from '@/features/portal/server.ts';
+import { getPortal, portalDecideChange, portalMessage, portalPay, portalRequestCode, portalVerifyCode } from '@/features/portal/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 import { usePhotoViewer } from '@/components/PhotoViewer.tsx';
 
@@ -145,6 +145,7 @@ function SpaceView({ data }: { data: Space }) {
 
       {tab === 'site' ? (
         <div className="stack loose">
+          <ChangeOrders orders={data.changeOrders} token={token} money={money} onDone={() => router.invalidate()} />
           {view.photos.length ? (
             <div className="stories" aria-label={t('portal.photos')}>
               {view.photos.slice(0, 12).map((photo, index) => (
@@ -243,6 +244,45 @@ function SpaceView({ data }: { data: Space }) {
       {signing ? <SignMilestone milestone={signing} company={view.company.name} defaultName={data.contactName ?? view.project.client ?? ''}
         onClose={() => setSigning(null)} onDone={async () => { setSigning(null); toast({ text: t('clientPortal.signedOk') }); await router.invalidate(); }} /> : null}
     </div>
+  );
+}
+
+/** Spec 048: the change orders sent to the client, to accept or refuse with their name. */
+function ChangeOrders({ orders, token, money, onDone }: { orders: Space['changeOrders']; token: string; money: (minor: number) => string; onDone: () => Promise<void> }) {
+  const { t, errorText } = useI18n();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const pending = orders.filter((order) => order.status === 'sent');
+  if (!orders.length) return null;
+  const decide = async (id: string, accept: boolean, form: HTMLFormElement) => {
+    const signer = String(new FormData(form).get('signer') ?? '').trim();
+    if (!signer) { form.querySelector<HTMLInputElement>('input[name="signer"]')?.focus(); return; }
+    setBusy(true);
+    try { await portalDecideChange({ data: { token, id, accept, signer } }); toast({ text: t('changes.decided') }); await onDone(); }
+    catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
+    setBusy(false);
+  };
+  return (
+    <section className="card stack">
+      <h3 style={{ margin: 0 }}>{t('changes.portalTitle')}</h3>
+      <p className="muted small" style={{ margin: 0 }}>{t('changes.portalSub')}</p>
+      {[...orders].sort((a, b) => Number(b.status === 'sent') - Number(a.status === 'sent') || a.number - b.number).map((order) => (
+        <div key={order.id} className="stack" style={{ gap: '.4rem', borderTop: '1px solid var(--line)', paddingTop: '.7rem' }}>
+          <div className="row" style={{ justifyContent: 'space-between' }}><b>{t('changes.number')} {order.number} · {order.title}</b><b>{money(order.amountMinor)}</b></div>
+          {order.description ? <p className="small" style={{ margin: 0 }}>{order.description}</p> : null}
+          {order.daysAdded ? <span className="small muted">{t('changes.daysAdded', { n: order.daysAdded })}</span> : null}
+          {order.status === 'sent' && pending.includes(order) ? (
+            <form className="stack" style={{ gap: '.4rem' }} onSubmit={(event) => event.preventDefault()}>
+              <input name="signer" required maxLength={120} placeholder={t('changes.yourName')} aria-label={t('changes.yourName')} />
+              <div className="pair">
+                <button type="button" className="btn secondary" disabled={busy} onClick={(event) => void decide(order.id, false, event.currentTarget.form!)}>{t('changes.refuse')}</button>
+                <button type="button" className="btn" disabled={busy} onClick={(event) => void decide(order.id, true, event.currentTarget.form!)}>{t('changes.accept')}</button>
+              </div>
+            </form>
+          ) : <span className="badge">{t(`changes.statuses.${order.status as 'accepted'}`)}{order.decidedBy ? ` · ${order.decidedBy}` : ''}</span>}
+        </div>
+      ))}
+    </section>
   );
 }
 

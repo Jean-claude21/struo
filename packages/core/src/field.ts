@@ -135,7 +135,15 @@ export async function reportIncident(db: Db, actor: Actor, input: unknown): Prom
       [data.id, actor.orgId, data.projectId, data.reportId ?? null, data.kind, data.priority, data.description, actor.userId],
     );
     const created = inserted.rowCount === 1;
-    if (created) await journal(tx, actor, 'incident.report', data.id, null, data);
+    if (created) {
+      await journal(tx, actor, 'incident.report', data.id, null, data);
+      // Spec 048: an incident is cleared by a task, given to the site's manager, due by its priority.
+      await tx.query(
+        `insert into project_task (org_id, project_id, title, assignee_id, due_on, priority, incident_id, created_by)
+         select $1, p.id, left($3, 200), p.manager_id, current_date + $4::int, $5, $6, $7 from project p where p.id = $2 and p.org_id = $1`,
+        [actor.orgId, data.projectId, data.description, data.priority === 'critical' ? 1 : data.priority === 'important' ? 3 : 7,
+          data.priority === 'critical' ? 'urgent' : data.priority === 'important' ? 'normal' : 'low', data.id, actor.userId]);
+    }
     return { id: data.id, created };
   });
 }
@@ -329,6 +337,12 @@ export async function updateIncident(db: Db, actor: Actor, id: string, input: un
       if (data.status === 'resolved') sets.push('resolved_at = now()');
       else if (data.status) sets.push('resolved_at = null');
       await tx.query(`update incident set ${sets.join(', ')} where id = $1 and org_id = $2`, [id, actor.orgId, ...entries.map(([, value]) => value)]);
+      // Spec 048: the incident's task follows who acts, by when, and whether it is cleared.
+      await tx.query(
+        `update project_task t set assignee_id = i.assignee_id, due_on = coalesce(i.due_on, t.due_on),
+                status = case i.status when 'resolved' then 'done' when 'in_progress' then 'doing' else 'todo' end,
+                done_at = case when i.status = 'resolved' then coalesce(t.done_at, now()) else null end
+           from incident i where i.id = $1 and i.org_id = $2 and t.incident_id = i.id`, [id, actor.orgId]);
     }
     await journal(tx, actor, 'incident.update', id, before, data);
   });

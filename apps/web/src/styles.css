@@ -1307,3 +1307,7 @@ input[type='range'] { accent-color: var(--brand); min-height: 32px; padding: 0; 
 .kpi-mini b { font-size: 1.25rem; letter-spacing: -.02em; }
 .presence-day { border-bottom: 1px solid var(--divider); padding: .7rem 0; }
 .presence-day:last-child { border-bottom: 0; }
+
+.crew-import { padding: .8rem 1rem; border-bottom: 1px solid var(--line); }
+.crew-import summary { cursor: pointer; font-weight: 600; }
+.crew-import form { margin-top: .6rem; }

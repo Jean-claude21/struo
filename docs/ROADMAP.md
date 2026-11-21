@@ -50,6 +50,7 @@ real external account · ⏳ next.
 | 045 | `045-landing-clarity` | Landing « Ce qui est bien géré se voit » (Impeccable), sourced figures and estimate, prices per country currency, call-back requests, screens per role (demo and real use), site map on Today | 🟡 for review | `growth.test.ts`; every demo role walked |
 | 046 | `045-landing-clarity` | Tasks given per site (page and site tab), internal thread per site, document versions kept and downloadable | 🟡 for review | `work.test.ts` |
 | 047 | `047-crew-viewer` | One photo viewer everywhere; field crew (workers, presences ticked in the day report, labour per site), subcontractors paid as expenses; tasks in the field app | 🟡 for review | `crew.test.ts` |
+| 048 | `048-coherence` | Incident ↔ task as one action, tasks on milestones and phases, late-task alerts, checklist settings by phase, document families, change orders accepted in the portal, day journal, worker import | 🟡 for review | `coherence.test.ts` |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

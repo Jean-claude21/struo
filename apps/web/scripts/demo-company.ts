@@ -673,6 +673,22 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
   }
   log(`tasks: ${TASKS.length}, internal notes: ${THREADS.length}`);
 
+  // ---------------------------------------------------------------- change orders, document families (spec 048)
+  await owner.query(`update project_document set family = 'technical' where org_id = $1 and title ~* '(plan|coupe|fa[cç]ade|[ée]tude|calcul|ferraill)'`, [orgId]);
+  const CHANGES: [string, string, string, number, number, 'accepted' | 'sent' | 'draft'][] = [
+    ['KC-01', 'Mur de clôture supplémentaire', 'Mur en agglos de 20 cm sur 42 m, enduit deux faces, portail non compris.', 2_400_000, 6, 'accepted'],
+    ['KC-01', 'Carrelage grand format au salon', 'Remplacement du 40×40 prévu par du 60×120, pose comprise.', 950_000, 2, 'sent'],
+    ['KC-02', 'Renfort des poteaux du R+4', 'Demande du bureau de contrôle : section portée à 30×30 sur 8 poteaux.', 3_100_000, 5, 'accepted'],
+    ['KC-05', 'Local technique climatisation', 'Dalle et abri pour les groupes extérieurs.', 1_200_000, 4, 'draft'],
+  ];
+  for (const [site, title, description, amount, days, status] of CHANGES) {
+    if (!ids[site]) continue;
+    const { id } = await core.createChangeOrder(app, actors.jean, { projectId: ids[site], title, description, amountMinor: amount, daysAdded: days });
+    if (status !== 'draft') await core.sendChangeOrder(app, actors.jean, id);
+    if (status === 'accepted') await core.decideChangeOrder(app, actors.jean, id, { accept: true, decidedBy: site === 'KC-01' ? 'Kodjo Amegah' : 'SCI Les Cocotiers' });
+  }
+  log(`change orders: ${CHANGES.length}`);
+
   // ---------------------------------------------------------------- crew, presences, subcontractors (spec 047)
   const CREW: [string, string, number, string][] = [
     ['Kossi Amouzou', 'Maçon', 6000, 'KC-01'], ['Yawo Dossou', 'Maçon', 6000, 'KC-01'], ['Komlan Ahiaku', 'Manœuvre', 3500, 'KC-01'],

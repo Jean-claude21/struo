@@ -91,13 +91,14 @@ export const getProjectPage = createServerFn({ method: 'GET' })
           core.listClients(db, actor),
           core.listMembers(db, actor),
         ]);
-      const [settings, tasks, notes, subcontracts, labour] = await Promise.all([
+      const [settings, tasks, notes, subcontracts, labour, changeOrders, contract] = await Promise.all([
         core.getSettings(db, actor), core.listTasks(db, actor, { projectId: data.id }), core.listNotes(db, actor, data.id),
         core.listSubcontracts(db, actor, { projectId: data.id }), core.labourByProject(db, actor),
+        core.listChangeOrders(db, actor, data.id), core.contractValue(db, actor, data.id),
       ]);
       return {
         role: actor.role, userId: actor.userId, project, reports, incidents, invoices, payments, documents, milestones,
-        expenses, messages, links, configuration, clients, members, companyName: settings.name, tasks, notes, subcontracts, labour: labour.find((row) => row.projectId === data.id) ?? null, canRates: core.can(actor.role, 'crew.rates'),
+        expenses, messages, links, configuration, clients, members, companyName: settings.name, tasks, notes, subcontracts, labour: labour.find((row) => row.projectId === data.id) ?? null, canRates: core.can(actor.role, 'crew.rates'), changeOrders, contract,
       };
     }),
   );
@@ -621,6 +622,10 @@ export const saveWorker = createServerFn({ method: 'POST' })
   .validator((input: { id: string | null; patch: Record<string, unknown> }) => input)
   .handler(({ data }) => act((actor) => core.saveWorker(runtime().db, actor, data.id, data.patch)));
 
+export const importWorkers = createServerFn({ method: 'POST' })
+  .validator((input: { text: string }) => ({ text: String(input.text ?? '').slice(0, 100_000) }))
+  .handler(({ data }) => act((actor) => core.importWorkers(runtime().db, actor, data.text)));
+
 export const setAttendance = createServerFn({ method: 'POST' })
   .validator((input: { projectId: string; day: string; workerIds: string[] }) => input)
   .handler(({ data }) => act((actor) => core.recordAttendance(runtime().db, actor, { ...data, replace: true })));
@@ -636,6 +641,35 @@ export const updateSubcontract = createServerFn({ method: 'POST' })
 export const paySubcontract = createServerFn({ method: 'POST' })
   .validator((input: { id: string; amountMinor: number }) => input)
   .handler(({ data }) => act((actor) => core.paySubcontract(runtime().db, actor, data.id, { amountMinor: data.amountMinor })));
+
+// ---------------------------------------------------------------- change orders (spec 048)
+
+export const createChangeOrder = createServerFn({ method: 'POST' })
+  .validator(any)
+  .handler(({ data }) => act((actor) => core.createChangeOrder(runtime().db, actor, data)));
+
+export const sendChangeOrder = createServerFn({ method: 'POST' })
+  .validator(idOf)
+  .handler(({ data }) => act((actor) => core.sendChangeOrder(runtime().db, actor, data.id)));
+
+export const decideChangeOrder = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; accept: boolean; decidedBy: string }) => input)
+  .handler(({ data }) => act((actor) => core.decideChangeOrder(runtime().db, actor, data.id, { accept: data.accept, decidedBy: data.decidedBy })));
+
+export const invoiceChangeOrder = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; dueOn: string }) => input)
+  .handler(({ data }) => act(async (actor) => {
+    const locale = requestLocale();
+    return core.invoiceChangeOrder(runtime().db, actor, data.id, data.dueOn, (number, title) => translate(locale, 'changes.invoiceLabel', { n: number, title }));
+  }));
+
+export const getSiteDay = createServerFn({ method: 'GET' })
+  .validator((input: { projectId: string; day: string }) => input)
+  .handler(({ data }) => act(async (actor) => {
+    const { db } = runtime();
+    const [journal, settings] = await Promise.all([core.siteDay(db, actor, data.projectId, data.day), core.getSettings(db, actor)]);
+    return { ...journal, company: settings.name, orgId: actor.orgId };
+  }));
 
 // ---------------------------------------------------------------- alerts as text (assistants)
 

@@ -230,3 +230,32 @@ export async function paySubcontract(db: Db, actor: Actor, id: string, input: un
     return { expenseId: inserted.rows[0]!.id };
   });
 }
+
+/**
+ * Spec 048: workers pasted from a spreadsheet, one per line: name; trade; phone; day rate (tabs,
+ * semicolons or commas). The day rate is kept only for the roles that may see pay. A name already
+ * registered is skipped.
+ */
+export async function importWorkers(db: Db, actor: Actor, text: string): Promise<{ added: number; skipped: number }> {
+  ensure(actor, 'crew.write');
+  const rates = can(actor.role, 'crew.rates');
+  const lines = String(text ?? '').split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).slice(0, 500);
+  return asActor(db, actor, async (tx) => {
+    const existing = new Set((await tx.query<{ name: string }>('select lower(name) as name from worker where org_id = $1', [actor.orgId])).rows.map((row) => row.name));
+    let added = 0;
+    let skipped = 0;
+    for (const line of lines) {
+      const [name = '', trade = '', phone = '', rate = ''] = line.split(/\t|;|,(?=\s*[^\d\s])/u).map((cell) => cell.trim());
+      const key = name.toLowerCase();
+      // A header line, an empty name or a known worker is skipped.
+      if (!name || name.length > 120 || existing.has(key) || /^(nom|name)$/iu.test(name)) { skipped++; continue; }
+      const digits = rate.replace(/[^\d]/gu, '');
+      await tx.query('insert into worker (org_id, name, trade, phone, day_rate_minor) values ($1, $2, $3, $4, $5)',
+        [actor.orgId, name, trade.slice(0, 80) || null, phone.slice(0, 40) || null, rates && digits ? Number(digits) : null]);
+      existing.add(key);
+      added++;
+    }
+    await journal(tx, actor, 'worker.import', actor.orgId, null, { added, skipped });
+    return { added, skipped };
+  });
+}

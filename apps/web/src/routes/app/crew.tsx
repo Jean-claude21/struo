@@ -5,7 +5,7 @@ import { useState, type FormEvent } from 'react';
 import { HardHat, Handshake, Users } from 'lucide-react';
 import { EmptyState, PageHeader, Panel, Progress, useToast } from '@/components/kit.tsx';
 import { formatMoney, parseMoney, Tabs } from '@/components/ui.tsx';
-import { createSubcontract, getCrew, paySubcontract, saveWorker, setAttendance, updateSubcontract } from '@/features/office/server.ts';
+import { createSubcontract, getCrew, importWorkers, paySubcontract, saveWorker, setAttendance, updateSubcontract } from '@/features/office/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
 export const Route = createFileRoute('/app/crew')({
@@ -51,6 +51,7 @@ function Crew() {
 function Workers({ data }: { data: Data }) {
   const { t, locale } = useI18n();
   const run = useRun();
+  const toast = useToast();
   const money = (minor: number | null) => (minor === null ? '—' : formatMoney(locale, minor, data.currency));
   const add = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -74,6 +75,20 @@ function Workers({ data }: { data: Data }) {
         {data.canRates ? <input name="rate" inputMode="decimal" placeholder={t('crew.rate', { currency: data.currency })} aria-label={t('crew.rate', { currency: data.currency })} /> : null}
         <button type="submit" className="btn small">{t('crew.add')}</button>
       </form>
+      <details className="crew-import">
+        <summary>{t('crew.importTitle')}</summary>
+        <form className="stack" onSubmit={async (event) => {
+          event.preventDefault();
+          const form = event.currentTarget;
+          const text = String(new FormData(form).get('rows') ?? '');
+          let result: { added: number; skipped: number } | null = null;
+          if (await run(async () => { result = await importWorkers({ data: { text } }); })) { form.reset(); if (result) toast({ text: t('crew.imported', { added: (result as { added: number }).added, skipped: (result as { skipped: number }).skipped }) }); }
+        }}>
+          <p className="small muted" style={{ margin: 0 }}>{t('crew.importHint')}</p>
+          <textarea name="rows" rows={5} required placeholder={t('crew.importExample')} aria-label={t('crew.importTitle')} />
+          <button type="submit" className="btn small" style={{ alignSelf: 'flex-start' }}>{t('crew.importAction')}</button>
+        </form>
+      </details>
       {data.workers.length ? (
         <div className="table-wrap"><table>
           <thead><tr><th>{t('crew.name')}</th><th>{t('crew.trade')}</th><th>{t('crew.phone')}</th>{data.canRates ? <th className="right">{t('crew.rate', { currency: data.currency })}</th> : null}<th className="right">{t('crew.days30')}</th><th>{t('crew.lastSeen')}</th><th /></tr></thead>

@@ -240,7 +240,7 @@ function HomeTab({ snapshot, site, onFlow, onSite }: {
         </div>
         <div className="stack" style={{ padding: '0 1rem 1rem', gap: '.5rem' }}>
           <b>{t('field2.myActions')}</b>
-          {(snapshot.templates ?? []).filter((template) => template.required).map((template) => (
+          {(snapshot.templates ?? []).filter((template) => appliesToday(template, site)).map((template) => (
             <button key={template.id} type="button" className={`check-row ${done.has(template.name) ? 'on' : ''}`} onClick={() => onFlow('checklist', template.id)} disabled={done.has(template.name)}>
               <span className="box">{done.has(template.name) ? <Check size={16} /> : null}</span>
               <span className="grow">{done.has(template.name) ? t('field2.checklistDone', { name: template.name }) : t('field2.checklistTodo', { name: template.name })}</span>
@@ -252,6 +252,13 @@ function HomeTab({ snapshot, site, onFlow, onSite }: {
           ))}
           {(snapshot.tasks ?? []).filter((task) => task.projectId === site.id).map((task) => <FieldTask key={task.id} task={task} />)}
           {site.openIncidents ? <div className="notice bad small"><TriangleAlert size={16} />{t('field2.openIncidents', { n: site.openIncidents })}</div> : null}
+          {(snapshot.templates ?? []).filter((template) => template.mode === 'on_demand').length ? (
+            <div className="chips">
+              {(snapshot.templates ?? []).filter((template) => template.mode === 'on_demand').map((template) => (
+                <button key={template.id} type="button" className="chip" onClick={() => onFlow('checklist', template.id)}><ClipboardCheck size={15} />{template.name}</button>
+              ))}
+            </div>
+          ) : null}
           <div className="pair" style={{ marginTop: '.25rem' }}>
             <button type="button" className="btn secondary small" onClick={() => onFlow('delivery')}><ScanLine size={16} />{t('field2.scan')}</button>
             <button type="button" className="btn secondary small" onClick={() => onFlow('pv')}><FileSignature size={16} />{t('field2.sign')}</button>
@@ -334,6 +341,19 @@ function PhotoPicker({ photos, setPhotos, gps, site }: {
 }
 
 // ---------------------------------------------------------------- T4–T6: report in four steps
+
+/**
+ * Spec 048: the checklists of the day on a site: the daily ones, and those tied to a phase under way
+ * there (started, not finished). On-demand checklists are offered as buttons.
+ */
+function appliesToday(template: { required: boolean; mode?: string; phaseName?: string | null }, site: FieldProject): boolean {
+  if (template.mode === 'on_demand') return false;
+  if (template.mode === 'phase') {
+    const wanted = (template.phaseName ?? '').trim().toLowerCase();
+    return site.phases.some((phase) => phase.name.trim().toLowerCase() === wanted && phase.progressPct > 0 && phase.progressPct < 100);
+  }
+  return template.required;
+}
 
 /** A task given to the site lead (spec 046): mark it done when the network is there. */
 function FieldTask({ task }: { task: { id: string; title: string; dueOn: string | null; status: string; priority: string } }) {
