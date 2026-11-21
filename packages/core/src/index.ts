@@ -29,3 +29,4 @@ export * from './kpis.ts';
 export * from './work.ts';
 export * from './crew.ts';
 export * from './changes.ts';
+export * from './reports-client.ts';

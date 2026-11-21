@@ -1,9 +1,9 @@
 // The client's space (spec 022): opened from a link, confirmed once by an e-mail code on this device,
 // then followed like a parcel — photos, steps, reports in plain words, milestones signed with a
 // finger, payments and messages. Phone first, one main action per screen.
-import { createFileRoute, useRouter } from '@tanstack/react-router';
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
-import { Check, CircleCheck, CreditCard, FileText, HardHat, Home, KeyRound, Lock, Mail, MessageCircle, Send, Wallet } from 'lucide-react';
+import { ArrowRight, Check, CircleCheck, CreditCard, FileText, HardHat, Home, KeyRound, Lock, Mail, MessageCircle, Send, Wallet } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { SignaturePad, type SignaturePadHandle } from '@/components/SignaturePad.tsx';
 import { Modal, useToast } from '@/components/kit.tsx';
@@ -146,6 +146,16 @@ function SpaceView({ data }: { data: Space }) {
       {tab === 'site' ? (
         <div className="stack loose">
           <ChangeOrders orders={data.changeOrders} token={token} money={money} onDone={() => router.invalidate()} />
+          {data.clientReports.length ? (
+            <section className="card stack" style={{ gap: '.4rem' }}>
+              <h3 style={{ margin: 0 }}>{t('clientReport.portalTitle')}</h3>
+              {data.clientReports.slice(0, 6).map((item) => (
+                <Link key={item.id} to="/portal/$token/report/$id" params={{ token, id: item.id }} className="row" style={{ justifyContent: 'space-between' }}>
+                  <span>{date(item.from)} → {date(item.to)}</span><ArrowRight size={16} />
+                </Link>
+              ))}
+            </section>
+          ) : null}
           {view.photos.length ? (
             <div className="stories" aria-label={t('portal.photos')}>
               {view.photos.slice(0, 12).map((photo, index) => (

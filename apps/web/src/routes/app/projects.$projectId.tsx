@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { DocumentDialog, ExpenseDialog, InvoiceDialog, MilestoneDialog, PaymentDialog, ReminderDialog, ReportCard } from '@/components/forms.tsx';
 import { Badge, DateText, Empty, ErrorText, Field, formData, formatMoney, Kpi, Money, parseMoney, Progress, Tabs, useAction } from '@/components/ui.tsx';
 import {
-  addPhase, archiveProject, createChangeOrder, createPortalLink, decideChangeOrder, getProjectPage, getSiteDay, invoiceChangeOrder, sendChangeOrder, postMessage, removePhase, resolveIncident, revokePortalLink,
+  addPhase, archiveProject, createChangeOrder, createPortalLink, decideChangeOrder, getClientReportTab, getProjectPage, getSiteDay, previewClientReport, sendClientReport, invoiceChangeOrder, sendChangeOrder, postMessage, removePhase, resolveIncident, revokePortalLink,
   updateDocument, updateMilestone, updatePhase, updateProject,
 } from '@/features/office/server.ts';
 import { DocumentRows, InvoiceTable, MilestoneRows } from '@/components/tables.tsx';
@@ -17,13 +17,14 @@ import { NotesThread, TaskBoard } from '@/components/Work.tsx';
 import { usePhotoViewer } from '@/components/PhotoViewer.tsx';
 import { DayJournal } from '@/routes/print.journal.tsx';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ClientReportView } from '@/components/ClientReportView.tsx';
 
 export const Route = createFileRoute('/app/projects/$projectId')({
   loader: ({ params }) => getProjectPage({ data: { id: params.projectId } }),
   component: ProjectPage,
 });
 
-type Tab = 'overview' | 'journal' | 'work' | 'changes' | 'labour' | 'field' | 'finance' | 'expenses' | 'documents' | 'planning' | 'portal' | 'messages';
+type Tab = 'overview' | 'report' | 'journal' | 'work' | 'changes' | 'labour' | 'field' | 'finance' | 'expenses' | 'documents' | 'planning' | 'portal' | 'messages';
 type Data = Awaited<ReturnType<typeof getProjectPage>>;
 
 function ProjectPage() {
@@ -31,7 +32,7 @@ function ProjectPage() {
   const data = Route.useLoaderData();
   const { project } = data;
   const [tab, setTab] = useState<Tab>('overview');
-  const tabs: Tab[] = ['overview', 'journal', 'work', 'changes', ...(sees(data.role, 'crew') ? (['labour'] as Tab[]) : []), 'field', ...(sees(data.role, 'finance') ? (['finance'] as Tab[]) : []), 'expenses', 'documents', 'planning', 'portal', 'messages'];
+  const tabs: Tab[] = ['overview', 'report', 'journal', 'work', 'changes', ...(sees(data.role, 'crew') ? (['labour'] as Tab[]) : []), 'field', ...(sees(data.role, 'finance') ? (['finance'] as Tab[]) : []), 'expenses', 'documents', 'planning', 'portal', 'messages'];
   const cover = data.reports.flatMap((report) => report.photos)[0];
   const client = data.clients.find((candidate) => candidate.id === project.clientId) ?? null;
   const money = (minor: number) => formatMoney(locale, minor, project.currencyCode);
@@ -77,7 +78,7 @@ function ProjectPage() {
         ) : null}
         <KpiTile label={t('projects.compliance')} value={project.compliancePct === null ? '—' : `${project.compliancePct} %`} tone={(project.compliancePct ?? 100) < 75 ? 'bad' : undefined} />
       </div>
-      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'portal' ? t('clientInvite.tab') : value === 'labour' ? t('crew.tab') : value === 'changes' ? t('changes.tab') : value === 'journal' ? t('journal.tab') : t(`projects.tabs.${value}`) }))} />
+      <Tabs value={tab} onChange={setTab} items={tabs.map((value) => ({ value, label: value === 'portal' ? t('clientInvite.tab') : value === 'labour' ? t('crew.tab') : value === 'changes' ? t('changes.tab') : value === 'journal' ? t('journal.tab') : value === 'report' ? t('clientReport.tab') : t(`projects.tabs.${value}`) }))} />
       {tab === 'overview' ? <Overview data={data} /> : null}
       {tab === 'work' ? (
         <div className="grid-main">
@@ -85,6 +86,7 @@ function ProjectPage() {
           <NotesThread projectId={project.id} notes={data.notes} />
         </div>
       ) : null}
+      {tab === 'report' ? <ClientReportTab projectId={project.id} /> : null}
       {tab === 'journal' ? <JournalTab projectId={project.id} /> : null}
       {tab === 'changes' ? <ChangesTab data={data} /> : null}
       {tab === 'labour' ? <LabourTab data={data} /> : null}
@@ -814,5 +816,69 @@ function JournalTab({ projectId }: { projectId: string }) {
     )}>
       {journal ? <DayJournal data={journal} /> : <p className="muted">…</p>}
     </Panel>
+  );
+}
+
+/** Spec 049: what the client receives, previewed in the company's look, then sent or printed. */
+function ClientReportTab({ projectId }: { projectId: string }) {
+  const { t, locale, errorText } = useI18n();
+  const [range, setRange] = useState(() => {
+    const to = new Date(); const from = new Date(); from.setDate(from.getDate() - 6);
+    return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+  });
+  const [note, setNote] = useState('');
+  const [tab, setTab] = useState<Awaited<ReturnType<typeof getClientReportTab>> | null>(null);
+  const [preview, setPreview] = useState<Awaited<ReturnType<typeof previewClientReport>> | null>(null);
+  const [state, setState] = useState<{ kind: 'idle' | 'sending' | 'sent' | 'error'; text?: string }>({ kind: 'idle' });
+  const load = () => getClientReportTab({ data: { projectId } }).then(setTab);
+  useEffect(() => { void load(); }, [projectId]);
+  useEffect(() => {
+    let live = true;
+    const handle = window.setTimeout(() => { void previewClientReport({ data: { projectId, ...range, note: note || null } }).then((value) => { if (live) setPreview(value); }); }, 300);
+    return () => { live = false; window.clearTimeout(handle); };
+  }, [projectId, range.from, range.to, note]);
+  const send = async () => {
+    setState({ kind: 'sending' });
+    try {
+      const result = await sendClientReport({ data: { projectId, ...range, note: note || null } });
+      setState({ kind: 'sent', text: result.mailed ? t('clientReport.sent', { email: tab?.contact?.email ?? '' }) : t('clientReport.savedNoMail') });
+      await load();
+    } catch (caught) { setState({ kind: 'error', text: errorText(caught) }); }
+  };
+  const when = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+  const print = `/print/client-report?project=${projectId}&from=${range.from}&to=${range.to}${note ? `&note=${encodeURIComponent(note)}` : ''}`;
+  return (
+    <div className="grid-main">
+      <Panel title={t('clientReport.preview')} sub={t('clientReport.previewSub')}>
+        {preview ? <div className="cr-frame"><ClientReportView report={preview.report} orgId={preview.orgId} photoUrl={(id) => `/api/files/photo/${id}`} /></div> : <p className="muted">…</p>}
+      </Panel>
+      <div className="stack">
+        <Panel title={t('clientReport.send')}>
+          <div className="stack">
+            <div className="form-grid">
+              <label className="field">{t('clientReport.from')}<input type="date" value={range.from} max={range.to} onChange={(event) => setRange({ ...range, from: event.target.value })} /></label>
+              <label className="field">{t('clientReport.to')}<input type="date" value={range.to} min={range.from} onChange={(event) => setRange({ ...range, to: event.target.value })} /></label>
+            </div>
+            <label className="field">{t('clientReport.note')}<textarea rows={3} maxLength={2000} value={note} onChange={(event) => setNote(event.target.value)} placeholder={t('clientReport.notePlaceholder')} /></label>
+            {tab?.contact?.email ? <p className="small muted" style={{ margin: 0 }}>{t('clientReport.to_', { name: tab.contact.name ?? '', email: tab.contact.email })}</p>
+              : <p className="small bad-text" style={{ margin: 0 }}>{t('clientReport.noEmail')}</p>}
+            {tab?.contact?.email && !tab.contact.hasLink ? <p className="small muted" style={{ margin: 0 }}>{t('clientReport.oldLink')}</p> : null}
+            <div className="row" style={{ flexWrap: 'wrap' }}>
+              <button type="button" className="btn" disabled={!tab?.canSend || !tab.contact?.email || state.kind === 'sending'} onClick={() => void send()}>{state.kind === 'sending' ? t('clientReport.sending') : t('clientReport.sendButton')}</button>
+              <a className="btn secondary" href={print} target="_blank" rel="noreferrer">{t('journal.print')}</a>
+            </div>
+            {state.text ? <p className={`small ${state.kind === 'error' ? 'bad-text' : ''}`} role="status" style={{ margin: 0 }}>{state.text}</p> : null}
+            <p className="small muted" style={{ margin: 0 }}>{tab?.weekly ? t('clientReport.weeklyOn') : t('clientReport.weeklyOff')}</p>
+          </div>
+        </Panel>
+        <Panel title={t('clientReport.history')}>
+          {tab?.reports.length ? (
+            <ul className="cr-history">{tab.reports.map((item) => (
+              <li key={item.id}><span>{item.from} → {item.to}{item.automatic ? ` · ${t('clientReport.auto')}` : ''}</span><span className="muted small">{item.sentAt ? `${when(item.sentAt)} · ${item.sentTo ?? ''}` : t('clientReport.notSent')}</span></li>
+            ))}</ul>
+          ) : <p className="muted small" style={{ margin: 0 }}>{t('clientReport.none')}</p>}
+        </Panel>
+      </div>
+    </div>
   );
 }
