@@ -5,7 +5,7 @@
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { Mail, MessageCircle } from 'lucide-react';
-import { Announcements, CompanyNotes, Feedback, PlatformRuns, Plans, Steps, StepsList, Today } from '@/components/ConsoleFounder.tsx';
+import { Announcements, CompanyNotes, FeatureGrants, Feedback, McpAccess, PlatformRuns, Plans, Steps, StepsList, Today } from '@/components/ConsoleFounder.tsx';
 import { PublicHeader } from '@/components/PublicHeader.tsx';
 import { Badge, DateText, formatMoney, parseMoney, Tabs } from '@/components/ui.tsx';
 import { COUNTRIES, sortedCountries } from '@/features/settings/countries.ts';
@@ -25,7 +25,7 @@ export const Route = createFileRoute('/console')({
 });
 
 type Data = Awaited<ReturnType<typeof getConsole>>;
-type Tab = 'today' | 'overview' | 'health' | 'platform' | 'leads' | 'companies' | 'plans' | 'prices' | 'licenses' | 'announcements' | 'feedback' | 'journal';
+type Tab = 'today' | 'overview' | 'health' | 'platform' | 'leads' | 'companies' | 'plans' | 'prices' | 'licenses' | 'announcements' | 'feedback' | 'mcp' | 'journal';
 
 function Console() {
   const { t } = useI18n();
@@ -49,8 +49,10 @@ function Console() {
         { value: 'licenses', label: `${t('console2.licenses')} · ${data.products.length}` },
         { value: 'announcements', label: t('announce.tab') },
         { value: 'feedback', label: `${t('feedback.tab')} · ${data.feedback.filter((item) => !item.handledAt).length}` },
+        { value: 'mcp', label: t('pmcp.tab') },
         { value: 'journal', label: t('console2.journal') },
       ]} />
+      {tab === 'mcp' ? <McpAccess keys={data.platformKeys} url={data.mcpUrl} /> : null}
       {tab === 'today' ? <Today todo={data.todo} onOpen={setCompany} /> : null}
       {tab === 'platform' ? <PlatformRuns runs={data.runs} sentryOn={data.sentryOn} /> : null}
       {tab === 'plans' ? <Plans plans={data.editablePlans} /> : null}
@@ -197,6 +199,7 @@ function CompanyDrawer({ orgId, plans, onClose }: { orgId: string; plans: Data['
               )) : <p className="muted small" style={{ margin: 0 }}>{t('console2.noLicense')}</p>}
           </Panel>
           <StepsList steps={company.steps} />
+          <FeatureGrants orgId={orgId} grants={company.grants} onSaved={load} />
           <CompanyNotes orgId={orgId} notes={company.notes} onSaved={load} />
           <p className="faint xsmall">{t('console2.lastActivity', { date: when(company.usage.lastActivity) })}</p>
         </div>

@@ -262,7 +262,8 @@ const CORE_FEATURES = ['field', 'finance', 'documents', 'planning'];
 /** Refuses a gesture the company's plan does not include. */
 export async function assertFeature(q: Query, orgId: string, feature: PlanFeature): Promise<void> {
   const { rows } = await q.query<{ ok: boolean }>(
-    `select coalesce((select p.features ? $2 from org_settings s join plan p on p.code = s.plan_code where s.org_id = $1), true) as ok`, [orgId, feature]);
+    `select coalesce((select p.features ? $2 from org_settings s join plan p on p.code = s.plan_code where s.org_id = $1), true)
+            or exists (select 1 from company_feature_grant g where g.org_id = $1 and g.feature = $2 and (g.until is null or g.until >= current_date)) as ok`, [orgId, feature]);
   if (!rows[0]?.ok) throw new DomainError('plan_feature', 403, { feature });
 }
 

@@ -58,6 +58,7 @@ real external account · ⏳ next.
 | 053 | `053-cash-forecast` | Supplier bills to pay (paid → site expense), cash forecast at 30/60/90 days from recorded money (late invoices apart, to-invoice estimate, recent pace), owner's home tile, MCP tools | 🟡 for review | `cash.test.ts` |
 | 054 | `054-role-review` | Every role walked on screen: demo names no real place, believable cash story, contracts and required documents filed by kind | 🟡 for review | `client-trust.test.ts` |
 | 055 | `055-founder-console` | Founder's console: true money (no demo, per currency, licences), to-do today, getting-started steps and notes, platform runs, plans edited with impact/confirmation/history and enforced features, licence descriptions, announcements, in-app feedback, Umami on public pages only | 🟡 for review | `founder.test.ts` |
+| 056 | `056-platform-mcp` | The console through MCP (platform keys, read-only for routines, 31 tools with preview/confirmation), features granted to one company until a date, invoices as PDF in the client space | 🟡 for review | `platform-mcp.test.ts` |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

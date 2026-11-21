@@ -9,7 +9,7 @@ import { EmptyState, KpiTile, Panel, useToast } from './kit.tsx';
 import { lines, Rich } from './PlanWords.tsx';
 import { Badge, formatMoney } from './ui.tsx';
 import {
-  addCompanyNote, createAnnouncement, endAnnouncement, getPlanRevisions, handleFeedback, previewPlan, restorePlan, savePlan,
+  addCompanyNote, createAnnouncement, createPlatformKey, endAnnouncement, getPlanRevisions, grantFeature, handleFeedback, previewPlan, restorePlan, revokeFeature, revokePlatformKey, savePlan,
 } from '@/features/settings/server.ts';
 import { translate, useI18n } from '@/i18n/index.tsx';
 
@@ -385,3 +385,83 @@ export function Feedback({ items, onOpen }: { items: FeedbackRow[]; onOpen: (org
   );
 }
 
+
+// ---------------------------------------------------------------- spec 056: the console through MCP
+
+type KeyRow = { id: string; name: string; masked: string; readOnly: boolean; createdBy: string | null; createdAt: string; lastUsedAt: string | null; revokedAt: string | null };
+
+export function McpAccess({ keys, url }: { keys: KeyRow[]; url: string }) {
+  const { t, locale, errorText } = useI18n();
+  const router = useRouter();
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const [readOnly, setReadOnly] = useState(true);
+  const [shown, setShown] = useState<string | null>(null);
+  const when = (value: string | null) => (value ? new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—');
+  return (
+    <div className="grid-main">
+      <Panel title={t('pmcp.title')} sub={t('pmcp.sub')}>
+        <div className="stack">
+          <div><b className="small">{t('pmcp.url')}</b><div className="secret">{url}</div></div>
+          <p className="small muted" style={{ margin: 0 }}>{t('pmcp.how')}</p>
+          {shown ? (
+            <div className="notice ok stack" style={{ gap: '.3rem' }}>
+              <b>{t('pmcp.copyNow')}</b><code className="secret" style={{ userSelect: 'all' }}>{shown}</code>
+              <button type="button" className="btn small secondary" style={{ justifySelf: 'start' }} onClick={() => { void navigator.clipboard?.writeText(shown); toast({ text: t('pmcp.copied') }); }}>{t('pmcp.copy')}</button>
+            </div>
+          ) : null}
+          <form className="stack" style={{ gap: '.5rem' }} onSubmit={async (event) => {
+            event.preventDefault();
+            try { const { key } = await createPlatformKey({ data: { name, readOnly } }); setShown(key); setName(''); await router.invalidate(); }
+            catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
+          }}>
+            <label className="field">{t('pmcp.name')}<input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} required placeholder={t('pmcp.namePlaceholder')} /></label>
+            <label className="check"><input type="checkbox" checked={readOnly} onChange={(event) => setReadOnly(event.target.checked)} />{t('pmcp.readOnly')}</label>
+            <span className="xsmall faint">{readOnly ? t('pmcp.readOnlyHint') : t('pmcp.fullHint')}</span>
+            <button type="submit" className="btn small" style={{ alignSelf: 'flex-start' }}>{t('pmcp.create')}</button>
+          </form>
+        </div>
+      </Panel>
+      <Panel title={t('pmcp.keys')} flush>
+        {keys.length ? <ul className="claims">{keys.map((key) => (
+          <li key={key.id} className={key.revokedAt ? '' : 'pending'}>
+            <div className="row nowrap"><b className="grow">{key.name}</b>{key.revokedAt ? <Badge>{t('pmcp.revoked')}</Badge> : <Badge tone={key.readOnly ? 'ok' : 'warn'}>{key.readOnly ? t('pmcp.ro') : t('pmcp.rw')}</Badge>}</div>
+            <span className="small muted"><code>{key.masked}</code> · {key.createdBy ?? ''} · {t('pmcp.lastUsed', { date: when(key.lastUsedAt) })}</span>
+            {!key.revokedAt ? <button type="button" className="btn ghost small" style={{ justifySelf: 'start' }} onClick={async () => { if (!window.confirm(t('pmcp.revokeConfirm'))) return; await revokePlatformKey({ data: { id: key.id } }); await router.invalidate(); }}>{t('pmcp.revoke')}</button> : null}
+          </li>
+        ))}</ul> : <p className="muted small" style={{ padding: '1rem', margin: 0 }}>{t('pmcp.none')}</p>}
+      </Panel>
+    </div>
+  );
+}
+
+type Grant = { orgId: string; company: string; feature: string; until: string | null; reason: string | null; active: boolean };
+
+export function FeatureGrants({ orgId, grants, onSaved }: { orgId: string; grants: Grant[]; onSaved: () => Promise<void> }) {
+  const { t, errorText } = useI18n();
+  const toast = useToast();
+  const [feature, setFeature] = useState<string>('portal');
+  const [until, setUntil] = useState('');
+  const [reason, setReason] = useState('');
+  return (
+    <Panel title={t('grants.title')} sub={t('grants.sub')}>
+      {grants.map((grant) => (
+        <div key={grant.feature} className="row nowrap small" style={{ borderBottom: '1px solid var(--divider)', padding: '.35rem 0' }}>
+          <b className="grow">{t(`plans.features.${grant.feature as 'ai'}`)}</b>
+          <span className={grant.active ? 'ok-text' : 'muted'}>{grant.until ? t('grants.until', { date: grant.until }) : t('grants.noEnd')}</span>
+          <button type="button" className="btn ghost small" onClick={async () => { try { await revokeFeature({ data: { orgId, feature: grant.feature } }); await onSaved(); } catch (caught) { toast({ text: errorText(caught), kind: 'err' }); } }}>{t('grants.revoke')}</button>
+        </div>
+      ))}
+      <form className="row" style={{ flexWrap: 'wrap', gap: '.5rem', marginTop: '.5rem' }} onSubmit={async (event) => {
+        event.preventDefault();
+        try { await grantFeature({ data: { orgId, feature, until: until || null, reason: reason || null } }); setReason(''); setUntil(''); toast({ text: t('grants.done') }); await onSaved(); }
+        catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
+      }}>
+        <select value={feature} onChange={(event) => setFeature(event.target.value)} style={{ width: 'auto' }} aria-label={t('grants.feature')}>{FEATURES.map((item) => <option key={item} value={item}>{t(`plans.features.${item}`)}</option>)}</select>
+        <input type="date" value={until} onChange={(event) => setUntil(event.target.value)} style={{ width: 'auto' }} aria-label={t('grants.untilLabel')} />
+        <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={300} placeholder={t('grants.reason')} style={{ flex: 1, minWidth: 140 }} />
+        <button type="submit" className="btn small">{t('grants.give')}</button>
+      </form>
+    </Panel>
+  );
+}

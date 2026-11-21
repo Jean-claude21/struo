@@ -172,7 +172,8 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
     const [money, todo, onboarding, runs, editablePlans, announcements, feedback] = await Promise.all([
       core.founderMoney(owner), core.founderTodo(owner), core.onboardingSteps(owner), core.platformRuns(owner),
       core.listEditablePlans(owner), core.listAnnouncements(owner), core.listFeedback(owner)]);
-    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
+    const [platformKeys, grants] = await Promise.all([core.listPlatformKeys(owner), core.featureGrants(owner)]);
+    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
   }),
 );
 
@@ -245,8 +246,8 @@ export const getConsoleCompany = createServerFn({ method: 'GET' })
   .handler(({ data }) => guarded(async () => {
     await requirePlatformAdmin();
     const { owner } = runtime();
-    const [company, notes, steps] = await Promise.all([core.platformCompany(owner, data.orgId), core.companyNotes(owner, data.orgId), core.onboardingSteps(owner, data.orgId)]);
-    return { ...company, notes, steps: steps[data.orgId] ?? null };
+    const [company, notes, steps, grants] = await Promise.all([core.platformCompany(owner, data.orgId), core.companyNotes(owner, data.orgId), core.onboardingSteps(owner, data.orgId), core.featureGrants(owner, data.orgId)]);
+    return { ...company, notes, steps: steps[data.orgId] ?? null, grants };
   }));
 
 // ---------------------------------------------------------------- the founder's console (spec 055)
@@ -477,3 +478,21 @@ export const eraseCompany = createServerFn({ method: 'POST' })
       return { erased: true };
     }),
   );
+
+// ---------------------------------------------------------------- the console through MCP (spec 056)
+
+export const createPlatformKey = createServerFn({ method: 'POST' })
+  .validator((input: { name: string; readOnly: boolean }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); return core.createPlatformKey(runtime().owner, viewer.userId, data); }));
+
+export const revokePlatformKey = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.revokePlatformKey(runtime().owner, viewer.userId, data.id); }));
+
+export const grantFeature = createServerFn({ method: 'POST' })
+  .validator((input: { orgId: string; feature: string; until?: string | null; reason?: string | null }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.grantFeature(runtime().owner, viewer.userId, data); }));
+
+export const revokeFeature = createServerFn({ method: 'POST' })
+  .validator((input: { orgId: string; feature: string }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.revokeFeatureGrant(runtime().owner, viewer.userId, data.orgId, data.feature); }));

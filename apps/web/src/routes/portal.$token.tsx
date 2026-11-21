@@ -383,6 +383,7 @@ function InvoicesTab({ data, money, date, onDone }: { data: Space; money: (minor
                   <span className="muted small">{invoice.number} · {t(`finance.kinds.${invoice.kind as 'progress'}`)}</span>
                   <span style={{ fontSize: '1.7rem', fontWeight: 800 }}>{money(invoice.balance)}</span>
                   <span className="small">{t('clientPortal.dueBefore', { date: date(invoice.dueOn) })}</span>
+                  <Link to="/portal/$token/invoice/$id" params={{ token, id: invoice.id }} className="small" style={{ alignSelf: 'flex-start' }}><FileText size={14} /> {t('clientApp.seeInvoicePdf')}</Link>
                   {claim?.status === 'pending' ? <span className="notice info small">{t('clientApp.claimPending', { date: date(claim.paidOn) })}</span>
                     : claim?.status === 'rejected' ? <span className="notice warn small">{t('clientApp.claimRejected', { reason: claim.rejectReason ?? '' })}</span> : null}
                   {howToPay?.canDeclare && claim?.status !== 'pending' ? <button type="button" className="btn secondary block" onClick={() => setClaiming(invoice)}><CircleCheck size={18} />{t('clientApp.iPaid')}</button> : null}
@@ -408,7 +409,7 @@ function InvoicesTab({ data, money, date, onDone }: { data: Space; money: (minor
               <h3 style={{ margin: 0 }}>{t('clientPortal.history')}</h3>
               {paid.map((invoice) => (
                 <div key={invoice.id} className="row nowrap small" style={{ borderBottom: '1px solid var(--divider)', padding: '.5rem 0' }}>
-                  <span className="grow trunc" style={{ minWidth: 0 }}>{invoice.number} · {t(`finance.kinds.${invoice.kind as 'progress'}`)}</span><b className="num nowrap">{money(invoice.net)}</b><CircleCheck size={16} style={{ color: 'var(--ok)' }} />
+                  <Link to="/portal/$token/invoice/$id" params={{ token, id: invoice.id }} className="grow trunc" style={{ minWidth: 0 }}>{invoice.number} · {t(`finance.kinds.${invoice.kind as 'progress'}`)}</Link><b className="num nowrap">{money(invoice.net)}</b><CircleCheck size={16} style={{ color: 'var(--ok)' }} />
                 </div>
               ))}
             </section>

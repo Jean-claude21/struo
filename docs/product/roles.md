@@ -16,7 +16,7 @@ Dernier pointage : 2026-11-21, à l'écran avec la démo, après les specs 050 �
 | Qu'est-ce qui est nouveau depuis ma dernière visite ? | Accueil « Nouveau depuis votre visite » | ✓ (051) |
 | Qu'est-ce qu'on attend de moi ? | Accueil « À faire » : avenants, étapes à valider, factures dues | ✓ (051) |
 | Que s'est-il passé cette semaine, en clair ? | Rapport client en sections, PDF | ✓ (050) |
-| Où en est l'argent ? Que dois-je régler, et comment ? | Factures : le point sur l'argent, « Comment payer », « J'ai payé » | ✓ (051) — PDF de chaque facture : à faire |
+| Où en est l'argent ? Que dois-je régler, et comment ? | Factures : le point sur l'argent, « Comment payer », « J'ai payé » | ✓ (051, PDF de chaque facture : 056) |
 | Puis-je poser une question sur ce que je vois ? | Messages, « Poser une question » depuis un rapport du terrain | ✓ (051) |
 | Suis-je prévenu sans ouvrir l'espace ? | Notifications sur le téléphone + e-mail | ✓ (051) |
 | Puis-je choisir ce que je reçois par e-mail ? | Accueil : « Recevoir aussi les nouvelles par e-mail » | ✓ (051) |

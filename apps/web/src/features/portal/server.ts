@@ -166,3 +166,17 @@ export const portalSetEmail = createServerFn({ method: 'POST' })
       return { ok: true };
     }),
   );
+
+/** Spec 056: one issued invoice of the client's site, to print or save as PDF (confirmed device only). */
+export const getPortalInvoice = createServerFn({ method: 'GET' })
+  .validator((input: { token: string; id: string }) => ({ token: tokenOf(input), id: String(input.id) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const link = await access(data.token);
+      if (link.requireCode && !link.verified) return { locked: true, invoice: null, logo: null };
+      if (!/^[0-9a-f-]{36}$/iu.test(data.id)) return { locked: false, invoice: null, logo: null };
+      const invoice = await core.portalInvoiceDocument(runtime().owner, core.hashToken(data.token), data.id);
+      const logo = invoice?.settings.logoKey ? `/api/files/logo/${invoice.org_id}?v=${encodeURIComponent(invoice.settings.logoKey.slice(-12))}` : null;
+      return { locked: false, invoice, logo };
+    }),
+  );
