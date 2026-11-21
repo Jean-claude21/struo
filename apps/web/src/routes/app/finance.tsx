@@ -1,4 +1,5 @@
 import { can } from '@struo/core/permissions';
+import { PaymentClaims } from '@/components/PaymentClaims.tsx';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { BellRing, Ban, Copy, Download, Eye, FileText, Kanban, Table2, TriangleAlert, Wallet } from 'lucide-react';
@@ -14,7 +15,8 @@ import { cancelInvoice, getFinance } from '@/features/office/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 
 export const Route = createFileRoute('/app/finance')({
-  validateSearch: (search: Record<string, unknown>): { new?: string; invoice?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { new?: string; invoice?: string; tab?: string } => ({
+    ...(typeof search.tab === 'string' ? { tab: search.tab } : {}),
     ...(typeof search.new === 'string' ? { new: search.new } : {}),
     ...(typeof search.invoice === 'string' ? { invoice: search.invoice } : {}),
   }),
@@ -43,7 +45,7 @@ function Finance() {
   const router = useRouter();
   const toast = useToast();
   const ago = useRelative();
-  const [tab, setTab] = useState<'invoices' | 'payments'>('invoices');
+  const [tab, setTab] = useState<'invoices' | 'payments' | 'claims'>(search.tab === 'claims' ? 'claims' : 'invoices');
   const [openId, setOpenId] = useState<string | null>(search.invoice ?? null);
   const [paying, setPaying] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<Invoice | null>(null);
@@ -143,7 +145,8 @@ function Finance() {
           ))}
         </div>
       </Panel>
-      <Tabs value={tab} onChange={setTab} items={[{ value: 'invoices', label: `${t('fin.invoicesTab')} · ${data.invoices.length}` }, { value: 'payments', label: `${t('fin.paymentsTab')} · ${data.payments.length}` }]} />
+      <Tabs value={tab} onChange={setTab} items={[{ value: 'invoices', label: `${t('fin.invoicesTab')} · ${data.invoices.length}` }, { value: 'payments', label: `${t('fin.paymentsTab')} · ${data.payments.length}` }, { value: 'claims', label: `${t('claims.tab')} · ${data.claims.filter((claim) => claim.status === 'pending').length}` }]} />
+      {tab === 'claims' ? <PaymentClaims claims={data.claims} canWrite={canWrite} onDone={() => router.invalidate()} /> : null}
       {tab === 'invoices' ? (
         <div>
           <ViewToolbar rows={data.invoices} fields={fields} state={view.state} update={view.update} columns={view.state.mode === 'table'}

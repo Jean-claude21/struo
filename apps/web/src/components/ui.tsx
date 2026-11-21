@@ -5,7 +5,7 @@ import { Modal } from './kit.tsx';
 
 // ---------------------------------------------------------------- formatting
 
-const decimalsOf = (currency: string) => {
+export const decimalsOf = (currency: string) => {
   try {
     return new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 0;
   } catch {

@@ -107,6 +107,8 @@ export const en: Catalog = {
     invalid_amount: 'Invalid amount.',
     portal_link_invalid: 'This link is no longer valid.',
     nothing_to_pay: 'Nothing to pay on this invoice.',
+    claim_pending: 'A payment is already reported on this invoice: the company will confirm it.',
+    claim_decided: 'This payment was already handled.',
     payment_unavailable: 'Online payment is not enabled by the company.',
     report_sent: 'This report was already sent: it is frozen.',
     client_email_missing: 'The client has no e-mail address: invite them from the « Client » tab.',

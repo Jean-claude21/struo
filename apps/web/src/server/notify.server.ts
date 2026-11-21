@@ -6,6 +6,7 @@ import { translate, type Locale } from '@/i18n/index.tsx';
 import { outboundAllowed } from './demo.server.ts';
 import { mailMessage } from './mail.server.ts';
 import { reportError } from './monitor.server.ts';
+import { sendPush } from './push.server.ts';
 import { draftSections } from './report.server.ts';
 import type { Runtime } from './runtime.server.ts';
 
@@ -57,7 +58,8 @@ export async function notifyChangeOrderSent(rt: Runtime, actor: core.Actor, chan
          left join lateral (select * from portal_link x where x.project_id = c.project_id and x.revoked_at is null order by x.created_at desc limit 1) l on true
         where c.id = $1 and c.org_id = $2`, [changeOrderId, actor.orgId]);
     const order = rows[0];
-    if (!order?.email) return false;
+    void notifyClient(rt, actor.orgId, order?.projectId ?? '', 'change', { n: order?.number ?? 0 });
+    if (!order?.email || (await core.clientOptedOut(rt.owner, order.projectId))) return false;
     const locale = await companyLocale(rt, actor.orgId);
     const url = portalUrl(rt, order.tokenEnc);
     await rt.mailer.send(mailMessage(locale, order.email, translate(locale, 'notify.change.subject', { project: order.project, company: order.company }), {
@@ -93,7 +95,8 @@ export async function deliverClientReport(rt: Runtime, actor: core.Actor, id: st
   if (!contact?.contactEmail) throw new core.DomainError('client_email_missing', 422);
   const report = await core.sendClientReportDraft(rt.db, actor, id, contact.contactEmail);
   const base = portalUrl(rt, contact.tokenEnc);
-  const outbound = await outboundAllowed(rt, actor.orgId);
+  const outbound = await outboundAllowed(rt, actor.orgId) && !(await core.clientOptedOut(rt.owner, draft.projectId));
+  void notifyClient(rt, actor.orgId, draft.projectId, 'report', { reportId: id });
   if (outbound) {
     await mailClientReport(rt, { locale: await companyLocale(rt, actor.orgId), to: contact.contactEmail, contactName: contact.contactName, company: report.company.name,
       project: report.project.name, from: report.period.from, to_: report.period.to, url: base ? `${base}/report/${id}` : null });
@@ -120,7 +123,8 @@ export async function runClientReports(rt: Runtime, now: Date, localClock: (time
       const id = await core.saveAutomaticClientReport(rt.owner, { orgId: target.orgId, projectId: target.projectId, from, to, sections, sentTo: target.autoSend ? target.email : null });
       if (target.autoSend) {
         const base = portalUrl(rt, target.tokenEnc);
-        await mailClientReport(rt, { locale: target.locale, to: target.email, contactName: target.contactName, company: target.company, project: target.projectName, from, to_: to, url: base ? `${base}/report/${id}` : null });
+        await notifyClient(rt, target.orgId, target.projectId, 'report', { reportId: id });
+        if (!(await core.clientOptedOut(rt.owner, target.projectId))) await mailClientReport(rt, { locale: target.locale, to: target.email, contactName: target.contactName, company: target.company, project: target.projectName, from, to_: to, url: base ? `${base}/report/${id}` : null });
       } else if (target.officeEmail) {
         await mailReportReady(rt, { locale: target.locale, to: target.officeEmail, code: target.projectCode, project: target.projectName, projectId: target.projectId, from, to_: to });
       }
@@ -142,4 +146,74 @@ async function mailReportReady(rt: Runtime, input: { locale: Locale; to: string;
     button: { label: translate(input.locale, 'reportDraft.readyMail.button'), url: `${rt.env.APP_BASE_URL}/app/projects/${input.projectId}?tab=report` },
     footnote: translate(input.locale, 'reportDraft.readyMail.why'),
   }, rt.env.APP_BASE_URL));
+}
+
+// ---------------------------------------------------------------- the client's phone and inbox (spec 051)
+
+export type ClientEvent = 'report' | 'change' | 'milestone' | 'invoice' | 'message' | 'paymentOk' | 'paymentNo';
+
+/**
+ * Tells the client something new waits in their space: a notification on their phone when they
+ * accepted them, and — for what needs them (an invoice, a stage to sign off, a refused payment) —
+ * an e-mail unless they opted out. The report and change order e-mails are sent by their own doors.
+ */
+export async function notifyClient(rt: Runtime, orgId: string, projectId: string, event: ClientEvent, params: Record<string, string | number> & { reportId?: string } = {}): Promise<void> {
+  try {
+    if (!projectId || !(await outboundAllowed(rt, orgId))) return;
+    const targets = await core.portalPushTargets(rt.owner, projectId);
+    for (const target of targets) {
+      const base = portalUrl(rt, target.tokenEnc);
+      if (!base) continue;
+      await sendPush(rt, [target], {
+        title: translate(target.locale, `clientPush.${event}.title`, params),
+        body: translate(target.locale, `clientPush.${event}.body`, params),
+        url: params.reportId ? `${base}/report/${params.reportId}` : base,
+        tag: `${event}:${projectId}`,
+      });
+    }
+    if (!['invoice', 'milestone', 'paymentNo'].includes(event)) return;
+    for (const recipient of await core.clientRecipients(rt.owner, projectId)) {
+      const url = portalUrl(rt, recipient.tokenEnc);
+      const values = { ...params, company: recipient.company, project: recipient.project, name: recipient.contactName ?? '' };
+      await rt.mailer.send(mailMessage(recipient.locale, recipient.email, translate(recipient.locale, `clientPush.${event}.subject`, values), {
+        preheader: translate(recipient.locale, `clientPush.${event}.body`, values),
+        title: translate(recipient.locale, `clientPush.${event}.title`, values),
+        paragraphs: [translate(recipient.locale, `clientPush.${event}.mail`, values), ...(url ? [] : [translate(recipient.locale, 'notify.noLink')])],
+        ...(url ? { button: { label: translate(recipient.locale, 'clientPush.open'), url } } : {}),
+        footnote: translate(recipient.locale, 'clientPush.why', { company: recipient.company }),
+      }, rt.env.APP_BASE_URL));
+    }
+  } catch (error) {
+    reportError(error, { where: `notify:client:${event}` });
+  }
+}
+
+/** Tells the people who handle money that a client declares a payment (e-mail and phone). */
+export async function notifyClaimDeclared(rt: Runtime, orgId: string, projectId: string): Promise<void> {
+  try {
+    if (!(await outboundAllowed(rt, orgId))) return;
+    const { rows } = await rt.owner.query<{ userId: string; email: string; code: string; project: string; client: string | null }>(
+      `select u.id as "userId", u.email, p.code, p.name as project, c.name as client
+         from member m join "user" u on u.id = m."userId" join project p on p.id = $2 left join client c on c.id = p.client_id
+        where m."organizationId" = $1 and m.role in ('owner', 'admin', 'accountant')`, [orgId, projectId]);
+    if (!rows.length) return;
+    const locale = await companyLocale(rt, orgId);
+    const first = rows[0]!;
+    const values = { code: first.code, project: first.project, client: first.client ?? '' };
+    const url = `${rt.env.APP_BASE_URL}/app/finance?tab=claims`;
+    await sendPush(rt, await core.memberPushTargets(rt.owner, orgId, rows.map((row) => row.userId)), {
+      title: translate(locale, 'claims.push.title'), body: translate(locale, 'claims.push.body', values), url, tag: `claim:${projectId}`,
+    });
+    for (const row of rows) {
+      await rt.mailer.send(mailMessage(locale, row.email, translate(locale, 'claims.mail.subject', values), {
+        preheader: translate(locale, 'claims.push.body', values),
+        title: translate(locale, 'claims.push.title'),
+        paragraphs: [translate(locale, 'claims.mail.body', values)],
+        button: { label: translate(locale, 'claims.mail.button'), url },
+        footnote: translate(locale, 'claims.mail.why'),
+      }, rt.env.APP_BASE_URL));
+    }
+  } catch (error) {
+    reportError(error, { where: 'notify:claim' });
+  }
 }

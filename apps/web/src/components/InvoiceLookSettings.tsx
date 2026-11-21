@@ -151,6 +151,8 @@ export function InvoiceLookSettings({ canWrite }: { canWrite: boolean }) {
           {input('mobileMoney', t('inv.mobileMoney'), { rows: 2, max: 300 })}
           {input('paymentTerms', t('inv.paymentTerms'), { rows: 2, hint: t('inv.paymentTermsHint') })}
           {input('footer', t('inv.footer'), { rows: 2 })}
+          {toggle('clientCanDeclare', t('inv.clientCanDeclare'))}
+          <span className="faint xsmall">{t('inv.paymentInSpace')}</span>
         </>)}
       </fieldset>
 

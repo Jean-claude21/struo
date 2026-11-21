@@ -30,3 +30,4 @@ export * from './work.ts';
 export * from './crew.ts';
 export * from './changes.ts';
 export * from './reports-client.ts';
+export * from './client-app.ts';

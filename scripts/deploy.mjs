@@ -52,6 +52,15 @@ const secret = (name, make) => {
   }
   return own[name];
 };
+const vapid = () => {
+  if (!own[`VAPID_PUBLIC_KEY_${ENV}`] || !own[`VAPID_PRIVATE_KEY_${ENV}`]) {
+    const require = createRequire(path.join(ROOT, 'apps/web/package.json'));
+    const keys = require('web-push').generateVAPIDKeys();
+    remember(`VAPID_PUBLIC_KEY_${ENV}`, keys.publicKey);
+    remember(`VAPID_PRIVATE_KEY_${ENV}`, keys.privateKey);
+  }
+  return { VAPID_PUBLIC_KEY: own[`VAPID_PUBLIC_KEY_${ENV}`], VAPID_PRIVATE_KEY: own[`VAPID_PRIVATE_KEY_${ENV}`] };
+};
 for (const name of ['NEON_API_TOKEN', 'COOLIFY_URL', 'COOLIFY_API_TOKEN']) {
   if (!admin[name]) throw new Error(`${name} is empty in ${ADMIN}.`);
 }
@@ -232,6 +241,8 @@ const variables = {
   ...(own.OPENAI_SIWC_CLIENT_ID ? { OPENAI_SIWC_CLIENT_ID: own.OPENAI_SIWC_CLIENT_ID } : {}),
   ...(own.OPENAI_SIWC_CLIENT_SECRET ? { OPENAI_SIWC_CLIENT_SECRET: own.OPENAI_SIWC_CLIENT_SECRET } : {}),
   // Subscriptions sold as licences on Chariow (spec 038).
+  // Phone notifications (spec 051): one VAPID key pair per environment, generated once.
+  ...vapid(),
   ...((own.CHARIOW_API_KEY || admin.CHARIOW_API_KEY) ? { CHARIOW_API_KEY: own.CHARIOW_API_KEY || admin.CHARIOW_API_KEY } : {}),
   // Monitoring (spec 041): errors from both environments; audience analytics in production only,
   // so tests on staging never count as visits.

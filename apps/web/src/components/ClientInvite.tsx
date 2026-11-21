@@ -9,7 +9,7 @@ import { useI18n } from '@/i18n/index.tsx';
 
 type Link = {
   id: string; revokedAt: string | null; lastSeenAt: string | null; contactName: string | null; contactEmail: string | null; contactPhone: string | null;
-  showPhotos: boolean; showPlanning: boolean; showFinance: boolean; showDocuments: boolean; showMessages: boolean; invitedAt: string | null; firstOpenedAt: string | null;
+  showPhotos: boolean; showPlanning: boolean; showFinance: boolean; showDocuments: boolean; showMessages: boolean; showFieldReports: boolean; invitedAt: string | null; firstOpenedAt: string | null;
 };
 
 export function ClientTab({ projectId, projectName, companyName, client, links, canManage }: {
@@ -53,7 +53,7 @@ export function ClientTab({ projectId, projectName, companyName, client, links, 
           ) : null}
           {active ? (
             <div className="chips">
-              {[['showPhotos', 'seePhotos'], ['showPlanning', 'seePlanning'], ['showFinance', 'seeFinance'], ['showDocuments', 'seeDocuments'], ['showMessages', 'seeMessages']]
+              {[['showPhotos', 'seePhotos'], ['showPlanning', 'seePlanning'], ['showFinance', 'seeFinance'], ['showDocuments', 'seeDocuments'], ['showMessages', 'seeMessages'], ['showFieldReports', 'seeFieldReports']]
                 .filter(([key]) => active[key as keyof Link]).map(([key, label]) => <span key={key} className="badge"><Eye size={12} />{t(`clientInvite.${label}` as 'clientInvite.seePhotos')}</span>)}
             </div>
           ) : null}
@@ -99,7 +99,7 @@ function InviteModal({ projectId, projectName, companyName, defaults, onClose, o
   const toast = useToast();
   const [channel, setChannel] = useState<'whatsapp' | 'email' | 'link'>(defaults.phone ? 'whatsapp' : 'email');
   const [contact, setContact] = useState(defaults);
-  const [show, setShow] = useState({ photos: true, planning: true, finance: true, documents: true, messages: true });
+  const [show, setShow] = useState({ photos: true, planning: true, finance: true, documents: true, messages: true, fieldReports: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const message = t('clientInvite.message', { name: contact.name, project: projectName, company: companyName, url: '…' });
@@ -128,7 +128,7 @@ function InviteModal({ projectId, projectName, companyName, defaults, onClose, o
     { value: 'email' as const, label: 'E-mail', icon: Mail },
     { value: 'link' as const, label: t('clientInvite.copyLink'), icon: Copy },
   ];
-  const toggles: [keyof typeof show, string][] = [['photos', 'seePhotos'], ['planning', 'seePlanning'], ['finance', 'seeFinance'], ['documents', 'seeDocuments'], ['messages', 'seeMessages']];
+  const toggles: [keyof typeof show, string][] = [['photos', 'seePhotos'], ['planning', 'seePlanning'], ['finance', 'seeFinance'], ['documents', 'seeDocuments'], ['messages', 'seeMessages'], ['fieldReports', 'seeFieldReports']];
   return (
     <Modal open wide onClose={onClose} title={t('clientInvite.title', { name: contact.name || '…' })}
       footer={(<><button type="button" className="btn secondary" onClick={onClose}>{t('app.cancel')}</button>

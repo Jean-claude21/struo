@@ -31,7 +31,7 @@ export interface InvoiceSettings {
   showClientContact: boolean; showSite: boolean; showPayments: boolean; showUnitColumns: boolean;
   titles: Partial<Record<'advance' | 'progress' | 'final', string>>; customFields: CustomField[];
   // The client report (spec 049).
-  reportIntro: string | null; reportPhotos: number; reportShowProgress: boolean; reportShowMilestones: boolean; reportShowChanges: boolean; reportWeekly: boolean; reportAutoSend: boolean;
+  reportIntro: string | null; reportPhotos: number; reportShowProgress: boolean; reportShowMilestones: boolean; reportShowChanges: boolean; reportWeekly: boolean; reportAutoSend: boolean; clientCanDeclare: boolean;
 }
 
 const SETTINGS_COLUMNS = {
@@ -43,7 +43,7 @@ const SETTINGS_COLUMNS = {
   showClientContact: 'show_client_contact', showSite: 'show_site', showPayments: 'show_payments', showUnitColumns: 'show_unit_columns',
   titles: 'titles', customFields: 'custom_fields',
   reportIntro: 'report_intro', reportPhotos: 'report_photos', reportShowProgress: 'report_show_progress', reportShowMilestones: 'report_show_milestones',
-  reportShowChanges: 'report_show_changes', reportWeekly: 'report_weekly', reportAutoSend: 'report_auto_send',
+  reportShowChanges: 'report_show_changes', reportWeekly: 'report_weekly', reportAutoSend: 'report_auto_send', clientCanDeclare: 'client_can_declare',
 } as const;
 /** Columns the settings form writes (the logo has its own door). */
 type Writable = Exclude<keyof InvoiceSettings, 'logoKey'>;
@@ -54,7 +54,7 @@ const DEFAULT_SETTINGS: InvoiceSettings = {
   phone: null, email: null, bankDetails: null, mobileMoney: null, paymentTerms: null, footer: null,
   logoKey: null, template: 'classic', accentColor: null, logoPosition: 'left', logoHeight: 56, font: 'sans', showAmountWords: true, showSignature: false,
   signerName: null, signerTitle: null, showClientContact: true, showSite: true, showPayments: true, showUnitColumns: true, titles: {}, customFields: [],
-  reportIntro: null, reportPhotos: 8, reportShowProgress: true, reportShowMilestones: true, reportShowChanges: true, reportWeekly: false, reportAutoSend: false,
+  reportIntro: null, reportPhotos: 8, reportShowProgress: true, reportShowMilestones: true, reportShowChanges: true, reportWeekly: false, reportAutoSend: false, clientCanDeclare: true,
 };
 
 export async function readSettings(tx: Tx, orgId: string): Promise<InvoiceSettings> {
@@ -80,7 +80,7 @@ const settingsInput = z.object({
   titles: z.object({ advance: z.string().trim().max(80).optional(), progress: z.string().trim().max(80).optional(), final: z.string().trim().max(80).optional() }),
   customFields: z.array(z.object({ label: z.string().trim().min(1).max(60), value: z.string().trim().max(200) })).max(12),
   reportIntro: text(1000), reportPhotos: z.number().int().min(0).max(24), reportShowProgress: z.boolean(), reportShowMilestones: z.boolean(),
-  reportShowChanges: z.boolean(), reportWeekly: z.boolean(), reportAutoSend: z.boolean(),
+  reportShowChanges: z.boolean(), reportWeekly: z.boolean(), reportAutoSend: z.boolean(), clientCanDeclare: z.boolean(),
 }).partial();
 
 export async function updateInvoiceSettings(db: Db, actor: Actor, input: unknown): Promise<void> {

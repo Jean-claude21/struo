@@ -42,15 +42,27 @@ export const getPortal = createServerFn({ method: 'GET' })
           maskedEmail: link.contactEmail ? core.maskEmail(link.contactEmail) : null,
         };
       }
-      const reports = link.show.photos ? await core.portalReports(db, data.token) : [];
-      // Spec 048: the change orders sent to the client, to accept or refuse.
-      const changeOrders = link.show.finance ? await core.portalChangeOrders(db, data.token) : [];
-      // Spec 049: the reports the company sent.
-      const clientReports = await core.portalClientReports(runtime().owner, data.token);
+      const { owner, env } = runtime();
+      // Spec 051: when the client came before (« new since your visit »), their e-mail choice.
+      const visit = await core.portalVisit(owner, data.token);
+      const [reports, changeOrders, clientReports, news, money, howToPay, claims] = await Promise.all([
+        // Raw field reports only when the company chose to show them (spec 051).
+        link.show.photos && visit.showFieldReports ? core.portalReports(db, data.token) : Promise.resolve([]),
+        // Spec 048: the change orders sent to the client, to accept or refuse.
+        link.show.finance ? core.portalChangeOrders(db, data.token) : Promise.resolve([]),
+        // Spec 049: the reports the company sent.
+        core.portalClientReports(owner, data.token),
+        core.portalNews(owner, data.token, visit.since),
+        core.portalMoney(owner, data.token),
+        link.show.finance ? core.portalPaymentInstructions(owner, data.token) : Promise.resolve(null),
+        link.show.finance ? core.portalPaymentClaims(owner, data.token) : Promise.resolve([]),
+      ]);
       return {
         gate: false as const,
         show: link.show,
         contactName: link.contactName,
+        since: visit.since, news, money, howToPay, claims, emailOptOut: visit.emailOptOut, showFieldReports: visit.showFieldReports,
+        pushKey: env.VAPID_PUBLIC_KEY || null,
         view: {
           ...view,
           photos: link.show.photos ? view.photos : [],
@@ -130,3 +142,27 @@ export const portalMessage = createServerFn({ method: 'POST' })
     }),
   );
 
+
+/** Spec 051: the client's phone accepts notifications for this link. */
+export const portalSubscribePush = createServerFn({ method: 'POST' })
+  .validator((input: { token: string; subscription: unknown }) => ({ token: tokenOf(input), subscription: input.subscription }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const link = await access(data.token);
+      if (!link.verified) throw new core.DomainError('forbidden', 403);
+      await core.savePortalPush(runtime().owner, data.token, data.subscription);
+      return { ok: true };
+    }),
+  );
+
+/** Spec 051: the client chooses whether they receive news by e-mail. */
+export const portalSetEmail = createServerFn({ method: 'POST' })
+  .validator((input: { token: string; optOut: boolean }) => ({ token: tokenOf(input), optOut: Boolean(input.optOut) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const link = await access(data.token);
+      if (!link.verified) throw new core.DomainError('forbidden', 403);
+      await core.setPortalEmailOptOut(runtime().owner, data.token, data.optOut);
+      return { ok: true };
+    }),
+  );
