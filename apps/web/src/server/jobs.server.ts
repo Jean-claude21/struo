@@ -1,6 +1,7 @@
 import { companyKpis, digestRecipients, getSettings, listAlerts, markNotified, reportRecipients, resolveActor, type Alert } from '@struo/core';
 import { translate } from '@/i18n/index.tsx';
 import { refillDemoPool } from './demo.server.ts';
+import { runClientReports } from './notify.server.ts';
 import { monitorJob, reportError } from './monitor.server.ts';
 import type { Runtime } from './runtime.server.ts';
 
@@ -174,6 +175,8 @@ export function startJobs(rt: Runtime): void {
       // The digest and the reports leave from 7:00 in each company's own time zone.
       await runDigest(rt).catch((error: unknown) => reportError(error, { where: 'job:digest' }));
       await runReports(rt).catch((error: unknown) => reportError(error, { where: 'job:reports' }));
+      // Spec 049: the weekly client report, Monday morning, for the companies that chose it.
+      await runClientReports(rt, new Date(), localClock).catch((error: unknown) => reportError(error, { where: 'job:client-reports' }));
     }).catch((error: unknown) => reportError(error, { where: 'jobs' }));
   };
   setTimeout(tick, 30_000).unref?.();

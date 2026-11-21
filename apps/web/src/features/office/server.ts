@@ -6,6 +6,7 @@ import { translate } from '@/i18n/index.tsx';
 import { guarded, requestLocale, requireActor } from '@/server/context.server.ts';
 import { alertText } from '@/server/jobs.server.ts';
 import { outboundAllowed } from '@/server/demo.server.ts';
+import { mailClientReport, notifyChangeOrderSent, notifyTaskAssigned, portalUrl } from '@/server/notify.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 import { forecast, RAIN_LIMIT } from '@/server/weather.server.ts';
 
@@ -509,6 +510,7 @@ export const createPortalLink = createServerFn({ method: 'POST' })
   .handler(({ data }) =>
     act(async (actor) => {
       const link = await core.createPortalLink(runtime().db, actor, data.projectId, data.label);
+      await core.sealPortalToken(runtime().db, actor, link.id, runtime().secrets.seal(link.token));
       return { ...link, url: `${runtime().env.APP_BASE_URL}/portal/${link.token}` };
     }),
   );
@@ -533,6 +535,8 @@ export const inviteClient = createServerFn({ method: 'POST' })
         if (!old.revokedAt) await core.revokePortalLink(db, actor, old.id);
       }
       const link = await core.createPortalLink(db, actor, data.projectId, data.contactName || undefined);
+      // Spec 049: kept sealed so the client report and change orders can carry the link later.
+      await core.sealPortalToken(db, actor, link.id, runtime().secrets.seal(link.token));
       await core.updatePortalLink(db, actor, link.id, {
         contactName: data.contactName || null, contactEmail: data.contactEmail || null, contactPhone: data.contactPhone || null, requireCode: true,
         showPhotos: data.show.photos, showPlanning: data.show.planning, showFinance: data.show.finance, showDocuments: data.show.documents,
@@ -577,11 +581,19 @@ export const getTasks = createServerFn({ method: 'GET' })
 
 export const createTask = createServerFn({ method: 'POST' })
   .validator(any)
-  .handler(({ data }) => act((actor) => core.createTask(runtime().db, actor, data)));
+  .handler(({ data }) => act(async (actor) => {
+    const task = await core.createTask(runtime().db, actor, data);
+    // Spec 049: the person it is given to is told.
+    if (data.assigneeId) await notifyTaskAssigned(runtime(), actor, task.id);
+    return task;
+  }));
 
 export const updateTask = createServerFn({ method: 'POST' })
   .validator((input: { id: string; patch: Record<string, unknown> }) => input)
-  .handler(({ data }) => act((actor) => core.updateTask(runtime().db, actor, data.id, data.patch)));
+  .handler(({ data }) => act(async (actor) => {
+    await core.updateTask(runtime().db, actor, data.id, data.patch);
+    if (data.patch.assigneeId) await notifyTaskAssigned(runtime(), actor, data.id);
+  }));
 
 export const removeTask = createServerFn({ method: 'POST' })
   .validator(idOf)
@@ -650,7 +662,11 @@ export const createChangeOrder = createServerFn({ method: 'POST' })
 
 export const sendChangeOrder = createServerFn({ method: 'POST' })
   .validator(idOf)
-  .handler(({ data }) => act((actor) => core.sendChangeOrder(runtime().db, actor, data.id)));
+  .handler(({ data }) => act(async (actor) => {
+    await core.sendChangeOrder(runtime().db, actor, data.id);
+    // Spec 049: the client is told a change order waits for their answer.
+    return { notified: await notifyChangeOrderSent(runtime(), actor, data.id) };
+  }));
 
 export const decideChangeOrder = createServerFn({ method: 'POST' })
   .validator((input: { id: string; accept: boolean; decidedBy: string }) => input)
@@ -669,6 +685,44 @@ export const getSiteDay = createServerFn({ method: 'GET' })
     const { db } = runtime();
     const [journal, settings] = await Promise.all([core.siteDay(db, actor, data.projectId, data.day), core.getSettings(db, actor)]);
     return { ...journal, company: settings.name, orgId: actor.orgId };
+  }));
+
+// ---------------------------------------------------------------- client report (spec 049)
+
+export const getClientReportTab = createServerFn({ method: 'GET' })
+  .validator((input: { projectId: string }) => input)
+  .handler(({ data }) => act(async (actor) => {
+    const { db } = runtime();
+    const [contact, reports, look] = await Promise.all([core.portalContact(db, actor, data.projectId), core.listClientReports(db, actor, data.projectId), core.getInvoiceSettings(db, actor)]);
+    return {
+      contact: contact ? { name: contact.contactName, email: contact.contactEmail, hasLink: Boolean(contact.tokenEnc) } : null,
+      reports, weekly: look.reportWeekly, canSend: ['owner', 'admin', 'engineer'].includes(actor.role),
+    };
+  }));
+
+export const previewClientReport = createServerFn({ method: 'GET' })
+  .validator((input: { projectId: string; from: string; to: string; note?: string | null }) => input)
+  .handler(({ data }) => act(async (actor) => {
+    const report = await core.clientReport(runtime().db, actor, data.projectId, { from: data.from, to: data.to }, data.note ?? null);
+    return { report, orgId: actor.orgId };
+  }));
+
+export const sendClientReport = createServerFn({ method: 'POST' })
+  .validator((input: { projectId: string; from: string; to: string; note?: string | null }) => input)
+  .handler(({ data }) => act(async (actor) => {
+    const rt = runtime();
+    const contact = await core.portalContact(rt.db, actor, data.projectId);
+    if (!contact?.contactEmail) throw new core.DomainError('client_email_missing', 422);
+    const report = await core.clientReport(rt.db, actor, data.projectId, { from: data.from, to: data.to });
+    const { id } = await core.saveClientReport(rt.db, actor, { ...data, sentTo: contact.contactEmail });
+    const base = portalUrl(rt, contact.tokenEnc);
+    const sent = await outboundAllowed(rt, actor.orgId);
+    if (sent) {
+      const settings = await core.getSettings(rt.db, actor);
+      await mailClientReport(rt, { locale: settings.locale === 'en' ? 'en' : 'fr', to: contact.contactEmail, contactName: contact.contactName, company: report.company.name,
+        project: report.project.name, from: data.from, to_: data.to, url: base ? `${base}/report/${id}` : null });
+    }
+    return { id, mailed: sent && rt.mailer.configured, withLink: Boolean(base) };
   }));
 
 // ---------------------------------------------------------------- alerts as text (assistants)

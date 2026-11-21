@@ -46,6 +46,8 @@ export const getPortal = createServerFn({ method: 'GET' })
       const reports = link.show.photos ? await core.portalReports(db, data.token) : [];
       // Spec 048: the change orders sent to the client, to accept or refuse.
       const changeOrders = link.show.finance ? await core.portalChangeOrders(db, data.token) : [];
+      // Spec 049: the reports the company sent.
+      const clientReports = await core.portalClientReports(runtime().owner, data.token);
       return {
         gate: false as const,
         show: link.show,
@@ -60,6 +62,7 @@ export const getPortal = createServerFn({ method: 'GET' })
         },
         reports,
         changeOrders,
+        clientReports,
       };
     }),
   );
@@ -93,6 +96,18 @@ export const portalVerifyCode = createServerFn({ method: 'POST' })
         path: '/', httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365, secure: runtime().env.APP_BASE_URL.startsWith('https://'),
       });
       return { ok: true };
+    }),
+  );
+
+/** Spec 049: one client report, in the company's look (only on a confirmed device). */
+export const getPortalReport = createServerFn({ method: 'GET' })
+  .validator((input: { token: string; id: string }) => ({ token: tokenOf(input), id: String(input.id) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const link = await access(data.token);
+      if (link.requireCode && !link.verified) return null;
+      const report = await core.portalClientReport(runtime().owner, data.token, data.id);
+      return report ? { report, orgId: link.orgId } : null;
     }),
   );
 

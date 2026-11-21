@@ -688,6 +688,8 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
     if (status === 'accepted') await core.decideChangeOrder(app, actors.jean, id, { accept: true, decidedBy: site === 'KC-01' ? 'Kodjo Amegah' : 'SCI Les Cocotiers' });
   }
   log(`change orders: ${CHANGES.length}`);
+  // Spec 049: last week's client report, already sent to the KC-01 client.
+  if (ids['KC-01']) await core.saveClientReport(app, actors.jean, { projectId: ids['KC-01'], from: day(-7), to: day(-1), note: 'Les gouttières sont posées côté nord ; la couverture avance comme prévu.', sentTo: 'client.demo@struo.test' });
 
   // ---------------------------------------------------------------- crew, presences, subcontractors (spec 047)
   const CREW: [string, string, number, string][] = [
