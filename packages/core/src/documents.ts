@@ -86,7 +86,8 @@ export async function addDocument(db: Db, actor: Actor, input: unknown): Promise
       `insert into project_document (org_id, project_id, doc_type_id, title, status, reference, issued_on, expires_on,
                                      shared_with_client, note, family)
        values ($1, $2, $3, $4, coalesce($5, case when $3::uuid is null then 'valid' else 'pending' end), $6, $7, $8, $9, $10,
-               coalesce($11, case when exists (select 1 from doc_type where id = $3 and required) then 'admin' else 'other' end)) returning id`,
+               coalesce($11, case when exists (select 1 from doc_type where id = $3 and name ~* '(contrat|devis|march[ée]|avenant|contract|quote|agreement)') then 'contract'
+                            when exists (select 1 from doc_type where id = $3 and required) then 'admin' else 'other' end)) returning id`,
       [actor.orgId, data.projectId, data.docTypeId ?? null, data.title, data.status ?? null, data.reference ?? null,
         data.issuedOn ?? null, data.expiresOn ?? null, data.sharedWithClient, data.note ?? null, data.family ?? null],
     );

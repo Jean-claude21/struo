@@ -56,6 +56,7 @@ real external account · ⏳ next.
 | 051 | `051-client-app` | The client's application: home with new-since-visit and to-do, reports and photos by stage, money and how to pay, « I paid » confirmed by the accountant, e-mail choice, installable space and phone notifications | 🟡 for review | `client-app.test.ts` |
 | 052 | `052-field-office` | Field ↔ office: phone notifications for the team (tasks, reports, incidents, thread, material), field Office tab with the site thread and material requests (offline), office queue of requests | 🟡 for review | `field-office.test.ts` |
 | 053 | `053-cash-forecast` | Supplier bills to pay (paid → site expense), cash forecast at 30/60/90 days from recorded money (late invoices apart, to-invoice estimate, recent pace), owner's home tile, MCP tools | 🟡 for review | `cash.test.ts` |
+| 054 | `054-role-review` | Every role walked on screen: demo names no real place, believable cash story, contracts and required documents filed by kind | 🟡 for review | `client-trust.test.ts` |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

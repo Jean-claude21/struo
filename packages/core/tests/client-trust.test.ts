@@ -42,5 +42,10 @@ describe('what reaches the client (spec 050, step 0)', () => {
     const documents = await listDocuments(db.app, owner, { projectId });
     expect(documents.find((doc) => doc.id === id)).toMatchObject({ family: 'contract', status: 'valid' });
     expect(documents.find((doc) => doc.id === typed)?.status).toBe('missing');
+    // The required documents of a new site are filed by kind: never shown with the drawings.
+    const required = documents.filter((doc) => doc.required);
+    expect(required.length).toBeGreaterThan(0);
+    expect(required.every((doc) => doc.family !== 'other')).toBe(true);
+    for (const doc of required.filter((item) => /contrat|contract/iu.test(item.title))) expect(doc.family).toBe('contract');
   });
 });

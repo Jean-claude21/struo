@@ -1,4 +1,4 @@
-// The demo company (fictional): « Kekeli Construction SARL », a building company in Lomé with a team
+// The demo company (fictional): « Kekeli Construction SARL », a building company with a team
 // of seven, nine sites at every stage, twelve months of field reports with photos, validated
 // progress, invoices, payments, reminders, expenses, milestones with dependencies, documents,
 // incidents, deliveries, checklists, signed reports and client spaces with messages.
@@ -126,9 +126,9 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
   uploadedTo.add(storage);
   await core.setCompanyLogo(app, boss, logoKey, `/api/files/logo/${orgId}`);
   await core.updateInvoiceSettings(app, boss, {
-    legalName: 'Kekeli Construction SARL', taxId: '1000000000 (fictif)', tradeRegister: 'TG-LOM-0000-B-00000 (fictif)',
-    address: 'Boulevard du 13 Janvier, Lomé, Togo', phone: '+228 22 00 00 00', email: 'facturation@kekeli.example.test',
-    bankDetails: 'Banque exemple — compte fictif\nTitulaire : Kekeli Construction SARL', mobileMoney: 'T-Money / Flooz : +228 90 00 00 00 (fictif)',
+    legalName: 'Kekeli Construction SARL', taxId: '1000000000 (fictif)', tradeRegister: 'RC 0000-B-00000 (fictif)',
+    address: '12 avenue des Bâtisseurs, Centre-ville', phone: '22 00 00 00', email: 'facturation@kekeli.example.test',
+    bankDetails: 'Banque exemple — compte fictif\nTitulaire : Kekeli Construction SARL', mobileMoney: 'Paiement mobile : 90 00 00 00 (fictif)',
     paymentTerms: 'Paiement à 30 jours par virement ou mobile money. Retenue de garantie libérée à la réception définitive.',
     footer: 'Kekeli Construction SARL — société fictive de démonstration Struo',
     template: 'classic', accentColor: '#e8590c', showSignature: true, signerName: 'Afi Mensah', signerTitle: 'Gérante',
@@ -139,14 +139,14 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
   const client = async (name: string, kind: 'individual' | 'company' | 'public', phone: string, email: string | null) =>
     (await core.createClient(app, boss, { name, kind, phone, email })).id;
   const clients = {
-    amegah: await client('M. Kodjo Amegah', 'individual', '+228 90 11 22 33', 'k.amegah@example.test'),
-    cocotiers: await client('SCI Les Cocotiers', 'company', '+228 22 21 40 50', 'gerance@cocotiers.example.test'),
-    commune: await client('Commune du Golfe 5', 'public', '+228 22 25 10 12', 'services.techniques@golfe5.example.test'),
-    golfe: await client('Logistique du Golfe SA', 'company', '+228 22 27 33 90', 'achats@logistique-golfe.example.test'),
-    grace: await client('Association Sainte-Grâce', 'company', '+228 92 40 18 61', 'direction@saintegrace.example.test'),
-    ong: await client('ONG Eau Vive Togo', 'company', '+228 22 61 77 05', 'admin@eauvive.example.test'),
-    kossi: await client('Mme Ablavi Kossi', 'individual', '+228 91 45 67 89', 'ablavi.kossi@example.test'),
-    immo: await client('Immo Plus SARL', 'company', '+228 22 50 60 70', 'direction@immoplus.example.test'),
+    amegah: await client('M. Kodjo Amegah', 'individual', '90 11 22 33', 'k.amegah@example.test'),
+    cocotiers: await client('SCI Les Cocotiers', 'company', '22 21 40 50', 'gerance@cocotiers.example.test'),
+    commune: await client('Commune de Bellevue', 'public', '22 25 10 12', 'services.techniques@bellevue.example.test'),
+    golfe: await client('Logistique du Golfe SA', 'company', '22 27 33 90', 'achats@logistique-golfe.example.test'),
+    grace: await client('Association Sainte-Grâce', 'company', '92 40 18 61', 'direction@saintegrace.example.test'),
+    ong: await client('ONG Eau Vive', 'company', '22 61 77 05', 'admin@eauvive.example.test'),
+    kossi: await client('Mme Ablavi Kossi', 'individual', '91 45 67 89', 'ablavi.kossi@example.test'),
+    immo: await client('Immo Plus SARL', 'company', '22 50 60 70', 'direction@immoplus.example.test'),
   };
 
   // ---------------------------------------------------------------- sites
@@ -159,31 +159,31 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
     lead: Person; engineer: Person; photos: string[][]; lastReport?: number; reportEvery: [number, number];
   }
   const SITES: SiteSpec[] = [
-    { code: 'KC-01', name: 'Villa R+1 Amegah', type: 'Rés', client: clients.amegah, location: 'Lomé, Agoè-Nyivé', lat: 6.2279, lng: 1.2114,
+    { code: 'KC-01', name: 'Villa R+1 Amegah', type: 'Rés', client: clients.amegah, location: 'Quartier Nord', lat: 6.2279, lng: 1.2114,
       start: -200, end: 60, status: 'active', budget: 68 * M, progress: [100, 100, 92, 35, 0], lead: 'komi', engineer: 'jean', reportEvery: [2, 4],
       photos: [['m01-site-meeting'], ['f01-excavation', 'f02-rebar-footings', 'f03-footing-pour', 'f04-ground-beam'], ['e01-block-walls', 'e02-column-formwork', 'e03-slab-formwork', 'e04-slab-pour', 'e05-villa-frame'], ['t03-timber-roof', 't02-roof-sheets', 'e05-villa-frame'], ['s02-plastering']] },
-    { code: 'KC-02', name: 'Immeuble R+4 Les Cocotiers', type: 'Rés', client: clients.cocotiers, location: 'Lomé, Bè-Kpota', lat: 6.1462, lng: 1.2402,
+    { code: 'KC-02', name: 'Immeuble R+4 Les Cocotiers', type: 'Rés', client: clients.cocotiers, location: 'Quartier du Lac', lat: 6.1462, lng: 1.2402,
       start: -260, end: 200, status: 'active', budget: 420 * M, progress: [100, 100, 52, 0, 0], lead: 'yao', engineer: 'jean', reportEvery: [1, 3],
       photos: [['m01-site-meeting'], ['f01-excavation', 'f02-rebar-footings', 'f03-footing-pour'], ['i01-building-r4-frame', 'i02-r4-rebar-columns', 'e03-slab-formwork', 'e04-slab-pour', 'e02-column-formwork'], [], []] },
-    { code: 'KC-03', name: 'École primaire 6 classes', type: 'Ins', client: clients.commune, location: 'Lomé, Adidogomé', lat: 6.1709, lng: 1.1897,
+    { code: 'KC-03', name: 'École primaire 6 classes', type: 'Ins', client: clients.commune, location: 'Quartier Ouest', lat: 6.1709, lng: 1.1897,
       start: -240, end: 20, status: 'active', budget: 96 * M, progress: [100, 100, 100, 100, 70], lead: 'komi', engineer: 'jean', reportEvery: [2, 5],
       photos: [[], ['f03-footing-pour', 'f04-ground-beam'], ['e01-block-walls', 'e02-column-formwork'], ['t03-timber-roof'], ['s01-school-facade', 's02-plastering', 's03-tiling', 's04-painting', 's05-aluminium-windows']] },
-    { code: 'KC-04', name: 'Entrepôt logistique zone portuaire', type: 'Com', client: clients.golfe, location: 'Lomé, Zone portuaire', lat: 6.1319, lng: 1.2885,
+    { code: 'KC-04', name: 'Entrepôt logistique zone portuaire', type: 'Com', client: clients.golfe, location: 'Zone portuaire', lat: 6.1319, lng: 1.2885,
       start: -150, end: 90, status: 'active', budget: 185 * M, progress: [100, 100, 80, 15, 0], lead: 'edem', engineer: 'jean', reportEvery: [2, 4],
       photos: [[], ['f02-rebar-footings', 'f04-ground-beam'], ['t01-steel-frame', 'e04-slab-pour'], ['t02-roof-sheets'], []] },
-    { code: 'KC-05', name: 'Clinique Sainte-Grâce', type: 'Ins', client: clients.grace, location: 'Lomé, Kégué', lat: 6.1867, lng: 1.2353,
+    { code: 'KC-05', name: 'Clinique Sainte-Grâce', type: 'Ins', client: clients.grace, location: 'Quartier Est', lat: 6.1867, lng: 1.2353,
       start: -45, end: 300, status: 'active', budget: 260 * M, progress: [100, 20, 0, 0, 0], lead: 'yao', engineer: 'mawuli', reportEvery: [2, 3],
       photos: [['c02-site-board', 'm01-site-meeting'], ['c01-clinic-earthworks', 'f01-excavation', 'i04-rain-water', 'f02-rebar-footings'], [], [], []] },
-    { code: 'KC-06', name: 'Réhabilitation bureaux ONG Eau Vive', type: 'Rén', client: clients.ong, location: 'Lomé, Tokoin', lat: 6.1556, lng: 1.2236,
+    { code: 'KC-06', name: 'Réhabilitation bureaux ONG Eau Vive', type: 'Rén', client: clients.ong, location: 'Centre-ville', lat: 6.1556, lng: 1.2236,
       start: -300, end: -40, status: 'done', budget: 38 * M, progress: [100, 100, 100, 100, 100], lead: 'edem', engineer: 'mawuli', reportEvery: [3, 6], lastReport: -42,
       photos: [['b02-office-before'], ['b02-office-before'], ['s02-plastering'], ['s05-aluminium-windows'], ['s03-tiling', 's04-painting', 'b01-office-renovated']] },
-    { code: 'KC-07', name: 'Villa duplex Baguida', type: 'Rés', client: clients.kossi, location: 'Baguida', lat: 6.1594, lng: 1.3375,
+    { code: 'KC-07', name: 'Villa duplex Bord de mer', type: 'Rés', client: clients.kossi, location: 'Bord de mer', lat: 6.1594, lng: 1.3375,
       start: -220, end: 40, status: 'suspended', budget: 82 * M, progress: [100, 100, 45, 0, 0], lead: 'komi', engineer: 'mawuli', reportEvery: [3, 5], lastReport: -55,
       photos: [[], ['f03-footing-pour', 'f01-excavation'], ['e01-block-walls', 'v01-duplex-stopped'], [], []] },
-    { code: 'KC-08', name: 'Forage et château d’eau Tsévié', type: 'Ins', client: clients.ong, location: 'Tsévié', lat: 6.4261, lng: 1.2133,
+    { code: 'KC-08', name: 'Forage et château d’eau Les Collines', type: 'Ins', client: clients.ong, location: 'Les Collines', lat: 6.4261, lng: 1.2133,
       start: -180, end: -90, status: 'done', budget: 24 * M, progress: [100, 100, 100, 100, 100], lead: 'edem', engineer: 'mawuli', reportEvery: [3, 5], lastReport: -91,
       photos: [[], ['w01-drilling-rig'], ['w01-drilling-rig', 'w02-water-tower'], ['w02-water-tower'], ['w02-water-tower']] },
-    { code: 'KC-09', name: 'Résidence 4 villas Avédji', type: 'Rés', client: clients.immo, location: 'Lomé, Avédji', lat: 6.1823, lng: 1.2064,
+    { code: 'KC-09', name: 'Résidence 4 villas Les Jardins', type: 'Rés', client: clients.immo, location: 'Les Jardins', lat: 6.1823, lng: 1.2064,
       start: 30, end: 420, status: 'pending', budget: 310 * M, progress: [40, 0, 0, 0, 0], lead: 'yao', engineer: 'jean', reportEvery: [5, 8], lastReport: -3,
       photos: [['v02-four-villas-plot'], [], [], [], []] },
   ];
@@ -312,9 +312,9 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
   let inv = await invoice('KC-01', 'advance', 13.6 * M, -195, -185, 'Avance de démarrage 20 %');
   await pay('KC-01', inv, 1, -186, 'transfer', 'VIR-ORA-0381');
   inv = await invoice('KC-01', 'progress', 11 * M, -130, -100, 'Situation n°1 · Fondations', 2.2 * M);
-  await pay('KC-01', inv, 1, -98, 'mobile_money', 'TMoney 88231947');
+  await pay('KC-01', inv, 1, -98, 'mobile_money', 'Mobile 88231947');
   inv = await invoice('KC-01', 'progress', 14 * M, -75, -45, 'Situation n°2 · Gros œuvre RDC', 2.8 * M);
-  await pay('KC-01', inv, 0.6, -40, 'mobile_money', 'TMoney 90215533');
+  await pay('KC-01', inv, 0.6, -40, 'mobile_money', 'Mobile 90215533');
   await pay('KC-01', inv, 0.4, -21, 'transfer', 'VIR-ORA-0457');
   await invoice('KC-01', 'progress', 12 * M, -18, 12, 'Situation n°3 · Dalle R+1', 2.4 * M);
   // KC-02 building: big amounts, the third statement is late and the second half paid.
@@ -357,9 +357,9 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
   await pay('KC-06', inv, 1, -18, 'transfer', 'VIR-ECO-43391');
   // KC-07 duplex: two statements unpaid, site suspended.
   inv = await invoice('KC-07', 'advance', 16.4 * M, -218, -208, 'Avance');
-  await pay('KC-07', inv, 1, -209, 'mobile_money', 'Flooz 55102');
+  await pay('KC-07', inv, 1, -209, 'mobile_money', 'Mobile 55102');
   inv = await invoice('KC-07', 'progress', 14 * M, -150, -120, 'Situation n°1 · Fondations', 2.8 * M);
-  await pay('KC-07', inv, 1, -118, 'mobile_money', 'Flooz 57730');
+  await pay('KC-07', inv, 1, -118, 'mobile_money', 'Mobile 57730');
   const k7s2 = await invoice('KC-07', 'progress', 18 * M, -100, -70, 'Situation n°2 · Élévation RDC', 3.6 * M);
   const k7s3 = await invoice('KC-07', 'progress', 9 * M, -65, -35, 'Situation n°3 · Chaînages', 1.8 * M);
   await remind(k7s2, 'reminder', 'whatsapp', -62);
@@ -376,12 +376,12 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
 
   // ---------------------------------------------------------------- expenses
   const SUPPLIERS = {
-    materials: [['Ciment CPJ 45', 'Cimenterie du Golfe', 'sacs', 5_500], ['Fer à béton HA 8/10/12', 'Quincaillerie Lomé 2', 'tonnes', 620_000], ['Agglos de 15', 'Briqueterie Agoè', 'unités', 350],
+    materials: [['Ciment CPJ 45', 'Cimenterie du Golfe', 'sacs', 5_500], ['Fer à béton HA 8/10/12', 'Quincaillerie Centrale', 'tonnes', 620_000], ['Agglos de 15', 'Briqueterie Agoè', 'unités', 350],
       ['Sable lagunaire', 'Carrière Aképé', 'voyages', 95_000], ['Gravier 5/15', 'Carrière Aképé', 'voyages', 165_000], ['Bois de coffrage', 'Scierie du Port', 'lots', 240_000]],
     labour: [['Équipe maçons', 'Tâcherons', 'semaines', 420_000], ['Ferrailleurs', 'Tâcherons', 'semaines', 260_000], ['Manœuvres', 'Tâcherons', 'semaines', 180_000]],
-    equipment: [['Location bétonnière', 'Loc-Matériel Togo', 'jours', 25_000], ['Pompe à béton', 'Béton Express', 'coulages', 350_000], ['Location étais', 'Loc-Matériel Togo', 'semaines', 85_000]],
+    equipment: [['Location bétonnière', 'Loc-Matériel Pro', 'jours', 25_000], ['Pompe à béton', 'Béton Express', 'coulages', 350_000], ['Location étais', 'Loc-Matériel Pro', 'semaines', 85_000]],
     transport: [['Transport matériaux', 'Transport Plateaux', 'rotations', 45_000]],
-    subcontracting: [['Électricité', 'Elec Pro Services', 'lot', 0], ['Plomberie', 'Hydro Togo', 'lot', 0], ['Étanchéité', 'Etanch Afrique', 'lot', 0], ['Charpente métallique', 'Métal Afrique', 'lot', 0]],
+    subcontracting: [['Électricité', 'Elec Pro Services', 'lot', 0], ['Plomberie', 'Hydro Services', 'lot', 0], ['Étanchéité', 'Etanch Plus', 'lot', 0], ['Charpente métallique', 'Métal Afrique', 'lot', 0]],
     fees: [['Bureau de contrôle', 'Veritas Afrique de l’Ouest', 'visite', 150_000], ['Laboratoire béton', 'LNBTP', 'essais', 60_000]],
   } as const;
   const SPENT_RATIO: Record<string, number> = { 'KC-01': 0.72, 'KC-02': 1.06, 'KC-03': 0.7, 'KC-04': 0.74, 'KC-05': 0.62, 'KC-06': 0.71, 'KC-07': 0.95, 'KC-08': 0.69 };
@@ -516,7 +516,7 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
   // ---------------------------------------------------------------- deliveries and signatures
   const DELIVERIES: [string, string, string, number, string, string, number, 'conform' | 'reserve', string | null][] = [
     ['KC-01', 'Cimenterie du Golfe', 'Ciment CPJ 45', 200, 'sacs', 'd01-cement-delivery', -24, 'conform', null],
-    ['KC-01', 'Quincaillerie Lomé 2', 'Fer HA 10 et HA 12', 2.5, 'tonnes', 'd02-rebar-delivery', -32, 'conform', null],
+    ['KC-01', 'Quincaillerie Centrale', 'Fer HA 10 et HA 12', 2.5, 'tonnes', 'd02-rebar-delivery', -32, 'conform', null],
     ['KC-01', 'Carrière Aképé', 'Sable lagunaire', 3, 'voyages', 'd03-sand-gravel', -9, 'conform', null],
     ['KC-02', 'Cimenterie du Golfe', 'Ciment CPJ 45', 600, 'sacs', 'd01-cement-delivery', -5, 'reserve', '12 sacs déchirés, refusés.'],
     ['KC-02', 'Métal Afrique', 'Fer HA 12', 4, 'tonnes', 'd02-rebar-delivery', -1, 'conform', null],
@@ -527,7 +527,7 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
     ['KC-04', 'Métal Afrique', 'Tôles bac acier 0,45', 1800, 'm²', 'd02-rebar-delivery', -26, 'conform', null],
     ['KC-04', 'Cimenterie du Golfe', 'Ciment CPJ 45', 300, 'sacs', 'd01-cement-delivery', -60, 'conform', null],
     ['KC-05', 'Carrière Aképé', 'Sable et gravier', 4, 'voyages', 'd03-sand-gravel', -6, 'conform', null],
-    ['KC-05', 'Quincaillerie Lomé 2', 'Fer HA 8/10/12', 3, 'tonnes', 'd02-rebar-delivery', -3, 'conform', null],
+    ['KC-05', 'Quincaillerie Centrale', 'Fer HA 8/10/12', 3, 'tonnes', 'd02-rebar-delivery', -3, 'conform', null],
   ];
   for (const [code, supplier, item, quantity, unit, photo, offset, verdict, note] of DELIVERIES) {
     const id = randomUUID();
@@ -584,26 +584,26 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
 
   // ---------------------------------------------------------------- client spaces and messages
   const PORTALS: { code: string; contact: string; email: string; phone: string; opened: number; thread: [who: 'client' | Person, text: string, offset: number][] }[] = [
-    { code: 'KC-01', contact: 'Kodjo Amegah', email: 'k.amegah@example.test', phone: '+228 90 11 22 33', opened: -150, thread: [
+    { code: 'KC-01', contact: 'Kodjo Amegah', email: 'k.amegah@example.test', phone: '90 11 22 33', opened: -150, thread: [
       ['client', 'Bonjour, j’ai vu les photos de la dalle, c’est du beau travail. Quand est-ce que la toiture commence ?', -20],
       ['jean', 'Bonjour M. Amegah, la charpente arrive la semaine prochaine, pose prévue sur 10 jours.', -20],
       ['client', 'Merci. Je passe samedi matin avec mon épouse pour voir l’étage.', -6],
       ['jean', 'Nous vous attendons samedi à 9 h, Komi sera sur place.', -6],
     ] },
-    { code: 'KC-03', contact: 'Service technique, mairie du Golfe 5', email: 'services.techniques@golfe5.example.test', phone: '+228 22 25 10 12', opened: -200, thread: [
+    { code: 'KC-03', contact: 'Service technique, mairie de Bellevue', email: 'services.techniques@bellevue.example.test', phone: '22 25 10 12', opened: -200, thread: [
       ['client', 'Le maire souhaite une visite avant la réception provisoire.', -14],
       ['afi', 'Avec plaisir. Nous proposons mardi 10 h. La situation n°2 reste à régler, merci de nous dire où en est le mandat.', -14],
       ['client', 'Le mandat est à la signature du receveur, paiement attendu sous deux semaines.', -9],
     ] },
-    { code: 'KC-05', contact: 'Sœur Marie-Claire', email: 'direction@saintegrace.example.test', phone: '+228 92 40 18 61', opened: -38, thread: [
+    { code: 'KC-05', contact: 'Sœur Marie-Claire', email: 'direction@saintegrace.example.test', phone: '92 40 18 61', opened: -38, thread: [
       ['client', 'Nous avons vu l’eau dans les fouilles, est-ce grave ?', -3],
       ['mawuli', 'Non, c’est fréquent en saison des pluies. Nous pompons et reprenons dès que le sol est sec ; aucun impact sur la qualité.', -3],
     ] },
-    { code: 'KC-07', contact: 'Ablavi Kossi', email: 'ablavi.kossi@example.test', phone: '+228 91 45 67 89', opened: -190, thread: [
+    { code: 'KC-07', contact: 'Ablavi Kossi', email: 'ablavi.kossi@example.test', phone: '91 45 67 89', opened: -190, thread: [
       ['afi', 'Madame, nous sommes contraints de suspendre le chantier faute de paiement des situations n°2 et n°3.', -40],
       ['client', 'Je comprends, j’attends le déblocage de mon prêt. Je vous tiens informée.', -33],
     ] },
-    { code: 'KC-04', contact: 'Pierre Agbodjan', email: 'achats@logistique-golfe.example.test', phone: '+228 22 27 33 90', opened: -140, thread: [
+    { code: 'KC-04', contact: 'Pierre Agbodjan', email: 'achats@logistique-golfe.example.test', phone: '22 27 33 90', opened: -140, thread: [
       ['client', 'Pouvez-vous nous envoyer le planning de pose de la couverture ?', -8],
       ['jean', 'Le planning est à jour dans votre espace, onglet Planning. Fin de couverture prévue dans 25 jours.', -8],
     ] },
@@ -692,7 +692,7 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
   }
   log(`change orders: ${CHANGES.length}`);
   // Spec 053: the bank balance the owner gave, and supplier bills to pay.
-  await core.setCashBalance(app, boss, { amountMinor: 38_500_000, on: day(-3) });
+  await core.setCashBalance(app, boss, { amountMinor: 96_500_000, on: day(-3) });
   if (ids['KC-01']) {
     await core.createSupplierBill(app, boss, { projectId: ids['KC-01'], supplier: 'Cimenterie Exemple', label: 'Ciment, livraison du 14', reference: 'FA-3391', category: 'materials', amountMinor: 2_150_000, issuedOn: day(-20), dueOn: day(-2) });
     await core.createSupplierBill(app, boss, { projectId: ids['KC-01'], supplier: 'Tuiles & Toitures (fictif)', label: 'Tuiles et faîtières', category: 'materials', amountMinor: 4_800_000, issuedOn: day(-5), dueOn: day(12) });

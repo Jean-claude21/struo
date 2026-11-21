@@ -52,7 +52,7 @@ function ClientForm({ client, onDone, onCancel }: { client?: ClientRow; onDone: 
         <Field label={t('app.email')} hint={t('app.optional')}>
           <input name="email" type="email" defaultValue={client?.email ?? ''} />
         </Field>
-        <Field label={t('app.phone')} hint="+228…">
+        <Field label={t('app.phone')} hint={t('app.phoneHint')}>
           <input name="phone" type="tel" defaultValue={client?.phone ?? ''} />
         </Field>
       </div>

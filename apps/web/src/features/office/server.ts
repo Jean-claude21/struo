@@ -328,8 +328,8 @@ export const getInvoicePreview = createServerFn({ method: 'GET' }).handler(() =>
       number: `${settings.numberPrefix}-${today.slice(0, 4)}-${'1'.padStart(settings.numberPadding, '0')}`, kind: 'progress', status: 'issued', label: 'Situation n°2',
       issued_on: today, due_on: today, currency_code: company.currencyCode, amount_minor: 9_500_000, vat_bps: 1800, vat_minor: 1_710_000, total_minor: 11_210_000,
       retention_bps: 500, retention_minor: 560_500, deduction_minor: 1_000_000, net_minor: 9_649_500, paid_minor: 0, balance_minor: 9_649_500,
-      project_code: 'P001', project_name: 'Villa R+1', location: 'Lomé', client_name: 'M. Client Exemple', client_address: 'Quartier, Lomé',
-      client_email: 'client@example.test', client_phone: '+228 90 00 00 00', company_name: company.name, contract_ref: 'Marché n°12/2026', order_ref: null,
+      project_code: 'P001', project_name: 'Villa R+1', location: 'Centre-ville', client_name: 'M. Client Exemple', client_address: '1 rue Exemple, Centre-ville',
+      client_email: 'client@example.test', client_phone: '90 00 00 00', company_name: company.name, contract_ref: 'Marché n°12/2026', order_ref: null,
       notes: null, terms: settings.paymentTerms, vat_exempt_reason: null, extra_fields: [],
       lines: [
         { kind: 'text', designation: 'Lot 1 — Gros œuvre', unit: null, quantity_milli: 0, unit_price_minor: 0, contract_minor: 0, cumulative_bps: 0, previous_minor: 0, amount_minor: 0 },

@@ -150,7 +150,7 @@ function InviteModal({ projectId, projectName, companyName, defaults, onClose, o
             <label className="field"><span className="row tight"><UserRound size={14} />{t('clientInvite.contactName')}</span>
               <input value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} maxLength={120} /></label>
             <label className="field">{t('clientInvite.contactPhone')}
-              <input value={contact.phone} onChange={(event) => setContact({ ...contact, phone: event.target.value })} inputMode="tel" placeholder="+228 90 00 00 00" maxLength={40} /></label>
+              <input value={contact.phone} onChange={(event) => setContact({ ...contact, phone: event.target.value })} inputMode="tel" placeholder={t('app.phoneHint')} maxLength={40} /></label>
           </div>
           <label className="field">{t('clientInvite.contactEmail')}
             <input type="email" value={contact.email} onChange={(event) => setContact({ ...contact, email: event.target.value })} required maxLength={254} />

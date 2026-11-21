@@ -6,7 +6,7 @@
 >
 > ✓ répondu · ✗ manque (avec la spec prévue) · — retiré volontairement
 
-Dernier pointage : 2026-11-21 (dans le code ; parcours à l'écran à refaire après les specs 050 à 053).
+Dernier pointage : 2026-11-21, à l'écran avec la démo, après les specs 050 à 053 (spec 054).
 
 ## Le client (espace client, sans compte)
 
