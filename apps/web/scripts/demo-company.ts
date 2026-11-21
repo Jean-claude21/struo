@@ -691,6 +691,16 @@ export async function seedDemoCompany(ctx: DemoContext, options: DemoOptions) {
     if (status === 'accepted') await core.decideChangeOrder(app, actors.jean, id, { accept: true, decidedBy: site === 'KC-01' ? 'Kodjo Amegah' : 'SCI Les Cocotiers' });
   }
   log(`change orders: ${CHANGES.length}`);
+  // Spec 051: the KC-01 client reports a transfer on an open invoice; the accountant confirms it.
+  {
+    const kc01 = portals.find((portal) => portal.code === 'KC-01');
+    const { rows: open } = await owner.query<{ id: string; balance: number }>(
+      'select invoice_id as id, balance_minor::float8 as balance from invoice_balance where project_id = $1 and balance_minor > 0 order by due_on limit 1', [ids['KC-01']]);
+    if (kc01 && open[0]) {
+      await core.portalDeclarePayment(owner, kc01.token, { invoiceId: open[0].id, amountMinor: Math.round(open[0].balance / 2), paidOn: day(-1), method: 'transfer', reference: 'VIR-20481', note: 'Premier versement, le solde suit la semaine prochaine.' });
+    }
+  }
+
   // Specs 049–050: last week's client report, written and sent to the KC-01 client; this week's
   // draft waiting for the office's reading.
   if (ids['KC-01']) {

@@ -106,6 +106,8 @@ export const fr = {
     invalid_amount: 'Montant invalide.',
     portal_link_invalid: 'Ce lien n’est plus valable.',
     nothing_to_pay: 'Rien à régler sur cette facture.',
+    claim_pending: 'Un paiement est déjà signalé sur cette facture : l’entreprise va le confirmer.',
+    claim_decided: 'Ce paiement a déjà été traité.',
     payment_unavailable: 'Le paiement en ligne n’est pas activé par l’entreprise.',
     report_sent: 'Ce rapport a déjà été envoyé : il est figé.',
     client_email_missing: 'Le client n’a pas d’adresse e-mail : invitez-le depuis l’onglet « Client ».',

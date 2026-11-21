@@ -13,13 +13,13 @@ Dernier pointage : 2026-11-21 (dans le code ; parcours à l'écran à refaire ap
 | Question | Où | État |
 |---|---|---|
 | Où en est mon chantier ? | Espace › Chantier : avancement par étape, photos validées | ✓ |
-| Qu'est-ce qui est nouveau depuis ma dernière visite ? | Accueil « Nouveau » | ✗ spec 051 |
-| Qu'est-ce qu'on attend de moi ? | Avenant à accepter, jalon à signer | ✓ · regroupé dans « À faire » : spec 051 |
-| Que s'est-il passé cette semaine, en clair ? | Rapport client | ✓ · en sections rédigées : spec 050 |
-| Où en est l'argent ? Que dois-je régler, et comment ? | Factures (lecture) | ✓ partiel · point sur l'argent, « Comment payer », « J'ai payé » : spec 051 |
-| Puis-je poser une question sur ce que je vois ? | Messages | ✓ · depuis un rapport ou une photo : spec 051 |
-| Suis-je prévenu sans ouvrir l'espace ? | E-mail (rapport, avenant) | ✓ · sur le téléphone : spec 051 |
-| Puis-je choisir ce que je reçois par e-mail ? | — | ✗ spec 051 |
+| Qu'est-ce qui est nouveau depuis ma dernière visite ? | Accueil « Nouveau depuis votre visite » | ✓ (051) |
+| Qu'est-ce qu'on attend de moi ? | Accueil « À faire » : avenants, étapes à valider, factures dues | ✓ (051) |
+| Que s'est-il passé cette semaine, en clair ? | Rapport client en sections, PDF | ✓ (050) |
+| Où en est l'argent ? Que dois-je régler, et comment ? | Factures : le point sur l'argent, « Comment payer », « J'ai payé » | ✓ (051) — PDF de chaque facture : à faire |
+| Puis-je poser une question sur ce que je vois ? | Messages, « Poser une question » depuis un rapport du terrain | ✓ (051) |
+| Suis-je prévenu sans ouvrir l'espace ? | Notifications sur le téléphone + e-mail | ✓ (051) |
+| Puis-je choisir ce que je reçois par e-mail ? | Accueil : « Recevoir aussi les nouvelles par e-mail » | ✓ (051) |
 | Est-ce que je ne vois que ce qui a été validé ? | Photos des rapports validés uniquement | ✓ (spec 050, étape 0) |
 | Payer en ligne | — | — retiré : les entreprises encaissent à leur façon |
 
@@ -45,7 +45,7 @@ Les écrans du gérant, plus l'équipe et les paramètres. ✓
 | Qu'est-ce que je dois valider ? | Aujourd'hui : boîte des rapports | ✓ |
 | Qu'est-ce qui coince ? | Imprévus ouverts, jalons et tâches en retard | ✓ |
 | Qui fait quoi ? | Tâches, planning | ✓ |
-| Qu'est-ce que je dis au client ? | Rapport client | ✓ · rédigé par l'IA, validé : spec 050 |
+| Qu'est-ce que je dis au client ? | Rapport client rédigé à partir des faits, validé | ✓ (050) |
 | Que demande le terrain ? | — | ✗ demande de matériel : spec 052 |
 | Suis-je prévenu à temps ? | E-mail | ✗ sur le téléphone : spec 052 |
 
@@ -70,7 +70,7 @@ Les écrans du gérant, plus l'équipe et les paramètres. ✓
 | Qu'est-ce qui est rentré ? | Derniers encaissements | ✓ |
 | Qui relancer ? | Relances préparées | ✓ |
 | Les pièces sont-elles en ordre ? | Documents à corriger | ✓ |
-| Quels clients disent avoir payé ? | — | ✗ file « paiements déclarés » : spec 051 |
+| Quels clients disent avoir payé ? | Accueil et Finance › Paiements déclarés | ✓ (051) |
 | Quelles factures fournisseurs payer, et quand ? | Dépenses (enregistrées une fois payées) | ✗ factures fournisseurs à payer : spec 053 |
 
 ## Sans compte

@@ -52,7 +52,7 @@ export interface PortalView {
   };
   phases: { name: string; progress: number }[];
   milestones: { id: string; name: string; plannedOn: string; actualOn: string | null; clientValidation: boolean; validatedAt: string | null }[];
-  photos: { id: string; takenAt: string; note: string | null }[];
+  photos: { id: string; takenAt: string; note: string | null; phase: string | null }[];
   documents: { id: string; title: string; hasFile: boolean }[];
   invoices: { id: string; number: string; kind: string; issuedOn: string; dueOn: string; net: number; paid: number; balance: number; currency: string }[];
   messages: { authorKind: 'team' | 'client'; authorName: string; body: string; at: string }[];
@@ -203,6 +203,7 @@ const linkSettings = z.object({
   showFinance: z.boolean().optional(),
   showDocuments: z.boolean().optional(),
   showMessages: z.boolean().optional(),
+  showFieldReports: z.boolean().optional(),
   invited: z.boolean().optional(),
 });
 
@@ -212,7 +213,7 @@ export async function updatePortalLink(db: Db, actor: Actor, id: string, input: 
   const data = parse(linkSettings, input);
   const columns: Record<string, string> = {
     label: 'label', contactName: 'contact_name', contactEmail: 'contact_email', contactPhone: 'contact_phone', requireCode: 'require_code',
-    showPhotos: 'show_photos', showPlanning: 'show_planning', showFinance: 'show_finance', showDocuments: 'show_documents', showMessages: 'show_messages',
+    showPhotos: 'show_photos', showPlanning: 'show_planning', showFinance: 'show_finance', showDocuments: 'show_documents', showMessages: 'show_messages', showFieldReports: 'show_field_reports',
   };
   const entries = Object.entries(data).filter(([key, value]) => value !== undefined && columns[key]);
   await asActor(db, actor, async (tx) => {
@@ -228,7 +229,7 @@ export async function updatePortalLink(db: Db, actor: Actor, id: string, input: 
 export interface PortalLinkRow {
   id: string; label: string | null; createdAt: string; revokedAt: string | null; lastSeenAt: string | null; contactName: string | null;
   contactEmail: string | null; contactPhone: string | null; requireCode: boolean; showPhotos: boolean; showPlanning: boolean; showFinance: boolean;
-  showDocuments: boolean; showMessages: boolean; invitedAt: string | null; firstOpenedAt: string | null;
+  showDocuments: boolean; showMessages: boolean; showFieldReports: boolean; invitedAt: string | null; firstOpenedAt: string | null;
 }
 
 export async function listPortalLinksFull(db: Db, actor: Actor, projectId: string): Promise<PortalLinkRow[]> {
@@ -236,7 +237,7 @@ export async function listPortalLinksFull(db: Db, actor: Actor, projectId: strin
     const { rows } = await tx.query<PortalLinkRow>(
       `select id, label, created_at as "createdAt", revoked_at as "revokedAt", last_seen_at as "lastSeenAt", contact_name as "contactName",
               contact_email as "contactEmail", contact_phone as "contactPhone", require_code as "requireCode", show_photos as "showPhotos",
-              show_planning as "showPlanning", show_finance as "showFinance", show_documents as "showDocuments", show_messages as "showMessages",
+              show_planning as "showPlanning", show_finance as "showFinance", show_documents as "showDocuments", show_messages as "showMessages", show_field_reports as "showFieldReports",
               invited_at as "invitedAt", first_opened_at as "firstOpenedAt"
          from portal_link where org_id = $1 and project_id = $2 order by created_at desc`,
       [actor.orgId, projectId],

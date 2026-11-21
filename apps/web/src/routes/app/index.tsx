@@ -1,4 +1,5 @@
 // « Today » (spec 023): one page, shaped by the role. The manager sees decisions, cash, sites, photos
+import { PaymentClaims } from '@/components/PaymentClaims.tsx';
 // and clients; the engineer sees weather, phases and what to review; the accountant sees what to
 // collect and what to fix; the site lead is sent to the field app.
 import { createFileRoute, getRouteApi, Link } from '@tanstack/react-router';
@@ -172,6 +173,7 @@ function Manager({ data }: { data: Data }) {
   const invoiced = cumulative(cash.map((item) => item.invoiced));
   return (
     <>
+      <PaymentClaims claims={data.claims} canWrite={data.role !== 'engineer'} onDone={() => { window.location.reload(); }} compact />
       {data.finance ? (
         <div className="grid">
           <KpiTile icon={Wallet} label={t('dashboard.receivable')} value={money(data.finance.receivableMinor)} tone="brand" sub={`${t('dashboard.overdue')} ${money(data.finance.overdueMinor)}`} subTone={data.finance.overdueMinor ? 'bad' : undefined} />
@@ -292,6 +294,7 @@ function Accountant({ data }: { data: Data }) {
           <div className="legend" style={{ marginTop: '.6rem' }}>{buckets.map((bucket, index) => <span key={bucket}><i style={{ ['--c' as string]: colors[index] }} />{t(`finance.aging.${bucket}`)} · <b>{money(aging[bucket].amount)}</b></span>)}</div>
         </Panel>
       ) : null}
+      <PaymentClaims claims={data.claims} canWrite onDone={() => { window.location.reload(); }} compact />
       <div className="grid-main">
         <ActionCards data={data} />
         <Panel title={t('today.lastPayments')} flush>

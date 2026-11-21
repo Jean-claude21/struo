@@ -1382,3 +1382,28 @@ input[type='range'] { accent-color: var(--brand); min-height: 32px; padding: 0; 
   .cr-changes li { display: grid; gap: .1rem; border-bottom: 1px solid #ecebe3; padding-bottom: .35rem; }
   .cr-title { font-size: 1.5rem; }
 }
+.ok-text { color: var(--ok); }
+.claims { list-style: none; margin: 0; padding: 0; }
+.claims li { display: grid; gap: .35rem; padding: .75rem 1rem; border-bottom: 1px solid var(--divider); }
+.claims li.pending { background: var(--brand-soft); }
+
+/* Spec 051 — the client's application */
+.ca-h { margin: 0; font-size: 1.05rem; display: flex; align-items: center; gap: .5rem; }
+.b-dot.inline { position: static; display: inline-grid; place-items: center; min-width: 1.3rem; height: 1.3rem; border-radius: 999px; background: var(--brand); color: #fff; font-size: .72rem; padding: 0 .3rem; }
+.ca-news h2 { margin: 0; font-size: 1rem; }
+.ca-news .chip { min-height: 40px; }
+.ca-todo { border-color: var(--brand); border-width: 2px; gap: .5rem; }
+.ca-last { text-decoration: none; color: inherit; gap: .35rem; }
+.ca-quote { font-size: 1.02rem; line-height: 1.5; color: var(--ink); }
+.ca-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .3rem; }
+.ca-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; display: block; }
+.ca-money h2 { margin: 0; font-size: 1.05rem; }
+.ca-money dl { margin: 0; display: grid; gap: .35rem; }
+.ca-money dl div { display: flex; justify-content: space-between; gap: 1rem; font-size: .95rem; }
+.ca-money dt { color: var(--ink-soft); }
+.ca-money dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+.ca-money .total { border-top: 1px solid var(--divider); padding-top: .35rem; }
+.ca-money .total dt, .ca-money .total dd { color: var(--ink); font-weight: 800; }
+.ca-pre { margin: .15rem 0 0; white-space: pre-line; font-size: .95rem; user-select: all; }
+.ca-install { background: var(--brand-soft); border-color: transparent; gap: .5rem; }
+.ca-email { justify-content: center; color: var(--ink-soft); padding: .5rem 0 1rem; }

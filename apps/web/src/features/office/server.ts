@@ -6,7 +6,7 @@ import { translate } from '@/i18n/index.tsx';
 import { guarded, requestLocale, requireActor } from '@/server/context.server.ts';
 import { alertText } from '@/server/jobs.server.ts';
 import { outboundAllowed } from '@/server/demo.server.ts';
-import { companyLocale, deliverClientReport, notifyChangeOrderSent, notifyTaskAssigned } from '@/server/notify.server.ts';
+import { companyLocale, deliverClientReport, notifyChangeOrderSent, notifyClient, notifyTaskAssigned } from '@/server/notify.server.ts';
 import { draftSections, rewriteSection } from '@/server/report.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 import { forecast, RAIN_LIMIT } from '@/server/weather.server.ts';
@@ -39,6 +39,8 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(() =>
       canFinance ? core.listPayments(db, actor, { limit: 6 }) : Promise.resolve([]),
       core.listMembers(db, actor),
     ]);
+    // Spec 051: payments clients declared, waiting for the people who handle money.
+    const claims = canFinance ? await core.listPaymentClaims(db, actor, { status: 'pending' }) : [];
     const me = members.find((member) => member.userId === actor.userId);
     // Spec 047: who is on the sites today.
     const crew = await core.crewToday(db, actor, new Date().toISOString().slice(0, 10));
@@ -46,7 +48,7 @@ export const getDashboard = createServerFn({ method: 'GET' }).handler(() =>
       .map(async (site) => ({ projectId: site.id, code: site.code, location: site.location, days: await forecast(site.latitude!, site.longitude!) })));
     return {
       role: actor.role, name: me?.name ?? '', settings, finance, operations, alerts, projects, activity, subscription,
-      insights: canFinance ? insights : { ...insights, cash: [], risk: [] }, aging, payments, weather, rainLimit: RAIN_LIMIT, crew,
+      insights: canFinance ? insights : { ...insights, cash: [], risk: [] }, aging, payments, weather, rainLimit: RAIN_LIMIT, crew, claims,
     };
   }),
 );
@@ -212,16 +214,17 @@ export const getFieldDesk = createServerFn({ method: 'GET' }).handler(() =>
 export const getFinance = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { db, messenger, mailer, drafter } = runtime();
-    const [invoices, payments, aging, summary, projects, settings] = await Promise.all([
+    const [invoices, payments, aging, summary, projects, settings, claims] = await Promise.all([
       core.listInvoices(db, actor),
       core.listPayments(db, actor),
       core.receivablesAging(db, actor),
       core.financeSummary(db, actor),
       core.listProjects(db, actor),
       core.getSettings(db, actor),
+      core.listPaymentClaims(db, actor),
     ]);
     return {
-      role: actor.role, invoices, payments, aging, summary, settings,
+      role: actor.role, invoices, payments, aging, summary, settings, claims,
       projects: projects.map((project) => ({ id: project.id, code: project.code, name: project.name })),
       channels: { whatsapp: messenger.configured, email: mailer.configured, ai: drafter.configured },
     };
@@ -287,7 +290,14 @@ export const saveDraftInvoice = createServerFn({ method: 'POST' })
 
 export const issueInvoice = createServerFn({ method: 'POST' })
   .validator(idOf)
-  .handler(({ data }) => act((actor) => core.issueInvoice(runtime().db, actor, data.id)));
+  .handler(({ data }) => act(async (actor) => {
+    const rt = runtime();
+    const issued = await core.issueInvoice(rt.db, actor, data.id);
+    // Spec 051: the client is told a new invoice waits in their space.
+    const { rows } = await rt.owner.query<{ projectId: string }>('select project_id as "projectId" from invoice where id = $1 and org_id = $2', [data.id, actor.orgId]);
+    if (rows[0]) void notifyClient(rt, actor.orgId, rows[0].projectId, 'invoice', { number: issued.number });
+    return issued;
+  }));
 
 export const deleteDraftInvoice = createServerFn({ method: 'POST' })
   .validator(idOf)
@@ -482,7 +492,17 @@ export const addMilestone = createServerFn({ method: 'POST' })
 
 export const updateMilestone = createServerFn({ method: 'POST' })
   .validator((input: { id: string; patch: Record<string, unknown> }) => input)
-  .handler(({ data }) => act((actor) => core.updateMilestone(runtime().db, actor, data.id, data.patch)));
+  .handler(({ data }) => act(async (actor) => {
+    const rt = runtime();
+    const result = await core.updateMilestone(rt.db, actor, data.id, data.patch);
+    // Spec 051: a stage reached that the client signs off is announced to them.
+    if (data.patch.actualOn) {
+      const { rows } = await rt.owner.query<{ projectId: string; name: string }>(
+        'select project_id as "projectId", name from milestone where id = $1 and org_id = $2 and client_validation and client_validated_at is null', [data.id, actor.orgId]);
+      if (rows[0]) void notifyClient(rt, actor.orgId, rows[0].projectId, 'milestone', { stage: rows[0].name });
+    }
+    return result;
+  }));
 
 export const moveMilestone = createServerFn({ method: 'POST' })
   .validator((input: { id: string; plannedOn: string }) => input)
@@ -524,7 +544,7 @@ export const createPortalLink = createServerFn({ method: 'POST' })
 export const inviteClient = createServerFn({ method: 'POST' })
   .validator((input: {
     projectId: string; channel: 'whatsapp' | 'email' | 'link'; contactName?: string; contactEmail?: string; contactPhone?: string;
-    show: { photos: boolean; planning: boolean; finance: boolean; documents: boolean; messages: boolean };
+    show: { photos: boolean; planning: boolean; finance: boolean; documents: boolean; messages: boolean; fieldReports?: boolean };
   }) => input)
   .handler(({ data }) =>
     act(async (actor) => {
@@ -541,7 +561,7 @@ export const inviteClient = createServerFn({ method: 'POST' })
       await core.updatePortalLink(db, actor, link.id, {
         contactName: data.contactName || null, contactEmail: data.contactEmail || null, contactPhone: data.contactPhone || null, requireCode: true,
         showPhotos: data.show.photos, showPlanning: data.show.planning, showFinance: data.show.finance, showDocuments: data.show.documents,
-        showMessages: data.show.messages, invited: true,
+        showMessages: data.show.messages, showFieldReports: Boolean(data.show.fieldReports), invited: true,
       });
       const url = `${env.APP_BASE_URL}/portal/${link.token}`;
       const message = translate(locale, 'clientInvite.message', { name: data.contactName || '', project: project.name, company: settings.name, url });
@@ -562,7 +582,43 @@ export const revokePortalLink = createServerFn({ method: 'POST' })
 
 export const postMessage = createServerFn({ method: 'POST' })
   .validator((input: { projectId: string; body: string }) => input)
-  .handler(({ data }) => act((actor) => core.postTeamMessage(runtime().db, actor, data.projectId, data.body)));
+  .handler(({ data }) => act(async (actor) => {
+    const result = await core.postTeamMessage(runtime().db, actor, data.projectId, data.body);
+    void notifyClient(runtime(), actor.orgId, data.projectId, 'message');
+    return result;
+  }));
+
+// ---------------------------------------------------------------- payments declared by clients (spec 051)
+
+export const getPaymentClaims = createServerFn({ method: 'GET' })
+  .validator((input: { status?: 'pending' | 'confirmed' | 'rejected'; projectId?: string } | undefined) => input ?? {})
+  .handler(({ data }) => act((actor) => core.listPaymentClaims(runtime().db, actor, data)));
+
+export const confirmPaymentClaim = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; amountMinor?: number; receivedOn?: string }) => input)
+  .handler(({ data }) => act(async (actor) => {
+    const rt = runtime();
+    const result = await core.confirmPaymentClaim(rt.db, actor, data.id, { amountMinor: data.amountMinor, receivedOn: data.receivedOn });
+    const [claim] = (await core.listPaymentClaims(rt.db, actor, {})).filter((row) => row.id === data.id);
+    if (claim) void notifyClient(rt, actor.orgId, claim.projectId, 'paymentOk', { number: claim.invoiceNumber });
+    return result;
+  }));
+
+export const rejectPaymentClaim = createServerFn({ method: 'POST' })
+  .validator((input: { id: string; reason: string }) => input)
+  .handler(({ data }) => act(async (actor) => {
+    const rt = runtime();
+    await core.rejectPaymentClaim(rt.db, actor, data.id, { reason: data.reason });
+    const [claim] = (await core.listPaymentClaims(rt.db, actor, {})).filter((row) => row.id === data.id);
+    if (claim) void notifyClient(rt, actor.orgId, claim.projectId, 'paymentNo', { number: claim.invoiceNumber, reason: data.reason });
+  }));
+
+/** Spec 051–052: a team member's phone or browser accepts notifications. */
+export const subscribeMemberPush = createServerFn({ method: 'POST' })
+  .validator((input: { subscription: unknown }) => input)
+  .handler(({ data }) => act((actor) => core.saveMemberPush(runtime().owner, actor, data.subscription)));
+
+export const getPushKey = createServerFn({ method: 'GET' }).handler(() => act(async () => ({ key: runtime().env.VAPID_PUBLIC_KEY || null })));
 
 // ---------------------------------------------------------------- tasks, internal thread, versions (spec 046)
 

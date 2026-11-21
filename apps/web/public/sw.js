@@ -3,7 +3,7 @@
 // - Field pages (/field…): network first, cached copy when offline.
 // - Everything else (API, office pages) goes to the network untouched: data is never served stale
 //   by the worker; the field app keeps its own data in IndexedDB.
-const VERSION = 'struo-field-v1';
+const VERSION = 'struo-field-v2';
 const SHELL = ['/field', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -62,4 +62,24 @@ self.addEventListener('fetch', (event) => {
         .catch(() => caches.match('/field').then((cached) => cached || Response.error())),
     );
   }
+});
+
+// Phone notifications (spec 051): shown as they come, opening the page they point to.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'Struo', body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(data.title || 'Struo', {
+    body: data.body || '', tag: data.tag, icon: '/icon-192.png', badge: '/icon-192.png', data: { url: data.url || '/' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url || '/', self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      for (const client of windows) if (client.url === url && 'focus' in client) return client.focus();
+      return self.clients.openWindow(url);
+    }),
+  );
 });
