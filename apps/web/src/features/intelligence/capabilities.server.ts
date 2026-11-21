@@ -345,6 +345,33 @@ export const CAPABILITIES: Capability[] = [
     async run({ rt, actor, projectId }, input) { return core.recordPayment(rt.db, actor, { ...input, site: undefined, projectId: await projectId(input.site) }); },
     summary: async (context, input) => `${input.site} · ${fmt(context, input.amountMinor)} · ${input.method}${input.reference ? ` · ${input.reference}` : ''}${input.receivedOn ? ` · ${input.receivedOn}` : ''}`,
   }),
+  // Spec 053: the money to come.
+  define({
+    name: 'cash_forecast', group: 'finance', permission: 'cash.read', autonomy: 1, input: z.object({}),
+    description: 'The cash forecast over 13 weeks: start (bank balance given by the company, else collected minus spent), money in (open invoices on their due date; late invoices NOT counted, given apart), money out (supplier bills on their due date, labour and usual spending at the recent pace), the balance at 30/60/90 days, the low point, and the subcontracts left to pay without a date.',
+    run: ({ rt, actor }) => core.cashForecast(rt.db, actor),
+  }),
+  define({
+    name: 'list_supplier_bills', group: 'finance', permission: 'cash.read', autonomy: 1,
+    input: z.object({ status: z.enum(['to_pay', 'paid', 'cancelled']).optional(), site: site.optional() }),
+    description: 'Supplier bills (to pay, paid, cancelled) with their due date and days late.',
+    async run({ rt, actor, projectId }, input) { return core.listSupplierBills(rt.db, actor, { status: input.status, projectId: input.site ? await projectId(input.site) : undefined }); },
+  }),
+  define({
+    name: 'add_supplier_bill', group: 'finance', permission: 'finance.write', autonomy: 2,
+    input: z.object({ supplier: z.string().min(1), label: z.string().min(1), amountMinor: money, dueOn: date, site: site.optional(), category: z.enum(core.EXPENSE_CATEGORIES).optional(), reference: z.string().optional() }),
+    description: 'Adds a supplier bill to pay, on a site or as overheads; it enters the cash forecast.',
+    async run({ rt, actor, projectId }, input) { return core.createSupplierBill(rt.db, actor, { ...input, site: undefined, projectId: input.site ? await projectId(input.site) : null }); },
+  }),
+  define({
+    name: 'pay_supplier_bill', group: 'finance', permission: 'finance.write', autonomy: 4, input: z.object({ billId: z.string().uuid(), paidOn: date.optional() }),
+    description: 'Marks a supplier bill paid; a bill of a site becomes that site’s expense.',
+    run: ({ rt, actor }, input) => core.paySupplierBill(rt.db, actor, input.billId, { paidOn: input.paidOn }),
+    summary: async ({ rt, actor }, input) => {
+      const bill = (await core.listSupplierBills(rt.db, actor)).find((row) => row.id === input.billId);
+      return bill ? `${bill.supplier} · ${bill.label} · ${bill.amountMinor}` : input.billId;
+    },
+  }),
   define({
     name: 'draft_reminder', group: 'finance', permission: 'finance.read', autonomy: 1,
     input: z.object({ invoiceId: z.string().uuid(), kind: z.enum(['reminder', 'formal_notice']) }),

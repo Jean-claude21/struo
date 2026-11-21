@@ -30,7 +30,7 @@ Dernier pointage : 2026-11-21 (dans le code ; parcours à l'écran à refaire ap
 | Est-ce que je gagne de l'argent ? | Aujourd'hui : marge actuelle et prévue par chantier | ✓ |
 | Qui me doit de l'argent ? | Aujourd'hui, Finance : créances, retards | ✓ |
 | Quel chantier va mal ? | Aujourd'hui : chantiers à risque · Indicateurs | ✓ |
-| Est-ce que j'ai de quoi payer dans 30, 60, 90 jours ? | Trésorerie et autonomie au rythme des dépenses | ✗ prévision : spec 053 |
+| Est-ce que j'ai de quoi payer dans 30, 60, 90 jours ? | Accueil « Dans 30 jours », Finance › Trésorerie | ✓ (053) |
 | Combien me coûte la main-d'œuvre ? | Main-d'œuvre par chantier | ✓ |
 | Qu'est-ce que je vais signer ? (devis) | — | — hors périmètre (décision du 2026-11-21) |
 
@@ -71,7 +71,7 @@ Les écrans du gérant, plus l'équipe et les paramètres. ✓
 | Qui relancer ? | Relances préparées | ✓ |
 | Les pièces sont-elles en ordre ? | Documents à corriger | ✓ |
 | Quels clients disent avoir payé ? | Accueil et Finance › Paiements déclarés | ✓ (051) |
-| Quelles factures fournisseurs payer, et quand ? | Dépenses (enregistrées une fois payées) | ✗ factures fournisseurs à payer : spec 053 |
+| Quelles factures fournisseurs payer, et quand ? | Finance › Trésorerie › Factures fournisseurs à payer | ✓ (053) |
 
 ## Sans compte
 

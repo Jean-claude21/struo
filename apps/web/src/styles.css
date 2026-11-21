@@ -1407,3 +1407,5 @@ input[type='range'] { accent-color: var(--brand); min-height: 32px; padding: 0; 
 .ca-pre { margin: .15rem 0 0; white-space: pre-line; font-size: .95rem; user-select: all; }
 .ca-install { background: var(--brand-soft); border-color: transparent; gap: .5rem; }
 .ca-email { justify-content: center; color: var(--ink-soft); padding: .5rem 0 1rem; }
+.cash-table td, .cash-table th { white-space: nowrap; }
+.cash-notes { margin: .8rem 0; padding-left: 1.1rem; display: grid; gap: .25rem; }
