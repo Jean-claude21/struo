@@ -194,7 +194,7 @@ function HomeTab({ data, money, date, onTab, onSign }: {
             ))}</div>
           </section>
         ) : null
-      ) : <section className="card stack ca-news"><h2>{t('clientApp.welcome', { company: view.company.name })}</h2><p className="small muted" style={{ margin: 0 }}>{t('clientApp.welcomeText')}</p></section>}
+      ) : <section className="card stack ca-news"><h2>{t('clientApp.welcome', { company: view.company.name })}</h2><p className="small muted" style={{ margin: 0 }}>{t('clientApp.welcomeText', { company: view.company.name })}</p></section>}
 
       <section className="stack" style={{ gap: '.6rem' }}>
         <h2 className="ca-h">{t('clientApp.todo')}{todo ? <span className="b-dot inline">{todo}</span> : null}</h2>
