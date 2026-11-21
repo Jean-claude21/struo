@@ -86,8 +86,13 @@ export async function submitChecklist(db: Db, actor: Actor, input: unknown): Pro
     const created = inserted.rowCount === 1;
     if (created) await journal(tx, actor, 'checklist.submit', data.id, null, { projectId: data.projectId, name: data.name, done, total: data.items.length });
     const missed = data.items.filter((item) => !item.done);
-    if (created && missed.length) {
-      // Spec 048: points not ticked are a non-conformity: an incident, and the task that clears it.
+    // Spec 048: on a quality check (tied to a phase, or done on demand, like receiving materials),
+    // points not ticked are a non-conformity: an incident, and the task that clears it. A daily
+    // routine left incomplete stays on record (journal, indicators) without raising an incident.
+    const quality = data.templateId
+      ? (await tx.query<{ mode: string }>('select mode from checklist_template where id = $1 and org_id = $2', [data.templateId, actor.orgId])).rows[0]?.mode !== 'daily'
+      : false;
+    if (created && missed.length && quality) {
       const incidentId = randomUUID();
       const description = `${data.name} : ${missed.map((item) => item.label).join(' ; ')}`.slice(0, 2000);
       await tx.query(

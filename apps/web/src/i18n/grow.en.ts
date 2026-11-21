@@ -336,7 +336,7 @@ export const growEn = {
   },
   checklists: {
     title: "Checklists",
-    sub: "The checks your site leads do on site. Unticked points create an incident and the task that clears it.",
+    sub: "The checks your site leads do on site. On a quality check (during a phase or on demand), unticked points create an incident and the task that clears it.",
     add: "New checklist",
     name: "Name",
     when: "When",

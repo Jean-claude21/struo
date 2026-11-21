@@ -266,7 +266,7 @@ function ChangeOrders({ orders, token, money, onDone }: { orders: Space['changeO
     <section className="card stack">
       <h3 style={{ margin: 0 }}>{t('changes.portalTitle')}</h3>
       <p className="muted small" style={{ margin: 0 }}>{t('changes.portalSub')}</p>
-      {orders.map((order) => (
+      {[...orders].sort((a, b) => Number(b.status === 'sent') - Number(a.status === 'sent') || a.number - b.number).map((order) => (
         <div key={order.id} className="stack" style={{ gap: '.4rem', borderTop: '1px solid var(--line)', paddingTop: '.7rem' }}>
           <div className="row" style={{ justifyContent: 'space-between' }}><b>{t('changes.number')} {order.number} · {order.title}</b><b>{money(order.amountMinor)}</b></div>
           {order.description ? <p className="small" style={{ margin: 0 }}>{order.description}</p> : null}

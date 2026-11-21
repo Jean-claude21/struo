@@ -337,7 +337,7 @@ export const growFr = {
   },
   checklists: {
     title: "Checklists",
-    sub: "Les contrôles que vos chefs de chantier font sur place. Des points non cochés créent un imprévu et la tâche qui le lève.",
+    sub: "Les contrôles que vos chefs de chantier font sur place. Sur un contrôle qualité (pendant une phase ou à la demande), des points non cochés créent un imprévu et la tâche qui le lève.",
     add: "Nouvelle checklist",
     name: "Nom",
     when: "Quand",

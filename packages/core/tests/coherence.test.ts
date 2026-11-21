@@ -60,6 +60,12 @@ describe('checklists (spec 048)', () => {
     expect(incident).toMatchObject({ kind: 'defect', status: 'open' });
     expect((await listTasks(db.app, owner, { projectId })).some((item) => item.incidentId === incident.id)).toBe(true);
   });
+  it('keeps an incomplete daily routine on record without raising an incident', async () => {
+    const { id } = await saveChecklistTemplate(db.app, engineer, null, { name: 'Fin de journée test', items: ['Portail fermé', 'Outils rangés'], mode: 'daily' });
+    const before = (await listIncidents(db.app, owner, { projectId })).length;
+    await submitChecklist(db.app, lead, { id: randomUUID(), projectId, templateId: id, name: 'Fin de journée test', items: [{ label: 'Portail fermé', done: false }, { label: 'Outils rangés', done: true }], doneAt: new Date().toISOString() });
+    expect((await listIncidents(db.app, owner, { projectId })).length).toBe(before);
+  });
 });
 
 describe('documents have a family (spec 048)', () => {
