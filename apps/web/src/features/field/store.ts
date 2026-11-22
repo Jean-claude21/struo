@@ -29,6 +29,7 @@ export interface FieldSnapshot {
   rainLimit?: number;
   scanAvailable?: boolean;
   toFix?: { id: string; projectCode: string; note: string | null; reviewNote: string | null; takenAt: string }[];
+  access?: { stage: 'active' | 'ending' | 'grace' | 'locked'; kind: 'trial' | 'paid' | null; endsAt: string | null; graceEndsAt: string | null; daysLeft: number | null };
   /** Spec 047: the company's active workers, to tick who is present. */
   workers?: { id: string; name: string; trade: string | null }[];
   /** Spec 046: the open tasks given to this person. */

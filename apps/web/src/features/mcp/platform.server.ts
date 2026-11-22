@@ -108,6 +108,13 @@ const TOOLS: Tool[] = [
     preview: async ({ rt }, input) => ({ company: (await core.platformCompany(rt.owner, input.orgId)).name, revoke: input.feature }),
     run: async ({ rt, adminId }, input) => { await core.revokeFeatureGrant(rt.owner, adminId, input.orgId, input.feature); return { ok: true }; } }),
 
+  tool({ name: 'licence_settings', level: 'read', input: {}, description: 'How many days before the end of a trial or licence companies are warned, and how long the grace period lasts before read-only.',
+    run: ({ rt }) => core.licenceSettings(rt.owner) }),
+  tool({ name: 'set_licence_settings', level: 'commit', input: { warnDays: z.number().int().min(0).max(60), graceDays: z.number().int().min(0).max(90) },
+    description: 'Changes the warning window and the grace period (applies to every company at once).',
+    preview: async ({ rt }, input) => ({ before: await core.licenceSettings(rt.owner), after: input }),
+    run: async ({ rt, adminId }, input) => core.setLicenceSettings(rt.owner, adminId, input) }),
+
   // ---------------------------------------------------------------- the offer
   tool({ name: 'list_plans', level: 'read', input: {},
     description: 'Every plan (hidden ones too): words FR/EN, limits, features, highlight, visibility, order, prices per currency, and how many companies are on it (paying, trial).',

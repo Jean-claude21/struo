@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { setCookie } from '@tanstack/react-start/server';
 import { isLocale, LOCALE_COOKIE } from '@/i18n/index.tsx';
-import { currentAnnouncement, searchCompany } from '@struo/core';
+import { companyAccess, currentAnnouncement, searchCompany } from '@struo/core';
 import { chooseCompany, guarded, loadViewer, requestLocale, requireActor } from '@/server/context.server.ts';
 import { deployEnvironment, reportError } from '@/server/monitor.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
@@ -23,7 +23,9 @@ export const getShell = createServerFn({ method: 'GET' }).handler(async () => {
   };
   // Spec 055: the platform's announcement of the moment, for signed-in members.
   const announcement = viewer ? await currentAnnouncement(runtime().db).catch(() => null) : null;
-  return { locale, viewer, monitoring, announcement };
+  // Spec 060: where the company stands with its trial or licence (bar shown before and after the end).
+  const access = viewer?.company ? await companyAccess(runtime().owner, viewer.company.id).catch(() => null) : null;
+  return { locale, viewer, monitoring, announcement, access };
 });
 
 export const setLocale = createServerFn({ method: 'POST' })

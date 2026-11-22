@@ -1,4 +1,4 @@
-import { companyKpis, digestRecipients, recordPlatformEvent, getSettings, listAlerts, markNotified, reportRecipients, resolveActor, type Alert } from '@struo/core';
+import { companyKpis, digestRecipients, licenceNotice, licenceNoticeTargets, markNoticeOnce, recordPlatformEvent, getSettings, listAlerts, markNotified, reportRecipients, resolveActor, type Alert } from '@struo/core';
 import { translate } from '@/i18n/index.tsx';
 import { refillDemoPool } from './demo.server.ts';
 import { runClientReports } from './notify.server.ts';
@@ -7,6 +7,7 @@ import type { Runtime } from './runtime.server.ts';
 
 const LOCK = 727100;
 const REPORT_LOCK = 727101;
+const LICENCE_LOCK = 727102;
 let started = false;
 
 /** Formats an alert as a line of text (e-mail, WhatsApp, MCP). */
@@ -164,6 +165,43 @@ export async function runReports(rt: Runtime, now = new Date()): Promise<number>
   return sent;
 }
 
+/**
+ * Spec 060: owners and admins are warned before their trial or licence ends (at the start of the
+ * window, then 7, 3 and 1 days before), when it has ended (grace period), and when the space turns
+ * read-only. Each message leaves once per period, from 7:00 in the company's time zone.
+ */
+export async function runLicenceNotices(rt: Runtime, now = new Date()): Promise<number> {
+  const client = await rt.owner.connect();
+  let sent = 0;
+  try {
+    const { rows } = await client.query<{ locked: boolean }>('select pg_try_advisory_lock($1) as locked', [LICENCE_LOCK]);
+    if (!rows[0]?.locked) return 0;
+    try {
+      for (const company of await licenceNoticeTargets(rt.owner, now)) {
+        if (localClock(company.timeZone, now).hour < MORNING) continue;
+        const notice = licenceNotice(company.access, company.warnDays);
+        if (!notice) continue;
+        if (!(await markNoticeOnce(rt.owner, company.orgId, notice.target))) continue;
+        const locale = company.locale;
+        const kind = company.access.kind === 'trial' ? 'trial' : 'paid';
+        const day = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'long' }).format(new Date(iso)) : '');
+        const params = { company: company.orgName, n: company.access.daysLeft ?? 0, end: day(company.access.endsAt), grace: day(company.access.graceEndsAt), url: `${rt.env.APP_BASE_URL}/app/settings` };
+        await rt.mailer.send({
+          to: company.emails,
+          subject: translate(locale, `licence.mail.${notice.stage}.${kind}Subject`, params),
+          text: [translate(locale, `licence.mail.${notice.stage}.${kind}`, params), '', translate(locale, 'licence.mail.renew', params), '', translate(locale, 'licence.mail.sign')].join('\n'),
+        });
+        sent += 1;
+      }
+    } finally {
+      await client.query('select pg_advisory_unlock($1)', [LICENCE_LOCK]);
+    }
+  } finally {
+    client.release();
+  }
+  return sent;
+}
+
 export function startJobs(rt: Runtime): void {
   if (started) return;
   started = true;
@@ -180,6 +218,7 @@ export function startJobs(rt: Runtime): void {
       // The digest and the reports leave from 7:00 in each company's own time zone.
       await run('digest', () => runDigest(rt));
       await run('reports', () => runReports(rt));
+      await run('licence-notices', () => runLicenceNotices(rt));
       // Spec 049: the weekly client report, Monday morning, for the companies that chose it.
       await run('client-reports', () => runClientReports(rt, new Date(), localClock));
     }).catch((error: unknown) => reportError(error, { where: 'jobs' }));

@@ -5,7 +5,7 @@ type Umami = { track: (payload?: unknown, data?: Record<string, unknown>) => voi
 const umami = () => (typeof window === 'undefined' ? undefined : (window as unknown as { umami?: Umami }).umami);
 
 /** The pages counted: what a prospect sees before having an account. */
-export const PUBLIC_PATHS = new Set(['/', '/demo', '/signup', '/login', '/forgot-password', '/onboarding']);
+export const PUBLIC_PATHS = new Set(['/', '/demo', '/signup', '/login', '/forgot-password', '/onboarding', '/mentions-legales', '/confidentialite', '/cookies', '/conditions', '/traitement-donnees']);
 
 export function trackPage(path: string): void {
   if (!PUBLIC_PATHS.has(path)) return;

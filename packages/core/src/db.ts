@@ -23,6 +23,8 @@ export interface Actor {
   readonly orgId: string;
   readonly role: Role;
   readonly door: Door;
+  /** Spec 060: the trial or licence ended past its grace period; only reading and renewal stay open. */
+  readonly locked?: boolean;
 }
 
 import type { Role } from './permissions.ts';

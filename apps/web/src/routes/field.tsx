@@ -2,6 +2,7 @@
 // (PWA). Everything written goes to the outbox first (IndexedDB) and leaves when the network is back;
 // every item carries its own id, so sending twice changes nothing.
 import { createFileRoute } from '@tanstack/react-router';
+import { LicenceBar } from '@/components/Platform.tsx';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Camera, Check, ChevronRight, ClipboardCheck, CloudRain, CloudSun, FileSignature, FileText, Hammer, HardHat, Home, LogOut, Map as MapIcon,
@@ -140,6 +141,7 @@ function FieldApp() {
       </header>
       <div className="field-body" style={{ paddingBottom: '9.5rem' }}>
         {!snapshot ? <p className="notice">{t('fieldApp.neverSynced')}</p> : null}
+        {snapshot ? <LicenceBar access={snapshot.access} canRenew={snapshot.user.role === 'owner' || snapshot.user.role === 'admin'} /> : null}
         {tab === 'home' && snapshot ? (
           <HomeTab snapshot={snapshot} site={site} onFlow={(next, template) => { if (template) setChecklistTemplate(template); setFlow(next); }} onSite={chooseSite} />
         ) : null}
