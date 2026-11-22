@@ -172,10 +172,18 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
     const [money, todo, onboarding, runs, editablePlans, announcements, feedback] = await Promise.all([
       core.founderMoney(owner), core.founderTodo(owner), core.onboardingSteps(owner), core.platformRuns(owner),
       core.listEditablePlans(owner), core.listAnnouncements(owner), core.listFeedback(owner)]);
-    const [platformKeys, grants, oauthConnections] = await Promise.all([core.listPlatformKeys(owner), core.featureGrants(owner), core.listPlatformMcpGrants(owner)]);
-    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, oauthConnections, mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
+    const [platformKeys, grants, oauthConnections, licenceSettings] = await Promise.all([core.listPlatformKeys(owner), core.featureGrants(owner), core.listPlatformMcpGrants(owner), core.licenceSettings(owner)]);
+    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, oauthConnections, licenceSettings, mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
   }),
 );
+
+/** Spec 060: how early companies are warned, and how long the grace period lasts. */
+export const saveLicenceSettings = createServerFn({ method: 'POST' })
+  .validator((input: { warnDays: number; graceDays: number }) => ({ warnDays: Number(input.warnDays), graceDays: Number(input.graceDays) }))
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    return core.setLicenceSettings(runtime().owner, viewer.userId, data);
+  }));
 
 // ---------------------------------------------------------------- checklists (spec 048)
 

@@ -1,4 +1,4 @@
-import { can, fieldSnapshot, getSettings, listChecklistRuns, listChecklistTemplates, listDocuments, listIncidents, listMaterialRequests, listNotes, listReports } from '@struo/core';
+import { can, companyAccess, fieldSnapshot, getSettings, listChecklistRuns, listChecklistTemplates, listDocuments, listIncidents, listMaterialRequests, listNotes, listReports } from '@struo/core';
 import { createFileRoute } from '@tanstack/react-router';
 import { actorFromRequest } from '@/server/api.server.ts';
 import { jsonError } from '@/server/context.server.ts';
@@ -54,6 +54,8 @@ export const Route = createFileRoute('/api/field/snapshot')({
               })),
               user: { id: actor.userId, name: user.rows[0]?.name ?? '', role: actor.role, canReport: can(actor.role, 'field.report') },
               company: { name: settings.name },
+              // Spec 060: the end of the trial or licence, shown on the phone too.
+              access: await companyAccess(runtime().owner, actor.orgId),
             },
             { headers: { 'cache-control': 'no-store' } },
           );

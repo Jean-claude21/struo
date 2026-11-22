@@ -11,7 +11,7 @@ import { Badge, DateText, formatMoney, parseMoney, Tabs } from '@/components/ui.
 import { COUNTRIES, sortedCountries } from '@/features/settings/countries.ts';
 import { BarChart } from '@/components/charts.tsx';
 import { Drawer, KpiTile, Panel, useToast } from '@/components/kit.tsx';
-import { consoleCompanyAction, getConsole, getConsoleCompany, markContactHandled, removeLicenseProduct, saveLicenseProduct, setCompanyPlan, setPlanPrice } from '@/features/settings/server.ts';
+import { consoleCompanyAction, getConsole, getConsoleCompany, markContactHandled, removeLicenseProduct, saveLicenseProduct, setCompanyPlan, setPlanPrice, saveLicenceSettings } from '@/features/settings/server.ts';
 import { getShell } from '@/features/shell/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
@@ -284,6 +284,28 @@ function Prices({ data }: { data: Data }) {
   );
 }
 
+/** Spec 060: warn N days before the end, then keep everything open for N days, then read-only. */
+function LicenceLifecycle({ value }: { value: { warnDays: number; graceDays: number } }) {
+  const { t, errorText } = useI18n();
+  const toast = useToast();
+  const router = useRouter();
+  const [form, setForm] = useState(value);
+  const save = async () => {
+    try { await saveLicenceSettings({ data: form }); toast({ text: t('console2.done') }); await router.invalidate(); }
+    catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
+  };
+  return (
+    <Panel title={t('licence.console.title')} sub={t('licence.console.sub')}>
+      <form className="form-grid" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <label className="field">{t('licence.console.warn')}<input type="number" min={0} max={60} value={form.warnDays} onChange={(event) => setForm({ ...form, warnDays: Number(event.target.value) })} /></label>
+        <label className="field">{t('licence.console.grace')}<input type="number" min={0} max={90} value={form.graceDays} onChange={(event) => setForm({ ...form, graceDays: Number(event.target.value) })} /></label>
+        <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>{t('licence.console.explain', { warn: form.warnDays, grace: form.graceDays })}</p>
+        <div><button type="submit" className="btn small">{t('app.save')}</button></div>
+      </form>
+    </Panel>
+  );
+}
+
 function Licenses({ data }: { data: Data }) {
   const { t, locale, errorText } = useI18n();
   const toast = useToast();
@@ -298,6 +320,7 @@ function Licenses({ data }: { data: Data }) {
   return (
     <div className="stack">
       {!data.chariowConfigured ? <p className="notice warn">{t('console2.chariowOff')}</p> : <p className="notice ok small">{t('console2.chariowOn')}</p>}
+      <LicenceLifecycle value={data.licenceSettings} />
       <Panel title={t('console2.products')} sub={t('console2.productsSub')}>
         <div className="stack">
           {data.products.map((product) => (

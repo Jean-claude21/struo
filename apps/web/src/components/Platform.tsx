@@ -1,11 +1,11 @@
 // Spec 055: what the platform says to every company (an announcement for a period), and what a
 // member says back (a problem or an idea, read in the founder's console).
 import { getRouteApi, useRouterState } from '@tanstack/react-router';
-import { Lightbulb, Megaphone, MessageSquareWarning, X } from 'lucide-react';
+import { CalendarClock, Lightbulb, Megaphone, MessageSquareWarning, X } from 'lucide-react';
 import { useState } from 'react';
 import { Modal, useToast } from './kit.tsx';
 import { sendFeedback } from '@/features/settings/server.ts';
-import { useI18n } from '@/i18n/index.tsx';
+import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 
 const root = getRouteApi('__root__');
 
@@ -24,6 +24,30 @@ export function AnnouncementBar() {
       <button type="button" className="btn ghost small" aria-label={t('announce.hide')} onClick={() => { try { localStorage.setItem('struo-announce', announcement.id); } catch { /* private mode */ } setHidden(true); }}><X size={16} /></button>
     </div>
   );
+}
+
+type Access = { stage: 'active' | 'ending' | 'grace' | 'locked'; kind: 'trial' | 'paid' | null; endsAt: string | null; graceEndsAt: string | null; daysLeft: number | null };
+
+/** Spec 060: the trial or licence ends soon, has ended (grace) or the space is read-only. */
+export function LicenceBar({ access, canRenew, renewHref = '/app/settings#licence' }: { access: Access | null | undefined; canRenew: boolean; renewHref?: string }) {
+  const { t, locale } = useI18n();
+  if (!access || access.stage === 'active') return null;
+  const day = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'long' }).format(new Date(iso)) : '');
+  const kind = access.kind === 'trial' ? 'trial' : 'paid';
+  const text = t(`licence.bar.${access.stage}.${kind}` as MessageKey, { n: access.daysLeft ?? 0, end: day(access.endsAt), grace: day(access.graceEndsAt) });
+  return (
+    <div className={`notice ${access.stage === 'ending' ? 'warn' : 'bad'} announce`} role="status">
+      <CalendarClock size={18} />
+      <div className="grow">{text}{canRenew ? null : <div className="small">{t('licence.bar.askOwner')}</div>}</div>
+      {canRenew ? <a className="btn small" href={renewHref}>{t('licence.bar.renew')}</a> : null}
+    </div>
+  );
+}
+
+/** The office's bar: reads the shell's access state; owners and admins get the renew button. */
+export function OfficeLicenceBar({ role }: { role: string }) {
+  const data = root.useLoaderData() as { access?: Access | null } | undefined;
+  return <LicenceBar access={data?.access} canRenew={role === 'owner' || role === 'admin'} />;
 }
 
 export function FeedbackButton() {

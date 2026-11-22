@@ -32,7 +32,7 @@ export function LanguageSwitch() {
 }
 
 /** The public header: logo, the page's own links (landing), language, sign-in and the demo. */
-export function PublicHeader({ signedIn, nav }: { signedIn?: boolean; nav?: { href: string; label: string }[] }) {
+export function PublicHeader({ signedIn, nav, cta }: { signedIn?: boolean; nav?: { href: string; label: string }[]; cta?: { href: string; label: string } }) {
   const { t } = useI18n();
   return (
     <header className="public-header">
@@ -47,7 +47,9 @@ export function PublicHeader({ signedIn, nav }: { signedIn?: boolean; nav?: { hr
         ) : (
           <>
             <Link to="/login" className="public-login">{t('landing.signIn')}</Link>
-            <Link to="/demo" className="btn small dark" data-umami-event="lp-demo-nav">{t('lx.nav.demo')}<ArrowRight size={15} /></Link>
+            {cta
+              ? <a href={cta.href} className="btn small dark" data-umami-event="lp-call-nav">{cta.label}<ArrowRight size={15} /></a>
+              : <Link to="/demo" className="btn small dark" data-umami-event="lp-demo-nav">{t('lx.nav.demo')}<ArrowRight size={15} /></Link>}
           </>
         )}
       </div>

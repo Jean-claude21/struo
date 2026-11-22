@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { en } from './en.ts';
 import { fr } from './fr.ts';
 import { translate } from './index.tsx';
+import { legalEn } from './legal.en.ts';
+import { legalFr } from './legal.fr.ts';
 
 const leaves = (node: unknown, prefix = ''): string[] =>
   typeof node === 'string'
@@ -66,5 +68,8 @@ describe('i18n (constitution VII)', () => {
     }
     expect(holes).toEqual([]);
   });
+  it('the legal pages have the same pages and sections in both languages (spec 060)', () => {
+    const shape = (pages: typeof legalFr) => Object.fromEntries(Object.entries(pages).map(([key, page]) => [key, { slug: page.slug, sections: page.sections.map((section) => section.id), summary: page.summary.length }]));
+    expect(shape(legalEn)).toEqual(shape(legalFr));
+  });
 });
-

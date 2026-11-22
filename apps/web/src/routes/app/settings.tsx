@@ -287,91 +287,77 @@ function MembersTab({ data }: { data: Data }) {
   );
 }
 
+/**
+ * Connections to assistants (spec 034, simplified): how to connect lives on the Intelligence page;
+ * here, who is connected and the keys for scripts. Revoked keys are not listed any more.
+ */
 function IntegrationsTab({ data }: { data: Data }) {
   const { t } = useI18n();
   const { run, error, busy } = useAction();
   const [key, setKey] = useState<string | null>(null);
   const manage = can(data.role, 'apikeys.manage');
-  const command = `claude mcp add --transport http struo ${data.baseUrl}/mcp --header "Authorization: Bearer ${key ?? '<clé>'}"`;
+  const active = data.keys.filter((apiKey) => !apiKey.revokedAt);
   return (
-    <section className="card stack">
-      <h2>{t('settings.apiKeys')}</h2>
-      <p className="muted">{t('settings.apiKeysHelp')}</p>
-      {manage ? (
-        <form
-          className="row"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const result = await run(() => createApiKey({ data: { name: formData(form).name ?? '' } }));
-            if (result) {
-              setKey(result.key);
-              form.reset();
-            }
-          }}
-        >
-          <input name="name" required maxLength={80} placeholder={t('settings.keyName')} style={{ maxWidth: 300 }} />
-          <button className="btn" disabled={busy}>
-            {t('settings.newKey')}
-          </button>
-        </form>
-      ) : null}
-      {key ? (
-        <div className="notice ok stack">
-          <span>{t('settings.keyCreated')}</span>
-          <div className="secret">{key}</div>
-          <button type="button" className="btn secondary small" onClick={() => void navigator.clipboard.writeText(key)}>
-            {t('app.copy')}
-          </button>
-        </div>
-      ) : null}
-      <div>
-        <div className="small muted">{t('settings.mcpHowTo')}</div>
-        <div className="secret">{command}</div>
-      </div>
-      <div>
-        <div className="small muted">{t('settings.mcpOauth')}</div>
-        <div className="secret">{`${data.baseUrl}/mcp`}</div>
-      </div>
-      {data.connections.length ? (
-        <>
-          <h3>{t('settings.connections')}</h3>
-          {data.connections.map((connection) => (
-            <div key={connection.clientId} className="alert-row">
-              <span className="grow">
-                <strong>{connection.clientName}</strong> · {connection.userName} · <DateText value={connection.createdAt} />
-              </span>
-              {connection.mine ? (
-                <button type="button" className="btn danger small" onClick={() => run(() => revokeMcpConnection({ data: { clientId: connection.clientId } }))}>
-                  {t('settings.revokeKey')}
-                </button>
-              ) : null}
-            </div>
-          ))}
-        </>
-      ) : null}
-      {data.keys.map((apiKey) => (
-        <div key={apiKey.id} className="alert-row">
-          <span className="grow">
-            <strong>{apiKey.name}</strong> <code>{apiKey.prefix}…</code> · {apiKey.ownerName}{' '}
-            {apiKey.lastUsedAt ? (
-              <span className="muted small">
-                · {t('settings.lastUsed', { date: '' })}
-                <DateText value={apiKey.lastUsedAt} time />
-              </span>
+    <div className="stack">
+      <section className="card stack">
+        <h2>{t('settings.connections')}</h2>
+        <p className="muted" style={{ margin: 0 }}>{t('settings.connectHelp')} <a href="/app/intelligence">{t('settings.connectLink')}</a></p>
+        {data.connections.length ? data.connections.map((connection) => (
+          <div key={connection.clientId} className="alert-row">
+            <span className="grow">
+              <strong>{connection.clientName}</strong> · {connection.userName} · <DateText value={connection.createdAt} />
+            </span>
+            {connection.mine ? (
+              <button type="button" className="btn danger small" onClick={() => run(() => revokeMcpConnection({ data: { clientId: connection.clientId } }))}>
+                {t('settings.revokeKey')}
+              </button>
             ) : null}
-          </span>
-          {apiKey.revokedAt ? (
-            <Badge tone="bad">{t('portalAdmin.revoked')}</Badge>
-          ) : manage ? (
-            <button type="button" className="btn danger small" onClick={() => run(() => revokeApiKey({ data: { id: apiKey.id } }))}>
-              {t('settings.revokeKey')}
-            </button>
-          ) : null}
-        </div>
-      ))}
+          </div>
+        )) : <p className="muted small" style={{ margin: 0 }}>{t('settings.noConnection')}</p>}
+      </section>
+      <details className="card stack" open={Boolean(key) || active.length > 0}>
+        <summary><b>{t('settings.apiKeys')}</b> <span className="muted small">· {t('settings.apiKeysHelp')}</span></summary>
+        {manage ? (
+          <form
+            className="row"
+            style={{ marginTop: '.8rem' }}
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const form = event.currentTarget;
+              const result = await run(() => createApiKey({ data: { name: formData(form).name ?? '' } }));
+              if (result) {
+                setKey(result.key);
+                form.reset();
+              }
+            }}
+          >
+            <input name="name" required maxLength={80} placeholder={t('settings.keyName')} style={{ maxWidth: 300 }} />
+            <button className="btn" disabled={busy}>{t('settings.newKey')}</button>
+          </form>
+        ) : null}
+        {key ? (
+          <div className="notice ok stack">
+            <span>{t('settings.keyCreated')}</span>
+            <div className="secret">{key}</div>
+            <span className="small">{t('settings.mcpHowTo')}</span>
+            <div className="secret">{`claude mcp add --transport http struo ${data.baseUrl}/mcp --header "Authorization: Bearer ${key}"`}</div>
+            <button type="button" className="btn secondary small" onClick={() => void navigator.clipboard.writeText(key)}>{t('app.copy')}</button>
+          </div>
+        ) : null}
+        {active.map((apiKey) => (
+          <div key={apiKey.id} className="alert-row">
+            <span className="grow">
+              <strong>{apiKey.name}</strong> <code>{apiKey.prefix}…</code> · {apiKey.ownerName}
+              {apiKey.lastUsedAt ? <span className="muted small"> · {t('settings.lastUsed', { date: '' })}<DateText value={apiKey.lastUsedAt} time /></span> : null}
+            </span>
+            {manage ? (
+              <button type="button" className="btn danger small" onClick={() => run(() => revokeApiKey({ data: { id: apiKey.id } }))}>{t('settings.revokeKey')}</button>
+            ) : null}
+          </div>
+        ))}
+      </details>
       <ErrorText error={error} />
-    </section>
+    </div>
   );
 }
 
@@ -596,7 +582,7 @@ function LicenseSection() {
   useEffect(() => { void load(); }, []);
   const date = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'long' }).format(new Date(value));
   return (
-    <section className="card stack">
+    <section className="card stack" id="licence">
       <h2>{t('lic.title')}</h2>
       <p className="muted small" style={{ margin: 0 }}>{t('lic.how')}</p>
       {offer?.products.length ? (

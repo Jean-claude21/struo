@@ -35,3 +35,4 @@ export * from './material.ts';
 export * from './cash.ts';
 export * from './founder.ts';
 export * from './platform-mcp.ts';
+export * from './licence.ts';
