@@ -11,7 +11,7 @@ import { Badge, DateText, formatMoney, parseMoney, Tabs } from '@/components/ui.
 import { COUNTRIES, sortedCountries } from '@/features/settings/countries.ts';
 import { BarChart } from '@/components/charts.tsx';
 import { Drawer, KpiTile, Panel, useToast } from '@/components/kit.tsx';
-import { consoleCompanyAction, getConsole, getConsoleCompany, markContactHandled, removeLicenseProduct, saveLicenseProduct, setCompanyPlan, setPlanPrice, saveLicenceSettings } from '@/features/settings/server.ts';
+import { consoleCompanyAction, getConsole, getConsoleCompany, markContactHandled, removeLicenseProduct, saveLicenseProduct, setCompanyPlan, setPlanPrice, saveLicenceSettings, savePublicPrices } from '@/features/settings/server.ts';
 import { getShell } from '@/features/shell/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
@@ -256,8 +256,18 @@ function Prices({ data }: { data: Data }) {
     catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
   };
   const missing = currencies.filter((currency) => paid.some((plan) => priceOf(plan.code, currency) === null)).length;
+  const togglePublic = async () => {
+    try { await savePublicPrices({ data: { on: !data.publicPrices } }); toast({ text: t('console2.done') }); await router.invalidate(); }
+    catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
+  };
   return (
     <div className="stack">
+      <Panel title={t('prices.publicTitle')} sub={data.publicPrices ? t('prices.publicOnHelp') : t('prices.publicOffHelp')}>
+        <div className="row" style={{ flexWrap: 'wrap', gap: '.8rem' }}>
+          <Badge tone={data.publicPrices ? 'ok' : 'warn'}>{data.publicPrices ? t('prices.publicOn') : t('prices.publicOff')}</Badge>
+          <button type="button" className="btn small" onClick={() => void togglePublic()}>{data.publicPrices ? t('prices.showQuote') : t('prices.showPrices')}</button>
+        </div>
+      </Panel>
       <p className={`notice ${missing ? 'warn' : 'ok'} small`}>{missing ? t('prices.missing', { n: missing }) : t('prices.complete')}</p>
       <Panel title={t('prices.title')} sub={t('prices.sub')} flush>
         <div className="table-wrap"><table>

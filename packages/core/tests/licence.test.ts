@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  accessStage, companyAccess, createProject, licenceNotice, licenceNoticeTargets, licenceSettings, listProjects, markNoticeOnce, resolveActor,
+  accessStage, companyAccess, createContactRequest, publicPrices, setPublicPrices, createProject, licenceNotice, licenceNoticeTargets, licenceSettings, listProjects, markNoticeOnce, resolveActor,
   setLicenceSettings, type Actor,
 } from '../src/index.ts';
 import { createTestCompany, createUser, setupDatabase, type TestDb } from './helpers.ts';
@@ -78,5 +78,20 @@ describe('the end of a licence (spec 060)', () => {
 
   it('refuses settings out of range', async () => {
     await expect(setLicenceSettings(db.owner, admin, { warnDays: 100, graceDays: 7 })).rejects.toMatchObject({ code: 'invalid_input' });
+  });
+});
+
+describe('public prices and call-back requests (spec 062)', () => {
+  it('shows « on quote » until the founder turns prices on', async () => {
+    expect(await publicPrices(db.owner)).toBe(false);
+    expect(await setPublicPrices(db.owner, admin, true)).toBe(true);
+    expect(await publicPrices(db.app)).toBe(true);
+    await setPublicPrices(db.owner, admin, false);
+  });
+
+  it('records a call-back request once per hour for the same contact', async () => {
+    const request = { name: 'Awa', company: 'Bâtir SARL', reach: '+00 11 22 33', activeSites: 4, message: '', locale: 'fr' };
+    expect(await createContactRequest(db.owner, request)).toBe(true);
+    expect(await createContactRequest(db.owner, request)).toBe(false);
   });
 });

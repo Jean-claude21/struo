@@ -8,6 +8,7 @@ import { invitationMail, mailMessage } from '@/server/mail.server.ts';
 import { chooseCompany, guarded, loadViewer, requestCountry, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
 import { COUNTRIES } from './countries.ts';
 import { outboundAllowed } from '@/server/demo.server.ts';
+import { reportError } from '@/server/monitor.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 
 const act = <T>(work: (actor: core.Actor) => Promise<T>, permission?: core.Permission) =>
@@ -154,7 +155,10 @@ export const getPlans = createServerFn({ method: 'GET' }).handler(() =>
     // Spec 045: the public prices are those of the visitor's country currency, never converted.
     const { country, detected } = requestCountry();
     const currency = COUNTRIES[country]!.currency;
-    return { plans: await core.listPlansIn(runtime().db, currency), country, currency, detected, locale: requestLocale() };
+    // Spec 062: until the founder turns public prices on, every plan is « on quote ».
+    const { db } = runtime();
+    const [plans, pricesOn] = await Promise.all([core.listPlansIn(db, currency), core.publicPrices(db)]);
+    return { plans: pricesOn ? plans : plans.map((plan) => ({ ...plan, priceMinor: 0 })), pricesOn, country, currency, detected, locale: requestLocale() };
   }),
 );
 
@@ -172,10 +176,18 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
     const [money, todo, onboarding, runs, editablePlans, announcements, feedback] = await Promise.all([
       core.founderMoney(owner), core.founderTodo(owner), core.onboardingSteps(owner), core.platformRuns(owner),
       core.listEditablePlans(owner), core.listAnnouncements(owner), core.listFeedback(owner)]);
-    const [platformKeys, grants, oauthConnections, licenceSettings] = await Promise.all([core.listPlatformKeys(owner), core.featureGrants(owner), core.listPlatformMcpGrants(owner), core.licenceSettings(owner)]);
-    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, oauthConnections, licenceSettings, mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
+    const [platformKeys, grants, oauthConnections, licenceSettings, publicPrices] = await Promise.all([core.listPlatformKeys(owner), core.featureGrants(owner), core.listPlatformMcpGrants(owner), core.licenceSettings(owner), core.publicPrices(owner)]);
+    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, oauthConnections, licenceSettings, publicPrices, mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
   }),
 );
+
+/** Spec 062: show the prices on the public site, or « on quote » for every plan. */
+export const savePublicPrices = createServerFn({ method: 'POST' })
+  .validator((input: { on: boolean }) => ({ on: Boolean(input.on) }))
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    return core.setPublicPrices(runtime().owner, viewer.userId, data.on);
+  }));
 
 /** Spec 060: how early companies are warned, and how long the grace period lasts. */
 export const saveLicenceSettings = createServerFn({ method: 'POST' })
@@ -211,7 +223,20 @@ export const sendContactRequest = createServerFn({ method: 'POST' })
     guarded(async () => {
       if (data.website) return { ok: true };
       const { country } = requestCountry();
-      await core.createContactRequest(runtime().owner, { ...data, countryCode: country, locale: requestLocale() });
+      const rt = runtime();
+      const created = await core.createContactRequest(rt.owner, { ...data, countryCode: country, locale: requestLocale() });
+      // Spec 062: the founder hears about every new request at once, not only in the console.
+      if (created && rt.env.PLATFORM_ADMIN_EMAILS.length) {
+        const line = (key: string, value: string | number | null | undefined) => (value === null || value === undefined || value === '' ? null : `${translate('fr', key)} : ${value}`);
+        await rt.mailer.send({
+          to: rt.env.PLATFORM_ADMIN_EMAILS,
+          subject: translate('fr', 'leadMail.subject', { name: data.name, company: data.company }),
+          text: [translate('fr', 'leadMail.intro'), '',
+            line('leadMail.name', data.name), line('leadMail.company', data.company), line('leadMail.reach', data.reach),
+            line('leadMail.sites', data.activeSites), line('leadMail.country', country), line('leadMail.message', data.message), '',
+            translate('fr', 'leadMail.open', { url: `${rt.env.APP_BASE_URL}/console` })].filter((item) => item !== null).join('\n'),
+        }).catch((error: unknown) => reportError(error, { where: 'lead-mail' }));
+      }
       return { ok: true };
     }),
   );

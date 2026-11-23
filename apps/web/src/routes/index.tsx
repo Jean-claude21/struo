@@ -3,11 +3,10 @@
 // What the mockup only pretended is real here: the cockpit pins switch the site, the estimate uses
 // the visitor's currency, prices come from the visitor's country (on quote when none is published),
 // each role opens its own demo, and the call-back form sends a real request.
-import { createFileRoute, getRouteApi, Link } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent } from 'react';
-import { LanguageSwitch } from '@/components/PublicHeader.tsx';
+import { EdFooter, EdHeader } from '@/components/Editorial.tsx';
 import { formatMoney } from '@/components/ui.tsx';
-import { LegalLinks } from '@/components/Legal.tsx';
 import { planWords } from '@/components/PlanWords.tsx';
 import { getPlans, sendContactRequest } from '@/features/settings/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
@@ -18,7 +17,6 @@ export const Route = createFileRoute('/')({
   component: Landing,
 });
 
-const root = getRouteApi('__root__');
 const IMG = '/landing/ed';
 
 // The five sites of the cockpit (demo data): position on the map, state and progress.
@@ -141,7 +139,6 @@ function CallBack() {
 function Landing() {
   const { t, locale } = useI18n();
   const { plans, currency } = Route.useLoaderData();
-  const { viewer } = root.useLoaderData();
   const [role, setRole] = useState<(typeof ROLES)[number]['key']>('owner');
   const shown = ROLES.find((item) => item.key === role)!;
   const list = (key: MessageKey) => t(key).split('|');
@@ -150,18 +147,7 @@ function Landing() {
   const tagline = (code: string, fallback: string) => (['starter', 'pro', 'enterprise'].includes(code) ? t(`lp.pricing.${code}` as MessageKey) : fallback);
   return (
     <div className="ed">
-      <header className="ed-nav" id="top">
-        <a className="ed-brand" href="#top" aria-label={t('lp.home')}><span className="ed-brand-mark">S</span><strong>STRUO</strong></a>
-        <nav aria-label={t('lp.navLabel')}>
-          <a href="#probleme">{t('lp.nav.problem')}</a>
-          <a href="#systeme">{t('lp.nav.system')}</a>
-          <a href="#preuve">{t('lp.nav.proof')}</a>
-          <a href="#tarifs">{t('lp.nav.pricing')}</a>
-        </nav>
-        {viewer
-          ? <Link className="ed-nav-cta" to="/app">{t('nav.dashboard')} <span>↗</span></Link>
-          : <a className="ed-nav-cta" href="#rappel" data-umami-event="lp-call-nav">{t('lp.cta')} <span>↗</span></a>}
-      </header>
+      <EdHeader />
 
       <main>
         <section className="ed-hero">
@@ -290,16 +276,7 @@ function Landing() {
           </div>
         </section>
       </main>
-      <footer>
-        <a className="ed-brand" href="#top"><span className="ed-brand-mark">S</span><strong>STRUO</strong></a>
-        <p>{t('lp.footer.tagline')}</p>
-        <div className="ed-foot-links">
-          <LegalLinks />
-          {viewer ? null : <Link to="/login">{t('landing.signIn')}</Link>}
-          <LanguageSwitch />
-        </div>
-        <a href="#top">{t('lp.footer.top')}</a>
-      </footer>
+      <EdFooter />
     </div>
   );
 }
