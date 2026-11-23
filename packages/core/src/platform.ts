@@ -223,14 +223,15 @@ const contactSchema = z.object({
  * A prospect asks to be called back from the public site. The same contact sent twice within an
  * hour is kept once (a double click or an impatient visitor), and nothing is sent to anyone.
  */
-export async function createContactRequest(owner: Db, input: unknown): Promise<void> {
+export async function createContactRequest(owner: Db, input: unknown): Promise<boolean> {
   const data = parse(contactSchema, input);
   const { rows } = await owner.query(
     `select 1 from contact_request where lower(reach) = lower($1) and created_at > now() - interval '1 hour'`, [data.reach]);
-  if (rows.length) return;
+  if (rows.length) return false;
   await owner.query(
     `insert into contact_request (name, company, reach, active_sites, message, country_code, locale) values ($1, $2, $3, $4, $5, $6, $7)`,
     [data.name, data.company, data.reach, data.activeSites ?? null, data.message || null, data.countryCode ?? null, data.locale]);
+  return true;
 }
 
 export async function listContactRequests(owner: Db, limit = 200): Promise<ContactRequest[]> {
@@ -245,4 +246,17 @@ export async function markContactHandled(owner: Db, id: string, adminId: string)
   const { rowCount } = await owner.query('update contact_request set handled_at = now(), handled_by = $2 where id = $1 and handled_at is null', [id, adminId]);
   if (!rowCount) throw notFound();
   await platformJournal(owner, adminId, 'contact.handled', null, { id });
+}
+
+/** Spec 062: whether the public site shows the prices, or « on quote » for every plan. */
+export async function publicPrices(q: Pick<Db, 'query'>): Promise<boolean> {
+  const { rows } = await q.query<{ on: boolean }>('select public_prices as on from platform_settings');
+  return rows[0]?.on ?? false;
+}
+
+export async function setPublicPrices(owner: Db, adminId: string, on: boolean): Promise<boolean> {
+  const value = parse(z.boolean(), on);
+  await owner.query('update platform_settings set public_prices = $1, updated_at = now(), updated_by = $2', [value, adminId]);
+  await platformJournal(owner, adminId, 'prices.public', 'platform', { on: value });
+  return value;
 }

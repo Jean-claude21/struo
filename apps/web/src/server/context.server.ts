@@ -68,10 +68,24 @@ export async function requirePlatformAdmin(): Promise<Viewer> {
   return viewer;
 }
 
+/**
+ * The request's headers as a plain lower-case map. The runtime hands a `Headers` object: indexing it
+ * like a record silently returned nothing, so language and country were never read from the browser.
+ */
+function requestHeaders(): Record<string, string | undefined> {
+  const raw = getRequestHeaders() as unknown;
+  if (raw && typeof (raw as Headers).get === 'function' && typeof (raw as Headers).forEach === 'function') {
+    const map: Record<string, string> = {};
+    (raw as Headers).forEach((value, key) => { map[key.toLowerCase()] = value; });
+    return map;
+  }
+  return Object.fromEntries(Object.entries((raw ?? {}) as Record<string, string | undefined>).map(([key, value]) => [key.toLowerCase(), value]));
+}
+
 export function requestLocale(): Locale {
   const chosen = getCookie(LOCALE_COOKIE);
   if (isLocale(chosen)) return chosen;
-  const headers = getRequestHeaders() as unknown as Record<string, string | undefined>;
+  const headers = requestHeaders();
   return localeFromHeaders(null, headers['accept-language'] ?? null);
 }
 
@@ -83,7 +97,7 @@ export function requestLocale(): Locale {
 export function requestCountry(): { country: string; detected: boolean } {
   const chosen = getCookie(COUNTRY_COOKIE)?.toUpperCase();
   if (isCountry(chosen)) return { country: chosen, detected: true };
-  const headers = getRequestHeaders() as unknown as Record<string, string | undefined>;
+  const headers = requestHeaders();
   for (const name of ['cf-ipcountry', 'x-vercel-ip-country', 'cloudfront-viewer-country', 'x-country-code']) {
     const value = headers[name]?.toUpperCase();
     if (isCountry(value)) return { country: value, detected: true };
