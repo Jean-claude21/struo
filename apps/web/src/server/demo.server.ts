@@ -6,7 +6,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { hashPassword } from 'better-auth/crypto';
-import { DomainError } from '@struo/core';
+import { DomainError, demoPerDay } from '@struo/core';
 import { DEMO_NAME, seedDemoCompany } from '../../scripts/demo-company.ts';
 import { reportError } from './monitor.server.ts';
 import type { Runtime } from './runtime.server.ts';
@@ -17,7 +17,6 @@ const LOCK = 727102;
 const TTL_HOURS = 24;
 // Mobile operators share one address between many people: a generous limit per address, and a cap
 // on the copies alive at the same time to protect the database.
-const PER_VISITOR_PER_DAY = 10;
 const MAX_ACTIVE = 150;
 /** The assistant's budget in a demo copy, in US cents: a few questions, no more. */
 const AI_BUDGET_CENTS = 30;
@@ -89,7 +88,9 @@ export async function claimSandbox(rt: Runtime, visitor: string): Promise<Sandbo
   if (!demoAvailable(rt)) throw new DomainError('demo_unavailable', 409);
   const hash = visitorHash(rt, visitor);
   const recent = await rt.owner.query<{ n: number }>(`select count(*)::int as n from demo_sandbox where visitor_hash = $1 and assigned_at > now() - interval '1 day'`, [hash]);
-  if (recent.rows[0]!.n >= PER_VISITOR_PER_DAY) throw new DomainError('demo_limit', 409);
+  // Spec 072: the founder sets the limit in the console (0: no limit).
+  const perDay = await demoPerDay(rt.owner);
+  if (perDay > 0 && recent.rows[0]!.n >= perDay) throw new DomainError('demo_limit', 409);
   const active = await rt.owner.query<{ n: number }>(`select count(*)::int as n from demo_sandbox where status = 'assigned' and expires_at > now()`);
   if (active.rows[0]!.n >= MAX_ACTIVE) throw new DomainError('demo_unavailable', 409);
   const claim = (orgId: string | null) => rt.owner.query<SandboxRow>(

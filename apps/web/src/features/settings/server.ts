@@ -157,8 +157,8 @@ export const getPlans = createServerFn({ method: 'GET' }).handler(() =>
     const currency = COUNTRIES[country]!.currency;
     // Spec 062: until the founder turns public prices on, every plan is « on quote ».
     const { db } = runtime();
-    const [plans, pricesOn] = await Promise.all([core.listPlansIn(db, currency), core.publicPrices(db)]);
-    return { plans: pricesOn ? plans : plans.map((plan) => ({ ...plan, priceMinor: 0 })), pricesOn, country, currency, detected, locale: requestLocale() };
+    const [plans, pricesOn, trial] = await Promise.all([core.listPlansIn(db, currency), core.publicPrices(db), core.trialSettings(db)]);
+    return { plans: pricesOn ? plans : plans.map((plan) => ({ ...plan, priceMinor: 0 })), pricesOn, trial, country, currency, detected, locale: requestLocale() };
   }),
 );
 
@@ -177,9 +177,31 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
       core.founderMoney(owner), core.founderTodo(owner), core.onboardingSteps(owner), core.platformRuns(owner),
       core.listEditablePlans(owner), core.listAnnouncements(owner), core.listFeedback(owner)]);
     const [platformKeys, grants, oauthConnections, licenceSettings, publicPrices, pulses] = await Promise.all([core.listPlatformKeys(owner), core.featureGrants(owner), core.listPlatformMcpGrants(owner), core.licenceSettings(owner), core.publicPrices(owner), core.listStorePulses(owner)]);
-    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, oauthConnections, licenceSettings, publicPrices, pulses, pulseUrl: `${env.APP_BASE_URL}/api/payments/chariow`, pulseConfigured: Boolean(env.CHARIOW_PULSE_SECRET), mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
+    const [trial, demoLimit] = await Promise.all([core.trialSettings(owner), core.demoPerDay(owner)]);
+    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, oauthConnections, licenceSettings, publicPrices, trial, demoLimit, pulses, pulseUrl: `${env.APP_BASE_URL}/api/payments/chariow`, pulseConfigured: Boolean(env.CHARIOW_PULSE_SECRET), mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
   }),
 );
+
+/** Spec 072: how many demos one address may open per day (0: no limit), and lifting today's counts. */
+export const saveDemoLimit = createServerFn({ method: 'POST' })
+  .validator((input: { perDay: number }) => ({ perDay: Number(input.perDay) }))
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    return core.setDemoPerDay(runtime().owner, viewer.userId, data.perDay);
+  }));
+
+export const resetDemoLimits = createServerFn({ method: 'POST' }).handler(() => guarded(async () => {
+  const viewer = await requirePlatformAdmin();
+  return core.resetDemoLimits(runtime().owner, viewer.userId);
+}));
+
+/** Spec 072: the free trial's length and whether the public site offers it. */
+export const saveTrialSettings = createServerFn({ method: 'POST' })
+  .validator((input: { days: number; public: boolean }) => ({ days: Number(input.days), public: Boolean(input.public) }))
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    return core.setTrialSettings(runtime().owner, viewer.userId, data);
+  }));
 
 /** Spec 062: show the prices on the public site, or « on quote » for every plan. */
 export const savePublicPrices = createServerFn({ method: 'POST' })
