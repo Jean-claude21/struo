@@ -22,6 +22,33 @@ export function portalUrl(rt: Runtime, tokenEnc: string | null): string | null {
 }
 
 /** Tells a person a task was given to them (from the office, or from an incident raised in the field). */
+/**
+ * Spec 073: the one way a team member is told something. The notice is always kept for the bell in
+ * the app; it reaches the phone and the inbox according to each person's choices (Account ›
+ * Notifications), with sensible defaults per kind. Never blocking.
+ */
+export async function deliverToMembers(
+  rt: Runtime, orgId: string, people: { userId: string; email: string }[], kind: core.NoticeKind,
+  notice: (person: { userId: string; email: string }) => { title: string; body: string; url: string; tag: string; mail?: { subject: string; paragraphs: string[]; button: string; footnote: string } },
+): Promise<void> {
+  if (!people.length) return;
+  const choices = await core.noticeChoices(rt.owner, orgId, people.map((person) => person.userId), kind);
+  const locale = await companyLocale(rt, orgId);
+  for (const person of people) {
+    const item = notice(person);
+    const path = item.url.startsWith(rt.env.APP_BASE_URL) ? item.url.slice(rt.env.APP_BASE_URL.length) : item.url;
+    await core.recordNotices(rt.owner, orgId, [{ userId: person.userId, kind, title: item.title, body: item.body, url: path }]);
+    const choice = choices.get(person.userId) ?? core.NOTICE_KINDS[kind];
+    if (choice.push) await sendPush(rt, await core.memberPushTargets(rt.owner, orgId, [person.userId]), { title: item.title, body: item.body, url: item.url, tag: item.tag });
+    if (choice.email && item.mail) {
+      await rt.mailer.send(mailMessage(locale, person.email, item.mail.subject, {
+        preheader: item.body, title: item.title, paragraphs: item.mail.paragraphs,
+        button: { label: item.mail.button, url: item.url }, footnote: item.mail.footnote,
+      }, rt.env.APP_BASE_URL));
+    }
+  }
+}
+
 export async function notifyTaskAssigned(rt: Runtime, actor: core.Actor, taskId: string): Promise<void> {
   try {
     if (!(await outboundAllowed(rt, actor.orgId))) return;
@@ -34,18 +61,16 @@ export async function notifyTaskAssigned(rt: Runtime, actor: core.Actor, taskId:
     if (!task || task.userId === actor.userId) return;
     const locale = await companyLocale(rt, actor.orgId);
     const url = `${rt.env.APP_BASE_URL}${task.role === 'site_lead' ? '/field' : '/app/tasks'}`;
-    // Spec 052: on the phone too (the field reads few e-mails).
-    await sendPush(rt, await core.memberPushTargets(rt.owner, actor.orgId, [task.userId]), {
-      title: translate(locale, task.incident ? 'notify.task.titleIncident' : 'notify.task.title'), body: `${task.code} · ${task.title.slice(0, 120)}`, url, tag: `task:${taskId}`,
-    });
     const due = task.dueOn ? new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'medium' }).format(new Date(`${task.dueOn}T12:00:00`)) : null;
-    await rt.mailer.send(mailMessage(locale, task.email, translate(locale, 'notify.task.subject', { title: task.title.slice(0, 80) }), {
-      preheader: translate(locale, 'notify.task.preheader', { code: task.code }),
-      title: translate(locale, task.incident ? 'notify.task.titleIncident' : 'notify.task.title'),
-      paragraphs: [`${task.title}`, translate(locale, 'notify.task.where', { code: task.code, site: task.site }), ...(due ? [translate(locale, 'notify.task.due', { date: due })] : [])],
-      button: { label: translate(locale, 'notify.task.button'), url },
-      footnote: translate(locale, 'notify.task.why'),
-    }, rt.env.APP_BASE_URL));
+    const title = translate(locale, task.incident ? 'notify.task.titleIncident' : 'notify.task.title');
+    await deliverToMembers(rt, actor.orgId, [{ userId: task.userId, email: task.email }], 'task', () => ({
+      title, body: `${task.code} · ${task.title.slice(0, 120)}`, url, tag: `task:${taskId}`,
+      mail: {
+        subject: translate(locale, 'notify.task.subject', { title: task.title.slice(0, 80) }),
+        paragraphs: [`${task.title}`, translate(locale, 'notify.task.where', { code: task.code, site: task.site }), ...(due ? [translate(locale, 'notify.task.due', { date: due })] : [])],
+        button: translate(locale, 'notify.task.button'), footnote: translate(locale, 'notify.task.why'),
+      },
+    }));
   } catch (error) {
     reportError(error, { where: 'notify:task' });
   }
@@ -205,18 +230,10 @@ export async function notifyClaimDeclared(rt: Runtime, orgId: string, projectId:
     const first = rows[0]!;
     const values = { code: first.code, project: first.project, client: first.client ?? '' };
     const url = `${rt.env.APP_BASE_URL}/app/finance?tab=claims`;
-    await sendPush(rt, await core.memberPushTargets(rt.owner, orgId, rows.map((row) => row.userId)), {
+    await deliverToMembers(rt, orgId, rows, 'claim', () => ({
       title: translate(locale, 'claims.push.title'), body: translate(locale, 'claims.push.body', values), url, tag: `claim:${projectId}`,
-    });
-    for (const row of rows) {
-      await rt.mailer.send(mailMessage(locale, row.email, translate(locale, 'claims.mail.subject', values), {
-        preheader: translate(locale, 'claims.push.body', values),
-        title: translate(locale, 'claims.push.title'),
-        paragraphs: [translate(locale, 'claims.mail.body', values)],
-        button: { label: translate(locale, 'claims.mail.button'), url },
-        footnote: translate(locale, 'claims.mail.why'),
-      }, rt.env.APP_BASE_URL));
-    }
+      mail: { subject: translate(locale, 'claims.mail.subject', values), paragraphs: [translate(locale, 'claims.mail.body', values)], button: translate(locale, 'claims.mail.button'), footnote: translate(locale, 'claims.mail.why') },
+    }));
   } catch (error) {
     reportError(error, { where: 'notify:claim' });
   }
@@ -234,33 +251,50 @@ export type TeamEvent = 'report' | 'incident' | 'material' | 'note' | 'materialU
 export async function notifyTeam(rt: Runtime, actor: core.Actor, projectId: string, event: TeamEvent, params: Record<string, string | number> = {}, only?: string[]): Promise<void> {
   try {
     if (!(await outboundAllowed(rt, actor.orgId))) return;
-    const { rows: people } = await rt.owner.query<{ userId: string; email: string; role: string }>(
-      only
-        ? `select u.id as "userId", u.email, m.role from member m join "user" u on u.id = m."userId" where m."organizationId" = $1 and u.id = any($2::text[])`
-        : `select u.id as "userId", u.email, m.role from member m join "user" u on u.id = m."userId" where m."organizationId" = $1 and m.role in ('owner', 'admin', 'engineer')`,
-      only ? [actor.orgId, only] : [actor.orgId]);
+    // Spec 073: the office of the site — owner, admins, and the engineers whose site it is.
+    const people = only
+      ? (await rt.owner.query<{ userId: string; email: string; role: string }>(
+          `select u.id as "userId", u.email, m.role from member m join "user" u on u.id = m."userId" where m."organizationId" = $1 and u.id = any($2::text[])`, [actor.orgId, only])).rows
+      : await core.siteOffice(rt.owner, actor.orgId, projectId);
     const targets = people.filter((person) => person.userId !== actor.userId);
     if (!targets.length) return;
     const { rows: sites } = await rt.owner.query<{ code: string; name: string }>('select code, name from project where id = $1 and org_id = $2', [projectId, actor.orgId]);
     const locale = await companyLocale(rt, actor.orgId);
     const values = { ...params, code: sites[0]?.code ?? '', site: sites[0]?.name ?? '' };
+    const roles = new Map(targets.map((person) => [person.userId, person.role]));
     const urlFor = (role: string) => `${rt.env.APP_BASE_URL}${role === 'site_lead' ? '/field' : event === 'report' ? '/app/field' : event === 'material' || event === 'note' || event === 'materialUpdate' ? `/app/projects/${projectId}?tab=work` : `/app/projects/${projectId}`}`;
-    for (const person of targets) {
-      await sendPush(rt, await core.memberPushTargets(rt.owner, actor.orgId, [person.userId]), {
-        title: translate(locale, `teamPush.${event}.title`, values), body: translate(locale, `teamPush.${event}.body`, values), url: urlFor(person.role), tag: `${event}:${projectId}`,
-      });
-      if (event === 'incident' || event === 'material') {
-        await rt.mailer.send(mailMessage(locale, person.email, translate(locale, `teamPush.${event}.subject`, values), {
-          preheader: translate(locale, `teamPush.${event}.body`, values),
-          title: translate(locale, `teamPush.${event}.title`, values),
-          paragraphs: [translate(locale, `teamPush.${event}.body`, values)],
-          button: { label: translate(locale, 'teamPush.open'), url: urlFor(person.role) },
-          footnote: translate(locale, 'teamPush.why'),
-        }, rt.env.APP_BASE_URL));
-      }
-    }
+    const withMail = event === 'incident' || event === 'material';
+    await deliverToMembers(rt, actor.orgId, targets, event, (person) => ({
+      title: translate(locale, `teamPush.${event}.title`, values), body: translate(locale, `teamPush.${event}.body`, values),
+      url: urlFor(roles.get(person.userId) ?? 'owner'), tag: `${event}:${projectId}`,
+      ...(withMail ? { mail: { subject: translate(locale, `teamPush.${event}.subject`, values), paragraphs: [translate(locale, `teamPush.${event}.body`, values)], button: translate(locale, 'teamPush.open'), footnote: translate(locale, 'teamPush.why') } } : {}),
+    }));
   } catch (error) {
     reportError(error, { where: `notify:team:${event}` });
+  }
+}
+
+/** Spec 073: the site lead hears that the office approved or sent back their report. */
+export async function notifyReviewed(rt: Runtime, actor: core.Actor, reportId: string): Promise<void> {
+  try {
+    if (!(await outboundAllowed(rt, actor.orgId))) return;
+    const { rows } = await rt.owner.query<{ authorId: string; email: string; status: string; note: string | null; code: string; site: string }>(
+      `select r.author_id as "authorId", u.email, r.status, r.review_note as note, p.code, p.name as site
+         from site_report r join "user" u on u.id = r.author_id join project p on p.id = r.project_id
+        where r.id = $1 and r.org_id = $2`, [reportId, actor.orgId]);
+    const report = rows[0];
+    if (!report || report.authorId === actor.userId || !['validated', 'rejected'].includes(report.status)) return;
+    const locale = await companyLocale(rt, actor.orgId);
+    const values = { code: report.code, site: report.site, note: report.note ?? '' };
+    const sentBack = report.status === 'rejected';
+    await deliverToMembers(rt, actor.orgId, [{ userId: report.authorId, email: report.email }], 'review', () => ({
+      title: translate(locale, sentBack ? 'teamPush.review.rejectedTitle' : 'teamPush.review.validatedTitle', values),
+      body: translate(locale, sentBack ? (report.note ? 'teamPush.review.rejectedBody' : 'teamPush.review.rejectedNoNote') : 'teamPush.review.validatedBody', values),
+      url: `${rt.env.APP_BASE_URL}/field`, tag: `review:${reportId}`,
+      mail: { subject: translate(locale, sentBack ? 'teamPush.review.rejectedTitle' : 'teamPush.review.validatedTitle', values), paragraphs: [translate(locale, sentBack ? (report.note ? 'teamPush.review.rejectedBody' : 'teamPush.review.rejectedNoNote') : 'teamPush.review.validatedBody', values)], button: translate(locale, 'teamPush.open'), footnote: translate(locale, 'teamPush.why') },
+    }));
+  } catch (error) {
+    reportError(error, { where: 'notify:review' });
   }
 }
 

@@ -13,7 +13,7 @@ import { translate } from '@/i18n/index.tsx';
 import { alertText } from '@/server/jobs.server.ts';
 import { invitationMail } from '@/server/mail.server.ts';
 import { outboundAllowed } from '@/server/demo.server.ts';
-import { companyLocale, deliverClientReport } from '@/server/notify.server.ts';
+import { companyLocale, deliverClientReport, notifyReviewed } from '@/server/notify.server.ts';
 import { draftSections } from '@/server/report.server.ts';
 import type { Runtime } from '@/server/runtime.server.ts';
 import { forecast } from '@/server/weather.server.ts';
@@ -215,7 +215,7 @@ export const CAPABILITIES: Capability[] = [
     name: 'review_report', group: 'field', permission: 'field.review', autonomy: 2,
     input: z.object({ reportId: z.string().uuid(), decision: z.enum(['validated', 'rejected']), note: z.string().optional() }),
     description: 'Validates a field report (its progress becomes the phase\'s) or rejects it with a note for the site lead.',
-    run: ({ rt, actor }, input) => core.reviewReport(rt.db, actor, input.reportId, { decision: input.decision, note: input.note ?? null }),
+    run: async ({ rt, actor }, input) => { await core.reviewReport(rt.db, actor, input.reportId, { decision: input.decision, note: input.note ?? null }); void notifyReviewed(rt, actor, input.reportId); },
   }),
   define({
     name: 'list_incidents', group: 'field', permission: null, autonomy: 1,

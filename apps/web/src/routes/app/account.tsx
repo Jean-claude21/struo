@@ -5,6 +5,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { CheckCircle2, LogOut, MailWarning } from 'lucide-react';
 import { PageHeader, Panel } from '@/components/kit.tsx';
 import { PushToggle } from '@/components/PushToggle.tsx';
+import { NoticePrefs } from '@/components/NoticePrefs.tsx';
 import { ErrorText, Field } from '@/components/ui.tsx';
 import { authCall, authErrorKey } from '@/features/auth/call.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
@@ -54,7 +55,10 @@ function Account() {
       {search.verified ? <Done>{t('account.verifiedNow')}</Done> : null}
       {search.email ? <Done>{t('account.emailChangedNow')}</Done> : null}
 
-      <Panel title={t('teamPush.title')}><PushToggle /></Panel>
+      <section id="notifications" className="stack">
+        <Panel title={t('teamPush.title')}><PushToggle /></Panel>
+        <Panel title={t('notices.prefsTitle')}><NoticePrefs role={viewer.company?.role ?? 'owner'} /></Panel>
+      </section>
 
       <Panel title={t('account.addressTitle')}>
         <div className="stack">

@@ -1,7 +1,6 @@
 // « Today » (spec 023): one page, shaped by the role. The manager sees decisions, cash, sites, photos
 import { PaymentClaims } from '@/components/PaymentClaims.tsx';
 import { MaterialRequests } from '@/components/MaterialRequests.tsx';
-import { PushToggle } from '@/components/PushToggle.tsx';
 // and clients; the engineer sees weather, phases and what to review; the accountant sees what to
 // collect and what to fix; the site lead is sent to the field app.
 import { createFileRoute, getRouteApi, Link } from '@tanstack/react-router';
@@ -242,7 +241,6 @@ function Engineer({ data }: { data: Data }) {
         <KpiTile icon={Camera} label={t('dashboard.photosWeek')} value={ops.photosWeek} sub={`${t('dashboard.reportsWeek')} ${ops.reportsWeek}`} />
         <KpiTile icon={HardHat} label={t('crew.tile')} value={data.crew.workers} sub={t('crew.tileSub', { sites: data.crew.sites })} onClick={() => { window.location.href = '/app/crew'; }} />
       </div>
-      <PushToggle compact />
       <MaterialRequests canHandle showSite />
       <SitesMap sites={data.insights.sites} />
       <Weather data={data} />

@@ -3,6 +3,7 @@
 // every item carries its own id, so sending twice changes nothing.
 import { createFileRoute } from '@tanstack/react-router';
 import { LicenceBar } from '@/components/Platform.tsx';
+import { NoticeBell } from '@/components/NoticeBell.tsx';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Camera, Check, ChevronRight, ClipboardCheck, CloudRain, CloudSun, FileSignature, FileText, Hammer, HardHat, Home, LogOut, Map as MapIcon,
@@ -137,7 +138,7 @@ function FieldApp() {
           <div className="muted small">{snapshot?.company.name ?? 'Struo'}</div>
           <strong style={{ fontSize: '1.35rem' }}>{t('fieldApp.hello', { name: snapshot?.user.name.split(' ')[0] ?? '' })}</strong>
         </div>
-        <span className="row tight">{online && snapshot ? <AssistantButton /> : null}{pill}</span>
+        <span className="row tight">{online && snapshot ? <NoticeBell className="icon-btn" /> : null}{online && snapshot ? <AssistantButton /> : null}{pill}</span>
       </header>
       <div className="field-body" style={{ paddingBottom: '9.5rem' }}>
         {!snapshot ? <p className="notice">{t('fieldApp.neverSynced')}</p> : null}

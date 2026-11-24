@@ -153,6 +153,17 @@ try {
   }
   const status = (await db.query<{ status: string }>('select status from site_report where id = $1', [reportId])).rows[0]?.status;
   ok('database: the report is approved', status === 'validated' || status === 'approved', String(status));
+  // Spec 073: the bell — the office was told about the report, the site lead about its approval.
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  const bell = async (person: Person) => (await (await person.fetch('/api/notifications')).json()) as { items: { kind: string; title: string }[]; unread: number };
+  const ownerBell = await bell(P.owner);
+  ok('bell: the owner has the report to approve', ownerBell.items.some((item) => item.kind === 'report'), `${ownerBell.unread} unread`);
+  const leadBell = await bell(P.site_lead);
+  ok('bell: the site lead is told the report is approved', leadBell.items.some((item) => item.kind === 'review'), leadBell.items.find((item) => item.kind === 'review')?.title ?? 'none');
+  const accountantBell = await bell(P.accountant);
+  ok('bell: the accountant is not told about field reports', !accountantBell.items.some((item) => item.kind === 'report'));
+  const marked = await P.site_lead.fetch('/api/notifications', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  ok('bell: mark all as read', marked.status === 200 && (await bell(P.site_lead)).unread === 0);
   const progress = (await db.query<{ progress: number }>('select progress_pct as progress from project_phase where id = $1', [phase])).rows[0]?.progress;
   ok('database: the phase progress follows the approved report', progress === 35, `${progress} %`);
   const notified = (await db.query<{ n: number }>(`select count(*)::int as n from platform_event where at > now() - interval '10 minutes'`)).rows[0]?.n ?? 0;
