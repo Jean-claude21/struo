@@ -62,6 +62,9 @@ real external account · ⏳ next.
 | 060 | `060-launch` | Offer landing (« in order in 30 days »), legal pages FR/EN, end of trial or licence: warnings, grace period set by the founder, then read-only | 🟡 for review | `licence.test.ts`, `i18n.test.ts` |
 | 061 | `061-editorial-landing` | The founder's « editorial cockpit » landing implemented as is (photos, fonts, interactive cockpit, real prices and call-back) | 🟡 for review | `i18n.test.ts` |
 | 062 | `062-quote-switch` | « On quote » switch in the console, call-back e-mailed to the founder, browser language/country read again, readable call-back form, legal pages in the editorial look | 🟡 for review | `licence.test.ts` |
+| 069 | `069-chariow-pulses` | Licences applied by themselves through the store's signed Pulses (buyer matched by e-mail) | 🟡 for review | `licence.server.test.ts`, `licence.test.ts` |
+| 072 | `072-trial-settings` | Sign-in and self-serve trial on the landing; trial length and demo limit set by the founder | 🟡 for review | `licence.test.ts` |
+| 073 | `073-notifications` | Notification centre (bell), review notice to the site lead, per-site targeting, choices per person, phone reminder | 🟡 for review | `notifications.test.ts` |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.

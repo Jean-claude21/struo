@@ -1,4 +1,6 @@
 import { homeOf, screenOf, sees, type Screen } from '@struo/core/permissions';
+import { NoticeBell } from '@/components/NoticeBell.tsx';
+import { PushPrompt } from '@/components/PushToggle.tsx';
 import { BrandMark } from '@/components/BrandMark.tsx';
 import { useEffect, useRef, useState } from 'react';
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from '@tanstack/react-router';
@@ -200,6 +202,7 @@ function OfficeLayout() {
             <Search size={14} /><span className="label grow" style={{ textAlign: 'left' }}>{t('ui.searchHint')}</span><span className="kbd hide-m">Ctrl K</span>
           </button>
           <span className="sp" />
+          <NoticeBell />
           <AssistantButton />
           <Popover
             align="end"
@@ -256,6 +259,7 @@ function OfficeLayout() {
           ) : null}
           <AnnouncementBar />
           <OfficeLicenceBar role={viewer.company.role} />
+          <PushPrompt />
           <Outlet />
         </main>
         <FeedbackButton />

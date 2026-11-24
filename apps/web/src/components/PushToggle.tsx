@@ -15,6 +15,24 @@ function keyBytes(value: string): Uint8Array<ArrayBuffer> {
 
 type State = 'loading' | 'unsupported' | 'off' | 'on' | 'denied';
 
+const DISMISS = 'struo-push-later';
+
+/** Spec 073: a reminder on every office page until notifications are on, or put off for 7 days. */
+export function PushPrompt() {
+  const { t } = useI18n();
+  const [later, setLater] = useState(true);
+  useEffect(() => {
+    try { const until = Number(localStorage.getItem(DISMISS) ?? 0); setLater(until > Date.now()); } catch { setLater(false); }
+  }, []);
+  if (later) return null;
+  return (
+    <div className="push-prompt">
+      <PushToggle compact />
+      <button type="button" className="btn ghost small" onClick={() => { try { localStorage.setItem(DISMISS, String(Date.now() + 7 * 86_400_000)); } catch { /* private mode */ } setLater(true); }}>{t('notices.later')}</button>
+    </div>
+  );
+}
+
 export function PushToggle({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   const toast = useToast();
