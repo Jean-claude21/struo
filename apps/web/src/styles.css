@@ -1979,3 +1979,11 @@ div.lp-risk li span { color: var(--ink-soft); font-size: .92rem; }
 .notice-prefs input{width:18px;height:18px}
 .push-prompt{display:flex;align-items:flex-start;gap:.6rem;margin-bottom:1rem}
 .push-prompt>section{flex:1;margin:0}
+
+/* spec 078 (found by the end-to-end simulation): on a phone, a row of options scrolls inside itself
+   instead of pushing the page sideways; the page title keeps its width next to its button. */
+.seg { max-width: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.seg::-webkit-scrollbar { display: none; }
+.seg button { white-space: nowrap; flex: none; }
+.page-head > :first-child { flex: 1 1 260px; min-width: 0; }
+.ed .ed-final label > span:first-child { display: block; }

@@ -143,9 +143,9 @@ function CallBack() {
   if (state === 'sent') return <form><p className="ed-sent" role="status">{t('lp.final.sent')}</p></form>;
   return (
     <form onSubmit={(event) => void submit(event)}>
-      <label>{t('lp.final.name')} <span className="ed-req" aria-hidden="true">*</span><input name="name" required aria-required="true" maxLength={120} autoComplete="name" /></label>
+      <label><span>{t('lp.final.name')} <span className="ed-req" aria-hidden="true">*</span></span><input name="name" required aria-required="true" maxLength={120} autoComplete="name" /></label>
       <label>{t('lp.final.company')}<input name="company" maxLength={160} autoComplete="organization" /></label>
-      <label>{t('lp.final.reach')} <span className="ed-req" aria-hidden="true">*</span><input name="reach" required aria-required="true" minLength={3} maxLength={160} autoComplete="tel" /></label>
+      <label><span>{t('lp.final.reach')} <span className="ed-req" aria-hidden="true">*</span></span><input name="reach" required aria-required="true" minLength={3} maxLength={160} autoComplete="tel" /></label>
       <label>{t('lp.final.sites')}<input name="sites" type="number" min={0} max={10000} inputMode="numeric" /></label>
       <input name="website" tabIndex={-1} autoComplete="off" className="ed-trap" aria-hidden="true" />
       <p className="ed-req-note"><span aria-hidden="true">*</span> {t('lp.final.required')}</p>

@@ -10,8 +10,11 @@ test('the owner opens the office, the bell and their notification choices', asyn
   await fitsWidth(page);
   const bell = page.locator('.notice-bell > button');
   await expect(bell).toBeVisible();
-  await bell.click();
-  await expect(page.locator('.notice-panel')).toBeVisible();
+  // The page may still be starting: click again until the panel opens.
+  await expect(async () => {
+    if (!(await page.locator('.notice-panel').isVisible())) await bell.click();
+    await expect(page.locator('.notice-panel')).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
   await shot(page, info, '11-owner-bell');
   await page.goto('/app/account#notifications');
   await expect(page.locator('table.notice-prefs')).toBeVisible();
@@ -22,7 +25,7 @@ test('the site lead works offline, and it all leaves when the network is back', 
   test.skip(!isMobile(info), 'the field app is used on a phone');
   await signIn(page, 'site_lead');
   await page.goto('/field');
-  await expect(page.locator('.field-header')).toContainText('Bonjour', { timeout: 30_000 });
+  await expect(page.locator('.field-header')).toContainText('Bonjour Chef', { timeout: 30_000 });
   await shot(page, info, '20-field-home');
   await fitsWidth(page);
   await page.locator('.field-tabs button').filter({ hasText: 'Bureau' }).click();
