@@ -22,7 +22,8 @@ concurrency:
 jobs:
   simulate:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.56 does not support the newest Ubuntu image yet.
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
       E2E_BASE_URL: https://struo-staging.kete.digital
