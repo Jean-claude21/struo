@@ -1940,3 +1940,6 @@ div.lp-risk li span { color: var(--ink-soft); font-size: .92rem; }
 .ed .ed-problem-photo p{z-index:2;max-width:22ch;text-shadow:0 2px 18px rgba(0,0,0,.55)}
 .ed .ed-problem-photo strong{color:#fff}
 @media(max-width:700px){.ed .ed-problem-photo::after{background:linear-gradient(0deg,rgba(12,20,15,.94) 0%,rgba(12,20,15,.75) 40%,rgba(12,20,15,0) 75%)}}
+
+/* the visitor picks their country: the estimate is in their currency (no IP location) */
+.ed .ed-calculator select.ed-country{grid-column:1/-1;width:100%;height:42px;border:1px solid var(--line);background:#fff;color:var(--ink);padding:0 10px;font:500 14px var(--sans)}
