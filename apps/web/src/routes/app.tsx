@@ -1,4 +1,5 @@
 import { homeOf, screenOf, sees, type Screen } from '@struo/core/permissions';
+import { BrandMark } from '@/components/BrandMark.tsx';
 import { useEffect, useRef, useState } from 'react';
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
@@ -152,7 +153,7 @@ function OfficeLayout() {
     <div className="layout">
       {sideOpen ? <button type="button" className="scrim only-m" aria-label={t('ui.close')} onClick={() => setSideOpen(false)} /> : null}
       <nav className={`sidebar ${sideOpen ? 'open' : ''}`} aria-label="Struo">
-        <div className="logo"><span className="logo-mark"><HardHat size={16} /></span><span>Struo</span></div>
+        <div className="logo"><BrandMark size={26} /><span>struo</span></div>
         <Popover
           width={240}
           trigger={(props) => (

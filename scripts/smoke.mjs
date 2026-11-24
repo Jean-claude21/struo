@@ -53,6 +53,7 @@ for (const [role, home] of [['owner', '/app'], ['engineer', '/app'], ['accountan
     const next = await get(location.startsWith('http') ? new URL(location).pathname + new URL(location).search : location, { headers: { cookie: cookies } });
     landed = next.status;
   }
+  if (location.includes('error=limit')) { console.log(`· demo ${role} — skipped: this address reached its daily demo limit (protection)`); continue; }
   ok(`demo ${role}`, [302, 303, 307].includes(start.status) && location.includes(home) && [200, 302, 307].includes(landed), `${start.status} → ${location.split('?')[0]} (${landed})`);
 }
 

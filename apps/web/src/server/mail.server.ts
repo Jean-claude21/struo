@@ -26,7 +26,7 @@ export function renderMail(locale: Locale, content: MailContent, appUrl: string)
 <span style="display:none;max-height:0;overflow:hidden;opacity:0">${escape(content.preheader)}</span>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f7f1;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px">
-<tr><td style="padding:0 4px 14px;font-weight:800;font-size:22px;letter-spacing:-1px;color:#202820"><span style="display:inline-block;width:22px;height:22px;background:#d94d20;border-radius:6px;margin-right:8px;vertical-align:-4px"></span>Struo</td></tr>
+<tr><td style="padding:0 4px 14px;font-weight:800;font-size:22px;letter-spacing:-1px;color:#202820"><span style="display:inline-block;vertical-align:-5px;margin-right:8px;width:22px;height:22px"><span style="display:block;width:12px;height:5px;background:#cf4519;border-radius:1px"></span><span style="display:block;width:12px;height:5px;background:#152219;border-radius:1px;margin:2.5px 0 2.5px 9px"></span><span style="display:block;width:12px;height:5px;background:#cf4519;border-radius:1px"></span></span>struo</td></tr>
 <tr><td style="background:#ffffff;border-radius:10px;padding:28px 26px;border:1px solid #d7d9d0">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
 <tr><td style="font-size:24px;font-weight:700;line-height:1.2;letter-spacing:-.5px;padding-bottom:14px">${escape(content.title)}</td></tr>

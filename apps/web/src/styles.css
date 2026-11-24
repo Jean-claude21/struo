@@ -1929,3 +1929,7 @@ div.lp-risk li span { color: var(--ink-soft); font-size: .92rem; }
   .ed .ed-cockpit-foot{min-height:58px;font-size:9px}
   .ed .ed-cockpit-foot b{display:block;margin:0}
 }
+
+/* spec 066: the « Assise » mark; the wordmark in lower case, heavy and tight */
+.ed .ed-brand strong{font-size:24px;font-weight:800;letter-spacing:-.04em;text-transform:none}
+.logo svg{margin-right:.1rem}
