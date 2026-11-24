@@ -11,7 +11,7 @@ import { formatMoney } from '@/components/ui.tsx';
 import { planWords } from '@/components/PlanWords.tsx';
 import { getPlans, sendContactRequest } from '@/features/settings/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
-import { trackSuccess } from '@/lib/audience.ts';
+import { trackEvent, trackSuccess } from '@/lib/audience.ts';
 
 export const Route = createFileRoute('/')({
   loader: () => getPlans(),
@@ -90,6 +90,7 @@ function Calculator({ currency, country }: { currency: string; country: string }
   useEffect(() => setMounted(true), []);
   const countries = useMemo(() => (mounted ? sortedCountries(locale) : sortedCountries(locale).filter((item) => item.code === country)), [locale, mounted, country]);
   const choose = async (code: string) => {
+    trackEvent('lp-country', { country: code });
     document.cookie = `${COUNTRY_COOKIE}=${code}; path=/; max-age=31536000; samesite=lax`;
     await router.invalidate();
   };
@@ -99,6 +100,8 @@ function Calculator({ currency, country }: { currency: string; country: string }
   const [share, setShare] = useState(25);
   useEffect(() => setCost(HOURLY[currency] ?? 15), [currency]);
   const win = ((people * hours * 52) / 12) * (share / 100);
+  const [used, setUsed] = useState(false);
+  useEffect(() => { if (!used && (people !== 3 || hours !== 5.5 || share !== 25)) { setUsed(true); trackEvent('lp-calc-used'); } }, [people, hours, share, used]);
   const number = (value: number, digits = 0) => value.toLocaleString(locale === 'en' ? 'en-GB' : 'fr-FR', { maximumFractionDigits: digits });
   return (
     <form className="ed-calculator" onSubmit={(event) => event.preventDefault()}>
@@ -134,6 +137,7 @@ function CallBack() {
       trackSuccess('contact-sent');
     } catch {
       setState('error');
+      trackEvent('contact-error');
     }
   };
   if (state === 'sent') return <form><p className="ed-sent" role="status">{t('lp.final.sent')}</p></form>;
@@ -156,6 +160,18 @@ function Landing() {
   const { plans, currency, country, trial } = Route.useLoaderData();
   const [role, setRole] = useState<(typeof ROLES)[number]['key']>('owner');
   const shown = ROLES.find((item) => item.key === role)!;
+  useEffect(() => {
+    const seen = new Set<string>();
+    const watch = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting || seen.has(entry.target.id)) continue;
+        seen.add(entry.target.id);
+        trackEvent(entry.target.id === 'tarifs' ? 'lp-pricing-seen' : 'lp-proof-seen');
+      }
+    }, { threshold: 0.35 });
+    for (const id of ['preuve', 'tarifs']) { const node = document.getElementById(id); if (node) watch.observe(node); }
+    return () => watch.disconnect();
+  }, []);
   const list = (key: MessageKey) => t(key).split('|');
   const paid = plans.filter((plan) => plan.code !== 'trial');
   const priced = paid.some((plan) => plan.priceMinor > 0 && plan.code !== 'enterprise');
@@ -172,7 +188,7 @@ function Landing() {
             <p className="ed-hero-lead">{t('lp.hero.lead')}</p>
             <div className="ed-hero-actions">
               <a className="ed-button ed-button-orange" href="#rappel" data-umami-event="lp-call-hero">{t('lp.hero.call')} <span>→</span></a>
-              <a className="ed-under-link" href="#preuve">{t('lp.hero.demo')} <span>↗</span></a>
+              <a className="ed-under-link" href="#preuve" data-umami-event="lp-demo-hero">{t('lp.hero.demo')} <span>↗</span></a>
             </div>
             {trial.public ? <a className="ed-trial-link" href="/signup" data-umami-event="lp-trial-hero">{t('lp.trial.link', { n: trial.days })} <span>→</span></a> : null}
             <ul className="ed-reassure">{[t('lp.hero.setup'), ...(trial.public ? [t('lp.trial.free', { n: trial.days })] : []), t('lp.hero.noCommitment')].map((item) => <li key={item}>{item}</li>)}</ul>
