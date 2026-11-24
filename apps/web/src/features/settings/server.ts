@@ -22,8 +22,11 @@ export const createCompany = createServerFn({ method: 'POST' })
     guarded(async () => {
       const viewer = await loadViewer();
       if (!viewer) throw new core.DomainError('not_signed_in', 401);
-      const { orgId } = await core.createCompany(runtime().db, viewer.userId, data);
-      await core.recordPlatformEvent(runtime().owner, { kind: 'signup', orgId });
+      const { internal, ...input } = data as Record<string, unknown> & { internal?: boolean };
+      const { orgId } = await core.createCompany(runtime().db, viewer.userId, input);
+      // Spec 074: a platform admin creating a company from the console makes an internal one (tests).
+      if (internal && viewer.platformAdmin) await core.setCompanyInternal(runtime().owner, viewer.userId, orgId, true);
+      else await core.recordPlatformEvent(runtime().owner, { kind: 'signup', orgId });
       chooseCompany(orgId);
       return { orgId };
     }),
@@ -370,7 +373,7 @@ export const sendFeedback = createServerFn({ method: 'POST' })
   .handler(({ data }) => guarded(async () => { await core.submitFeedback(runtime().db, await requireActor(), data); return { ok: true }; }));
 
 export const consoleCompanyAction = createServerFn({ method: 'POST' })
-  .validator((input: { orgId: string; action: 'suspend' | 'reactivate' | 'trial' | 'paid'; reason?: string; days?: number; months?: number }) => input)
+  .validator((input: { orgId: string; action: 'suspend' | 'reactivate' | 'trial' | 'paid' | 'internal' | 'external'; reason?: string; days?: number; months?: number }) => input)
   .handler(({ data }) =>
     guarded(async () => {
       const viewer = await requirePlatformAdmin();
@@ -378,6 +381,7 @@ export const consoleCompanyAction = createServerFn({ method: 'POST' })
       if (data.action === 'suspend' || data.action === 'reactivate') await core.setCompanySuspended(owner, viewer.userId, data.orgId, data.action === 'suspend', data.reason ?? null);
       if (data.action === 'trial') await core.extendTrial(owner, viewer.userId, data.orgId, data.days ?? 14);
       if (data.action === 'paid') await core.extendPaidPeriod(owner, viewer.userId, data.orgId, data.months ?? 1);
+      if (data.action === 'internal' || data.action === 'external') await core.setCompanyInternal(owner, viewer.userId, data.orgId, data.action === 'internal');
       return { ok: true };
     }),
   );

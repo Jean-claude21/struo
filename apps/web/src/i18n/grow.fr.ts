@@ -136,6 +136,13 @@ export const growFr = {
     footer: { tagline: "Le système opérationnel des entreprises du BTP.", top: "Retour en haut ↑" },
     trial: { link: "Ou essayez seul, {n} jours gratuits", short: "Essayer {n} jours gratuits", free: "{n} jours gratuits" },
   },
+  internal: {
+    create: "Créer une entreprise interne",
+    creating: "Entreprise interne : elle fonctionne comme une vraie (e-mails, licences, notifications) mais n’entre pas dans vos chiffres.",
+    badge: "Interne",
+    toggle: "Entreprise interne (tests)",
+    help: "Reste utilisable normalement, mais n’entre ni dans l’argent, ni dans les essais, ni dans la santé du produit, ni dans les points du MCP.",
+  },
   notices: {
     label: "Notifications",
     labelUnread: "Notifications, {n} non lue(s)",

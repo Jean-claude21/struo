@@ -138,7 +138,8 @@ export async function myRedemptions(db: Db, actor: Actor) {
 export async function platformCompany(owner: Db, orgId: string) {
   const head = (await owner.query(
     `select o.id as "orgId", o.name, o."createdAt" as "createdAt", s.plan_code as "planCode", s.trial_ends_at as "trialEndsAt", s.paid_until as "paidUntil",
-            s.suspended_at as "suspendedAt", s.suspended_reason as "suspendedReason", s.country_code as "countryCode", s.currency_code as "currencyCode"
+            s.suspended_at as "suspendedAt", s.suspended_reason as "suspendedReason", s.country_code as "countryCode", s.currency_code as "currencyCode",
+            s.is_internal as "isInternal", s.is_demo as "isDemo"
        from organization o join org_settings s on s.org_id = o.id where o.id = $1`, [orgId])).rows[0];
   if (!head) throw notFound();
   const [members, usage, redemptions, payments, journalRows] = await Promise.all([
@@ -336,4 +337,13 @@ export async function resetDemoLimits(owner: Db, adminId: string): Promise<numbe
   const { rowCount } = await owner.query(`update demo_sandbox set visitor_hash = null where visitor_hash is not null and assigned_at > now() - interval '1 day'`);
   await platformJournal(owner, adminId, 'demo.reset', 'platform', { addresses: rowCount ?? 0 });
   return rowCount ?? 0;
+}
+
+// ---------------------------------------------------------------- internal companies (spec 074)
+
+/** Marks a company as the founder's own (tests): it works normally but stays out of the figures. */
+export async function setCompanyInternal(owner: Db, adminId: string, orgId: string, internal: boolean): Promise<void> {
+  const { rowCount } = await owner.query('update org_settings set is_internal = $2 where org_id = $1', [orgId, Boolean(internal)]);
+  if (!rowCount) throw notFound();
+  await platformJournal(owner, adminId, internal ? 'company.internal' : 'company.external', orgId, null);
 }
