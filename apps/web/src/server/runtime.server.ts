@@ -1,4 +1,4 @@
-import { createPool, type Db, type Drafter, type Mailer, type Messenger, type Storage, type Transcriber, type DocumentReader, type Answerer } from '@struo/core';
+import { createPool, recordPlatformEvent, type Db, type Drafter, type Mailer, type Messenger, type Storage, type Transcriber, type DocumentReader, type Answerer } from '@struo/core';
 import { mcp } from '@better-auth/mcp';
 import { betterAuth } from 'better-auth';
 import { jwt } from 'better-auth/plugins';
@@ -113,6 +113,9 @@ function createAuth(environment: Env, db: Db, mailer: Mailer) {
       // person signs in, chooses the company on the consent page, and the client gets a token.
       mcp({
         resource: `${environment.APP_BASE_URL}/mcp`,
+        // Spec 056 bis: the platform console is a second protected resource (platform admins only).
+        resources: [`${environment.APP_BASE_URL}/mcp/platform`],
+        clientRegistrationDefaultResources: [`${environment.APP_BASE_URL}/mcp/platform`],
         loginPage: '/login',
         consentPage: '/oauth/consent',
         allowDynamicClientRegistration: true,
@@ -151,7 +154,16 @@ export function runtime(): Runtime {
   initMonitoring(environment);
   const db = createPool(environment.DATABASE_URL, 10);
   const owner = createPool(environment.DATABASE_OWNER_URL || environment.DATABASE_URL, 3);
-  const mailer = createMailer(environment);
+  const base = createMailer(environment);
+  // Spec 055: a send that fails is counted for the founder's console (and still reported).
+  const mailer: Mailer = {
+    ...base,
+    configured: base.configured,
+    send: (message) => base.send(message).catch(async (error: unknown) => {
+      await recordPlatformEvent(owner, { kind: 'mail_failed', name: String((error as Error)?.message ?? 'error').slice(0, 80) });
+      throw error;
+    }),
+  };
   current = {
     env: environment,
     db,

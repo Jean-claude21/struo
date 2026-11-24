@@ -9,6 +9,13 @@ import { runtime } from '@/server/runtime.server.ts';
 async function discovery(request: Request): Promise<Response> {
   const { auth } = runtime();
   const url = new URL(request.url);
+  // Spec 056 bis: the platform console's own resource metadata (same authorization server).
+  if (url.pathname === '/.well-known/oauth-protected-resource/mcp/platform') {
+    const base = new URL('/.well-known/oauth-protected-resource', url);
+    const response = await auth.handler(new Request(base, { method: 'GET', headers: request.headers }));
+    const metadata = (await response.json()) as Record<string, unknown>;
+    return Response.json({ ...metadata, resource: `${runtime().env.APP_BASE_URL}/mcp/platform` }, { headers: { 'cache-control': 'no-store' } });
+  }
   if (url.pathname.startsWith('/.well-known/oauth-protected-resource')) return auth.handler(request);
   const path = url.pathname.replace(/\/(api\/auth|mcp)$/u, '');
   url.pathname = `/api/auth${path}`;

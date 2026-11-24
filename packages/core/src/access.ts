@@ -1,11 +1,19 @@
 import { asUser, type Actor, type Db, type Door, type Tx } from './db.ts';
 import { can, isRole, type Permission } from './permissions.ts';
 import { DomainError, forbidden } from './errors.ts';
+import { companyAccess } from './licence.ts';
 
-export { PERMISSIONS, can, isRole, type Permission } from './permissions.ts';
+export { PERMISSIONS, SCREENS, can, homeOf, isRole, screenOf, sees, type Permission, type Screen } from './permissions.ts';
+
+/**
+ * What stays open in a read-only space (spec 060): reading the books, and the settings where a new
+ * licence is entered. Everything else that writes is refused until the company renews.
+ */
+const OPEN_WHEN_LOCKED: ReadonlySet<Permission> = new Set<Permission>(['finance.read', 'cash.read', 'org.manage']);
 
 export function ensure(actor: Actor, permission: Permission): void {
   if (!can(actor.role, permission)) throw forbidden();
+  if (actor.locked && !OPEN_WHEN_LOCKED.has(permission)) throw new DomainError('licence_locked', 403);
 }
 
 /**
@@ -16,12 +24,15 @@ export async function resolveActor(db: Db, userId: string, orgId: string, door: 
   const found = await asUser(db, userId, async (tx) => {
     const { rows } = await tx.query<{ role: string | null; suspended: string | null }>(
       'select struo_role($1) as role, (select suspended_at from org_settings where org_id = $1) as suspended', [orgId]);
-    return rows[0] ?? null;
+    const row = rows[0] ?? null;
+    // Spec 060: after the grace period the space is read-only (computed under the member's own rights).
+    return row && isRole(row.role) ? { ...row, locked: (await companyAccess(tx, orgId)).stage === 'locked' } : row;
   });
   if (!found || !isRole(found.role)) return null;
+  const locked = 'locked' in found && Boolean(found.locked);
   // A company the platform suspended cannot be used until it is reactivated (spec 038).
   if (found.suspended) throw new DomainError('company_suspended', 403);
-  return { userId, orgId, role: found.role, door };
+  return locked ? { userId, orgId, role: found.role, door, locked } : { userId, orgId, role: found.role, door };
 }
 
 /** Runs work as the actor, in their company. */

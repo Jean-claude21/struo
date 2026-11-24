@@ -9,6 +9,8 @@ import { ErrorText, Field, formData, useAction } from '@/components/ui.tsx';
 import { addConfigurationItem, createCompany, getConfiguration, removeConfigurationItem } from '@/features/settings/server.ts';
 import { getShell, selectCompany } from '@/features/shell/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
+import { COUNTRIES, countryFromLanguages, DEFAULT_COUNTRY, sortedCountries } from '@/features/settings/countries.ts';
+import { trackSuccess } from '@/lib/audience.ts';
 
 export const Route = createFileRoute('/onboarding')({
   loader: async () => {
@@ -19,13 +21,8 @@ export const Route = createFileRoute('/onboarding')({
   component: Onboarding,
 });
 
-// Country → currency, VAT (%) and retention (%) usually applied; all editable.
-const COUNTRIES: Record<string, { currency: string; vat: number; label: string }> = {
-  TG: { currency: 'XOF', vat: 18, label: 'Togo' }, BJ: { currency: 'XOF', vat: 18, label: 'Bénin' }, CI: { currency: 'XOF', vat: 18, label: 'Côte d’Ivoire' },
-  SN: { currency: 'XOF', vat: 18, label: 'Sénégal' }, BF: { currency: 'XOF', vat: 18, label: 'Burkina Faso' }, ML: { currency: 'XOF', vat: 18, label: 'Mali' },
-  NE: { currency: 'XOF', vat: 19, label: 'Niger' }, GH: { currency: 'GHS', vat: 15, label: 'Ghana' }, CM: { currency: 'XAF', vat: 19.25, label: 'Cameroun' },
-  GA: { currency: 'XAF', vat: 18, label: 'Gabon' }, GN: { currency: 'GNF', vat: 18, label: 'Guinée' }, FR: { currency: 'EUR', vat: 20, label: 'France' },
-};
+/** The browser's country when we know it, else the default (the list is international). */
+const guessCountry = () => (typeof navigator !== 'undefined' && countryFromLanguages(navigator.languages?.join(',') || navigator.language)) || DEFAULT_COUNTRY;
 
 type Config = Awaited<ReturnType<typeof getConfiguration>>;
 
@@ -34,8 +31,8 @@ function Onboarding() {
   const { viewer } = Route.useLoaderData();
   const { run, error, busy } = useAction();
   const [step, setStep] = useState(1);
-  const [country, setCountry] = useState('TG');
-  const preset = COUNTRIES[country] ?? COUNTRIES.TG!;
+  const [country, setCountry] = useState(guessCountry);
+  const preset = COUNTRIES[country] ?? COUNTRIES[DEFAULT_COUNTRY]!;
   const steps = [t('onb.stepCompany'), t('onb.stepTrade'), t('onb.stepTeam')];
   return (
     <div className="public" style={{ maxWidth: 820 }}>
@@ -53,13 +50,13 @@ function Onboarding() {
               name: v.name, countryCode: country, currencyCode: v.currencyCode?.toUpperCase(),
               vatBps: Math.round(Number(v.vat?.replace(',', '.')) * 100), retentionBps: Math.round(Number(v.retention?.replace(',', '.')) * 100), locale: v.locale,
             } }), { reload: false });
-            if (done) setStep(2);
+            if (done) { trackSuccess('company-created'); setStep(2); }
           }}>
             <Field label={t('onboarding.companyName')}><input name="name" required minLength={2} autoFocus /></Field>
             <div className="form-grid">
               <Field label={t('onb.country')}>
                 <select value={country} onChange={(event) => setCountry(event.target.value)}>
-                  {Object.entries(COUNTRIES).map(([code, item]) => <option key={code} value={code}>{item.label}</option>)}
+                  {sortedCountries(locale).map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
                 </select>
               </Field>
               <Field label={t('onboarding.currency')}><input key={`c-${country}`} name="currencyCode" defaultValue={preset.currency} maxLength={3} required pattern="[A-Za-z]{3}" /></Field>

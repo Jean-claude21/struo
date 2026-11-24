@@ -4,11 +4,11 @@
 
 ## What this repository is
 
-Struo: the operating system of a construction company (BTP) in West Africa — a multi-tenant SaaS.
+Struo: the operating system of a construction company — an international multi-tenant SaaS.
 A company signs up, configures its trade (project types, phases, required documents, VAT, retention),
 invites its team; site leads report from the field even without network; the office invoices,
-follows unpaid amounts, documents, costs and planning; the end client follows the project and pays
-through a portal; Claude or ChatGPT work on the company's data through MCP.
+follows unpaid amounts, documents, costs and planning; the end client follows the project, receives
+its reports and sees what to pay in a portal (the company collects payment itself); Claude or ChatGPT work on the company's data through MCP.
 
 ## Read before any action
 

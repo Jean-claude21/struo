@@ -1,6 +1,6 @@
 import { requireMcpAuth } from '@better-auth/mcp';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { actorFromApiKey, actorFromMcpGrant, type Actor } from '@struo/core';
+import { actorFromApiKey, actorFromMcpGrant, planIncludes, type Actor } from '@struo/core';
 import { createFileRoute } from '@tanstack/react-router';
 import { createStruoMcpServer } from '@/features/mcp/server.ts';
 import { localeFromHeaders } from '@/i18n/index.tsx';
@@ -13,6 +13,8 @@ import { runtime } from '@/server/runtime.server.ts';
  *   consent. A browser session cookie never opens this door.
  */
 async function serve(request: Request, actor: Actor): Promise<Response> {
+  // Spec 055: assistants through MCP are a feature of the company's plan.
+  if (!(await planIncludes(runtime().owner, actor.orgId, 'mcp'))) return refuse('The company’s plan does not include assistant connections (MCP).', 403);
   const locale = localeFromHeaders(null, request.headers.get('accept-language'));
   const server = createStruoMcpServer(runtime(), actor, locale);
   const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });

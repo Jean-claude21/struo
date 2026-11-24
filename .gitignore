@@ -12,3 +12,4 @@ apps/web/src/routeTree.gen.ts
 .nitro/
 .vinxi/
 storage/
+apps/web/.impeccable/review/

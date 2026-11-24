@@ -1,3 +1,4 @@
+import { assertFeature } from '@struo/core';
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 import { runTurn, type IntelligenceEvent } from '@/features/intelligence/agent.server.ts';
@@ -22,6 +23,8 @@ export const Route = createFileRoute('/api/intelligence')({
       POST: async ({ request }) => {
         try {
           const actor = await actorFromRequest(request, 'web');
+          // Spec 055: the assistant is a feature of the company's plan.
+          await assertFeature(runtime().owner, actor.orgId, 'ai');
           const turn = body.parse(await request.json());
           const locale = localeFromHeaders(request.headers.get('cookie'), request.headers.get('accept-language'));
           const encoder = new TextEncoder();

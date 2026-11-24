@@ -163,6 +163,38 @@ export function createDrafter(env: Env): Drafter {
       if (!text) throw new Error('ai empty');
       return text;
     },
+    async reportSections({ locale, facts, section, instruction, current }) {
+      if (!env.OPENAI_API_KEY) throw new Error('drafter not configured');
+      const fr = locale === 'fr';
+      const rules = fr
+        ? `Tu rédiges, pour une entreprise du BTP, le rapport d'avancement envoyé à son client (le maître d'ouvrage). Ton : professionnel, chaleureux, clair, phrases courtes, vouvoiement. Utilise UNIQUEMENT les faits fournis (JSON) : n'invente aucun chiffre, aucune date, aucun nom, aucun travail. Ne parle jamais de coûts, de dépenses, de marges, de problèmes internes, d'ouvriers nommés ni de sanctions. Si un fait manque, n'en parle pas. Sections : « summary » (3 à 4 phrases : l'essentiel de la période), « done » (ce qui a été réalisé, à partir des notes du terrain), « next » (les prochaines étapes, à partir des jalons à venir), « ask » (ce qu'on attend du client, à partir de « asks » ; chaîne vide s'il n'y a rien).`
+        : `You write, for a construction company, the progress report sent to its client (the project owner). Tone: professional, warm, clear, short sentences. Use ONLY the facts given (JSON): invent no figure, date, name or work. Never mention costs, expenses, margins, internal problems, named workers or penalties. If a fact is missing, say nothing about it. Sections: "summary" (3 to 4 sentences: the essentials of the period), "done" (what was done, from the field notes), "next" (the next steps, from the upcoming milestones), "ask" (what is expected from the client, from "asks"; empty string if nothing).`;
+      const task = section
+        ? (fr ? `Réécris seulement la section « ${section} ». Consigne du bureau : ${instruction ?? '(améliore le style)'}. Texte actuel : ${current ?? ''}. Réponds en JSON {"${section}": "..."}.`
+          : `Rewrite only the "${section}" section. Office instruction: ${instruction ?? '(improve the style)'}. Current text: ${current ?? ''}. Answer in JSON {"${section}": "..."}.`)
+        : (fr ? 'Réponds en JSON {"summary": "...", "done": "...", "next": "...", "ask": "..."}.' : 'Answer in JSON {"summary": "...", "done": "...", "next": "...", "ask": "..."}.');
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: env.OPENAI_MODEL,
+          temperature: 0.3,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: `${rules}
+${task}` },
+            { role: 'user', content: JSON.stringify(facts) },
+          ],
+        }),
+        signal: AbortSignal.timeout(45_000),
+      });
+      if (!response.ok) throw new Error(`ai ${response.status}`);
+      const body = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+      const parsed = JSON.parse(body.choices?.[0]?.message?.content ?? '{}') as Record<string, unknown>;
+      const out: Partial<Record<'summary' | 'done' | 'next' | 'ask', string>> = {};
+      for (const key of ['summary', 'done', 'next', 'ask'] as const) if (typeof parsed[key] === 'string') out[key] = (parsed[key] as string).trim().slice(0, 3000);
+      return out;
+    },
   };
 }
 

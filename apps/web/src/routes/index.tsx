@@ -1,197 +1,282 @@
-// Public landing (spec 028), built on Alex Hormozi's offer structure: the dream outcome first, the
-// pains it removes, how it works, the full value stack per person, why it fits here, risk removed,
-// a simple price, objections answered, one last call. No invented testimonial, figure or guarantee.
-import { createFileRoute, getRouteApi, Link } from '@tanstack/react-router';
-import {
-  ArrowRight, BadgeCheck, Banknote, Bot, Check, ClipboardCheck, CloudOff, Download, FileWarning, Globe2, HardHat, Lock, MessageCircle,
-  PhoneCall, Receipt, ShieldCheck, Smartphone, Undo2, Wallet, Wifi,
-} from 'lucide-react';
-import { PublicHeader } from '@/components/PublicHeader.tsx';
-import { Progress, StatusChip } from '@/components/kit.tsx';
+// Public landing (spec 061): the founder's « editorial cockpit » mockup, implemented as is
+// (struo-landing-editorial-cockpit: same sections, words, photos and look, scoped under .ed).
+// What the mockup only pretended is real here: the cockpit pins switch the site, the estimate uses
+// the visitor's currency, prices come from the visitor's country (on quote when none is published),
+// each role opens its own demo, and the call-back form sends a real request.
+import { createFileRoute } from '@tanstack/react-router';
+import { useEffect, useState, type FormEvent } from 'react';
+import { EdFooter, EdHeader } from '@/components/Editorial.tsx';
 import { formatMoney } from '@/components/ui.tsx';
-import { getPlans } from '@/features/settings/server.ts';
+import { planWords } from '@/components/PlanWords.tsx';
+import { getPlans, sendContactRequest } from '@/features/settings/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
+import { trackSuccess } from '@/lib/audience.ts';
 
 export const Route = createFileRoute('/')({
   loader: () => getPlans(),
   component: Landing,
 });
 
-const root = getRouteApi('__root__');
+const IMG = '/landing/ed';
+
+// The five sites of the cockpit (demo data): position on the map, state and progress.
+const SITES = [
+  { left: 18, top: 31, tone: 'ok', progress: 74, watch: false },
+  { left: 57, top: 21, tone: 'ok', progress: 61, watch: true },
+  { left: 72, top: 59, tone: 'warn', progress: 48, watch: true },
+  { left: 37, top: 67, tone: 'ok', progress: 86, watch: false },
+  { left: 87, top: 36, tone: 'ok', progress: 53, watch: false },
+] as const;
+
+const ROLES = [
+  { key: 'owner', image: 'daily-routine' },
+  { key: 'engineer', image: 'proof-demo' },
+  { key: 'site_lead', image: 'team-launch' },
+  { key: 'accountant', image: 'value-cost' },
+  { key: 'client', image: 'client-trust' },
+] as const;
+
+// Starting value of one working hour per currency: an editable assumption, never a claim.
+const HOURLY: Record<string, number> = {
+  EUR: 15, USD: 18, GBP: 15, CAD: 25, CHF: 35, MAD: 80, TND: 15, DZD: 600, XOF: 2500, XAF: 2500,
+  NGN: 3500, GHS: 60, KES: 600, RWF: 3500, CDF: 8000, GNF: 25000, MGA: 12000,
+};
+const decimals = (currency: string) => new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2;
+
+function Cockpit() {
+  const { t } = useI18n();
+  const [active, setActive] = useState(2);
+  const site = SITES[active]!;
+  const k = (name: string) => t(`lp.hero.s${active}${name}` as MessageKey);
+  return (
+    <div className="ed-cockpit" aria-label={t('lp.hero.cockpitLabel')}>
+      <div className="ed-cockpit-top"><span><i /><i /><i /></span><b>{t('lp.hero.today')}</b><em>{t('lp.hero.live')}</em></div>
+      <div className="ed-cockpit-main">
+        <div className="ed-map" aria-label={t('lp.hero.mapLabel')}>
+          <svg viewBox="0 0 600 430" aria-hidden="true">
+            <path d="M-30 330 C150 270 210 380 380 290 S530 200 650 230" className="ed-road" />
+            <path d="M180 -20 C160 120 230 220 190 450" className="ed-road" />
+            <path d="M410 -20 C390 130 470 260 430 450" className="ed-road ed-thin" />
+            <path d="M-20 120 C170 160 330 60 640 110" className="ed-road ed-thin" />
+          </svg>
+          {SITES.map((item, index) => (
+            <button key={index} type="button" className={`ed-pin ed-${item.tone}${index === active ? ' ed-is-active' : ''}`} style={{ left: `${item.left}%`, top: `${item.top}%` }}
+              aria-label={t(`lp.hero.s${index}n` as MessageKey)} aria-pressed={index === active} onClick={() => setActive(index)} />
+          ))}
+          <div className="ed-map-count"><small>{t('lp.hero.active')}</small><strong>05</strong></div>
+        </div>
+        <aside className="ed-site-panel" aria-live="polite">
+          <p className="ed-site-status">{site.watch ? t('lp.hero.watch') : t('lp.hero.ok')}</p>
+          <h2>{k('n')}</h2>
+          <p>{k('m')}</p>
+          <div className="ed-progress"><i style={{ width: `${site.progress}%` }} /></div>
+          <strong>{site.progress} %</strong>
+          <p>{k('t')}</p>
+        </aside>
+      </div>
+      <div className="ed-cockpit-foot"><span><b>3</b> {t('lp.hero.decisions')}</span><span><b>2</b> {t('lp.hero.reports')}</span><span><b>1</b> {t('lp.hero.invoice')}</span></div>
+    </div>
+  );
+}
+
+/** The visitor's own estimate, in their currency. */
+function Calculator({ currency }: { currency: string }) {
+  const { t, locale } = useI18n();
+  const [people, setPeople] = useState(3);
+  const [hours, setHours] = useState(5.5);
+  const [cost, setCost] = useState(HOURLY[currency] ?? 15);
+  const [share, setShare] = useState(25);
+  useEffect(() => setCost(HOURLY[currency] ?? 15), [currency]);
+  const win = ((people * hours * 52) / 12) * (share / 100);
+  const number = (value: number, digits = 0) => value.toLocaleString(locale === 'en' ? 'en-GB' : 'fr-FR', { maximumFractionDigits: digits });
+  return (
+    <form className="ed-calculator" onSubmit={(event) => event.preventDefault()}>
+      <label>{t('lp.cost.people')} <output>{people}</output><input type="range" min={1} max={30} value={people} onChange={(event) => setPeople(Number(event.target.value))} /></label>
+      <label>{t('lp.cost.hours')} <output>{t('lp.cost.hoursUnit', { n: number(hours, 1) })}</output><input type="range" min={1} max={20} step={0.5} value={hours} onChange={(event) => setHours(Number(event.target.value))} /></label>
+      <label>{t('lp.cost.hourCost', { currency })} <input type="number" min={0} step="any" inputMode="decimal" value={cost} onChange={(event) => setCost(Math.max(0, Number(event.target.value) || 0))} /></label>
+      <label>{t('lp.cost.share')} <output>{share} %</output><input type="range" min={10} max={60} step={5} value={share} onChange={(event) => setShare(Number(event.target.value))} /></label>
+      <div className="ed-calc-result" aria-live="polite">
+        <span>{t('lp.cost.result')}</span>
+        <strong>{t('lp.cost.hoursUnit', { n: number(win) })}</strong>
+        <b>{formatMoney(locale, Math.round(win * cost * 10 ** decimals(currency)), currency)}</b>
+        <p>{t('lp.cost.fine')}</p>
+      </div>
+    </form>
+  );
+}
+
+/** The call-back request (spec 045), in the mockup's form. */
+function CallBack() {
+  const { t } = useI18n();
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const text = (name: string) => String(form.get(name) ?? '').trim();
+    setState('sending');
+    try {
+      await sendContactRequest({ data: { name: text('name'), company: text('company'), reach: text('reach'), activeSites: text('sites') ? Number(text('sites')) : null, message: '', website: text('website') } });
+      setState('sent');
+      trackSuccess('contact-sent');
+    } catch {
+      setState('error');
+    }
+  };
+  if (state === 'sent') return <form><p className="ed-sent" role="status">{t('lp.final.sent')}</p></form>;
+  return (
+    <form onSubmit={(event) => void submit(event)}>
+      <label>{t('lp.final.name')}<input name="name" required maxLength={120} autoComplete="name" /></label>
+      <label>{t('lp.final.company')}<input name="company" required maxLength={160} autoComplete="organization" /></label>
+      <label>{t('lp.final.reach')}<input name="reach" required minLength={3} maxLength={160} autoComplete="tel" /></label>
+      <label>{t('lp.final.sites')}<input name="sites" type="number" min={0} max={10000} inputMode="numeric" /></label>
+      <input name="website" tabIndex={-1} autoComplete="off" className="ed-trap" aria-hidden="true" />
+      {state === 'error' ? <p className="ed-error" role="alert">{t('lp.final.error')}</p> : null}
+      <button type="submit" disabled={state === 'sending'} data-umami-event="lp-contact">{state === 'sending' ? t('lp.final.sending') : t('lp.final.send')} <span>→</span></button>
+    </form>
+  );
+}
 
 function Landing() {
   const { t, locale } = useI18n();
-  const { plans } = Route.useLoaderData();
-  const { viewer } = root.useLoaderData();
-  const pains = [
-    ['p1', Banknote], ['p2', CloudOff], ['p3', PhoneCall], ['p4', FileWarning],
-  ] as const;
-  const people = ['manager', 'engineer', 'lead', 'accountant', 'client'] as const;
-  const why = [['w1', Wifi], ['w2', MessageCircle], ['w3', Smartphone], ['w4', Receipt], ['w5', Globe2], ['w6', Bot]] as const;
-  const risk = [['r1', BadgeCheck], ['r2', Download], ['r3', Lock], ['r4', Undo2]] as const;
+  const { plans, currency } = Route.useLoaderData();
+  const [role, setRole] = useState<(typeof ROLES)[number]['key']>('owner');
+  const shown = ROLES.find((item) => item.key === role)!;
+  const list = (key: MessageKey) => t(key).split('|');
+  const paid = plans.filter((plan) => plan.code !== 'trial');
+  const priced = paid.some((plan) => plan.priceMinor > 0 && plan.code !== 'enterprise');
+  const tagline = (code: string, fallback: string) => (['starter', 'pro', 'enterprise'].includes(code) ? t(`lp.pricing.${code}` as MessageKey) : fallback);
   return (
-    <div className="landing">
-      <div className="public" style={{ paddingBottom: 0 }}><PublicHeader signedIn={Boolean(viewer)} /></div>
+    <div className="ed">
+      <EdHeader />
 
-      {/* 1. Dream outcome */}
-      <section className="lp-hero">
-        <div className="lp-wrap lp-hero-grid">
-          <div className="stack loose">
-            <span className="lp-eyebrow">{t('home.eyebrow')}</span>
-            <h1>{t('home.heroTitle')}</h1>
-            <p className="lp-lead">{t('home.heroSub')}</p>
-            <div className="row">
-              <Link to="/signup" className="btn large">{t('home.ctaTrial')}<ArrowRight size={18} /></Link>
-              <a href="#how" className="btn secondary large">{t('home.ctaHow')}</a>
+      <main>
+        <section className="ed-hero">
+          <div className="ed-hero-copy">
+            <p className="ed-kicker ed-light"><span /> {t('lp.hero.kicker')}</p>
+            <h1>{t('lp.hero.title1')}<br /><em>{t('lp.hero.title2')}</em></h1>
+            <p className="ed-hero-lead">{t('lp.hero.lead')}</p>
+            <div className="ed-hero-actions">
+              <a className="ed-button ed-button-orange" href="#rappel" data-umami-event="lp-call-hero">{t('lp.hero.call')} <span>→</span></a>
+              <a className="ed-under-link" href="#preuve">{t('lp.hero.demo')} <span>↗</span></a>
             </div>
-            <span className="faint small">{t('home.micro')}</span>
+            <ul className="ed-reassure">{list('lp.hero.reassure').map((item) => <li key={item}>{item}</li>)}</ul>
           </div>
-          <div className="lp-hero-visual">
-            <img src="/landing/hero-site-lead.webp" alt="" width={800} height={500} />
-            <div className="lp-float lp-float-a">
-              <span className="sync-pill ok"><Check size={13} />{t('fieldApp.allSent')}</span>
-              <b>P001 · Gros œuvre</b>
-              <Progress value={55} />
-            </div>
-            <div className="lp-float lp-float-b">
-              <StatusChip shape="done" label={t('field.validated')} />
-            </div>
-          </div>
-        </div>
-      </section>
+          <Cockpit />
+        </section>
 
-      {/* 2. Pains */}
-      <section className="lp-section">
-        <div className="lp-wrap">
-          <h2 className="lp-h2">{t('home.painTitle')}</h2>
-          <div className="lp-grid4">
-            {pains.map(([key, Icon]) => (
-              <div key={key} className="lp-card">
-                <span className="lp-icon bad"><Icon size={22} /></span>
-                <h3>{t(`home.pains.${key}t` as MessageKey)}</h3>
-                <p>{t(`home.pains.${key}b` as MessageKey)}</p>
-              </div>
+        <div className="ed-ticker"><div>{list('lp.ticker').map((word, index, all) => (
+          <span key={index} style={{ display: 'contents' }}><span>{word}</span>{index < all.length - 1 ? <i>✦</i> : null}</span>
+        ))}</div></div>
+
+        <section className="ed-problem" id="probleme">
+          <div className="ed-section-index"><p className="ed-kicker ed-dark"><span /> {t('lp.problem.kicker')}</p><b>01 / 05</b></div>
+          <div className="ed-problem-grid">
+            <h2>{t('lp.problem.title1')}<br /><em>{t('lp.problem.title2')}</em></h2>
+            <div className="ed-problem-copy">
+              {([1, 2, 3] as const).map((n) => <article key={n}><span>{t(`lp.problem.t${n}` as MessageKey)}</span><p>{t(`lp.problem.b${n}` as MessageKey)}</p></article>)}
+            </div>
+          </div>
+          <div className="ed-problem-photo">
+            <img src={`${IMG}/problem-chaos.webp`} alt={t('lp.problem.alt')} loading="lazy" width={1672} height={941} />
+            <p>{t('lp.problem.punch1')}<br /><strong>{t('lp.problem.punch2')}</strong></p>
+          </div>
+        </section>
+
+        <section className="ed-cost" id="calcul">
+          <div className="ed-cost-copy">
+            <p className="ed-kicker ed-light"><span /> {t('lp.cost.kicker')}</p>
+            <h2>{t('lp.cost.title1')}<br /><em>{t('lp.cost.title2')}</em></h2>
+            <p>{t('lp.cost.lead1')} <strong>{t('lp.cost.leadStrong')}</strong> {t('lp.cost.lead2')}</p>
+            <small>{t('lp.cost.source')}</small>
+            <img className="ed-cost-image" src={`${IMG}/value-cost.webp`} alt={t('lp.cost.alt')} loading="lazy" width={1672} height={941} />
+          </div>
+          <Calculator currency={currency} />
+        </section>
+
+        <section className="ed-day" id="systeme">
+          <div className="ed-section-index"><p className="ed-kicker ed-dark"><span /> {t('lp.day.kicker')}</p><b>02 / 05</b></div>
+          <div className="ed-day-head"><h2>{t('lp.day.title1')}<br /><em>{t('lp.day.title2')}</em></h2><p>{t('lp.day.lead')}</p></div>
+          <div className="ed-day-layout">
+            <figure><img src={`${IMG}/daily-routine.webp`} alt={t('lp.day.alt')} loading="lazy" width={1536} height={1024} /><figcaption>{t('lp.day.caption')}</figcaption></figure>
+            <ol className="ed-timeline">
+              {([1, 2, 3, 4, 5] as const).map((n) => (
+                <li key={n} className={n === 1 ? 'ed-active' : undefined}><time>{t(`lp.day.t${n}` as MessageKey)}</time><div><h3>{t(`lp.day.h${n}` as MessageKey)}</h3><p>{t(`lp.day.b${n}` as MessageKey)}</p></div></li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        <section className="ed-offer">
+          <div className="ed-section-index ed-light-index"><p className="ed-kicker ed-light"><span /> {t('lp.offer.kicker')}</p><b>03 / 05</b></div>
+          <div className="ed-offer-head"><h2>{t('lp.offer.title1')}<br /><em>{t('lp.offer.title2')}</em></h2><p>{t('lp.offer.lead')}</p></div>
+          <div className="ed-offer-steps">
+            {([1, 2, 3, 4, 5] as const).map((n) => (
+              <article key={n}><span>{String(n).padStart(2, '0')}</span><h3>{t(`lp.offer.s${n}t` as MessageKey)}</h3><p>{t(`lp.offer.s${n}b` as MessageKey)}</p><b>{t(`lp.offer.s${n}s` as MessageKey)}</b></article>
             ))}
           </div>
-        </div>
-      </section>
+          <div className="ed-offer-media">
+            <img src={`${IMG}/team-launch.webp`} alt={t('lp.offer.alt1')} loading="lazy" width={1536} height={1024} /><p><b>{t('lp.offer.tag1')}</b> {t('lp.offer.cap1')}</p>
+            <img src={`${IMG}/client-trust.webp`} alt={t('lp.offer.alt2')} loading="lazy" width={1536} height={1024} /><p><b>{t('lp.offer.tag2')}</b> {t('lp.offer.cap2')}</p>
+          </div>
+        </section>
 
-      {/* 3. How it works */}
-      <section className="lp-section lp-alt" id="how">
-        <div className="lp-wrap">
-          <h2 className="lp-h2">{t('home.howTitle')}</h2>
-          <p className="lp-sub">{t('home.howSub')}</p>
-          <div className="lp-steps">
-            {[['s1', '/landing/hero-site-lead.webp', HardHat], ['s2', '/landing/manager-office.webp', ClipboardCheck], ['s3', '/landing/client-phone.webp', Wallet]].map(([key, image, Icon], index) => {
-              const StepIcon = Icon as typeof HardHat;
+        <section className="ed-features" id="preuve">
+          <div className="ed-section-index"><p className="ed-kicker ed-dark"><span /> {t('lp.proof.kicker')}</p><b>04 / 05</b></div>
+          <div className="ed-demo-head"><h2>{t('lp.proof.title1')}<br /><em>{t('lp.proof.title2')}</em></h2><p>{t('lp.proof.lead')}</p></div>
+          <div className="ed-roles">
+            {ROLES.map((item, index) => (
+              <button key={item.key} type="button" className={`ed-role${item.key === role ? ' ed-active' : ''}`} aria-pressed={item.key === role} onClick={() => setRole(item.key)}>
+                <span>{String(index + 1).padStart(2, '0')}</span><b>{t(`lp.proof.${item.key}` as MessageKey)}</b><small>{t(`lp.proof.${item.key}S` as MessageKey)}</small>
+              </button>
+            ))}
+          </div>
+          <div className="ed-role-screen">
+            <img src={`${IMG}/${shown.image}.webp`} alt={t(`lp.proof.${role}A` as MessageKey)} loading="lazy" width={1536} height={1024} />
+            <div>
+              <p>{t(`lp.proof.${role}L` as MessageKey)}</p>
+              <h3>{t(`lp.proof.${role}T` as MessageKey)}</h3>
+              <a href={`/api/demo/start?role=${role}`} data-umami-event={`lp-role-${role}`}>{t('lp.proof.open')} <span>↗</span></a>
+            </div>
+          </div>
+        </section>
+
+        <section className="ed-pricing" id="tarifs">
+          <div className="ed-section-index"><p className="ed-kicker ed-dark"><span /> {t('lp.pricing.kicker')}</p><b>05 / 05</b></div>
+          <div className="ed-pricing-head"><h2>{t('lp.pricing.title1')}<br /><em>{t('lp.pricing.title2')}</em></h2><p>{priced ? t('lp.pricing.leadPriced', { currency }) : t('lp.pricing.leadQuote')}</p></div>
+          <div className="ed-pricing-grid">
+            {paid.map((plan) => {
+              const words = planWords(plan, locale);
+              const price = plan.priceMinor > 0 && plan.code !== 'enterprise';
               return (
-                <div key={key as string} className="lp-step">
-                  <div className="lp-step-img"><img src={image as string} alt="" loading="lazy" /><span className="lp-step-n">{index + 1}</span></div>
-                  <div className="row tight"><StepIcon size={18} style={{ color: 'var(--brand)' }} /><h3>{t(`home.how.${key}t` as MessageKey)}</h3></div>
-                  <p>{t(`home.how.${key}b` as MessageKey)}</p>
-                </div>
+                <article key={plan.code} className={words.highlight ? 'ed-featured' : undefined}>
+                  {words.highlight ? <b>{t('lp.offer.recommended').toUpperCase()}</b> : null}
+                  <span>{words.name.toUpperCase()}</span>
+                  <h3 className={price ? 'ed-priced' : undefined}>{price ? <>{formatMoney(locale, plan.priceMinor, plan.currencyCode)}<small>{t('lp.pricing.perMonth')}</small></> : t('lp.pricing.onQuote')}</h3>
+                  <p>{tagline(plan.code, words.tagline)}</p>
+                  <ul>
+                    <li>{plan.maxUsers ? t('landing.users', { n: plan.maxUsers }) : t('landing.usersUnlimited')}</li>
+                    <li>{plan.maxProjects ? t('landing.projects', { n: plan.maxProjects }) : t('landing.projectsUnlimited')}</li>
+                    {words.highlight ? <li>{t('lp.pricing.setup')}</li> : null}
+                    {plan.code === 'enterprise' ? <li>{t('lp.pricing.dedicated')}</li> : null}
+                  </ul>
+                  <a href="#rappel" data-umami-event={`lp-plan-${plan.code}`}>{t('lp.pricing.talk')}</a>
+                </article>
               );
             })}
           </div>
-        </div>
-      </section>
+          <div className="ed-risk-strip">{list('lp.pricing.risk').map((item) => <span key={item}>{item}</span>)}</div>
+        </section>
 
-      {/* 4. Value stack */}
-      <section className="lp-section">
-        <div className="lp-wrap">
-          <h2 className="lp-h2">{t('home.stackTitle')}</h2>
-          <p className="lp-sub">{t('home.stackSub')}</p>
-          <div className="lp-stack">
-            {people.map((person) => (
-              <div key={person} className="lp-card">
-                <h3>{t(`home.stack.${person}` as MessageKey)}</h3>
-                <ul className="lp-list">
-                  {t(`home.stack.${person}Items` as MessageKey).split('|').map((item) => <li key={item}><Check size={16} />{item}</li>)}
-                </ul>
-              </div>
-            ))}
+        <section className="ed-final" id="rappel">
+          <img src={`${IMG}/handover-future.webp`} alt={t('lp.final.alt')} loading="lazy" width={1672} height={941} />
+          <div className="ed-final-panel">
+            <p className="ed-kicker ed-light"><span /> {t('lp.final.kicker')}</p>
+            <h2>{t('lp.final.title1')}<br /><em>{t('lp.final.title2')}</em></h2>
+            <CallBack />
           </div>
-        </div>
-      </section>
-
-      {/* 5. Why it fits here */}
-      <section className="lp-section lp-dark">
-        <div className="lp-wrap">
-          <h2 className="lp-h2">{t('home.whyTitle')}</h2>
-          <div className="lp-why">
-            {why.map(([key, Icon]) => <div key={key} className="lp-why-item"><Icon size={22} /><span>{t(`home.why.${key}` as MessageKey)}</span></div>)}
-          </div>
-        </div>
-      </section>
-
-      {/* 6. Risk removed */}
-      <section className="lp-section">
-        <div className="lp-wrap">
-          <h2 className="lp-h2">{t('home.riskTitle')}</h2>
-          <div className="lp-grid4">
-            {risk.map(([key, Icon]) => (
-              <div key={key} className="lp-card">
-                <span className="lp-icon ok"><Icon size={22} /></span>
-                <h3>{t(`home.risk.${key}t` as MessageKey)}</h3>
-                <p>{t(`home.risk.${key}b` as MessageKey)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 7. Price */}
-      <section className="lp-section lp-alt" id="pricing">
-        <div className="lp-wrap">
-          <h2 className="lp-h2">{t('home.pricingTitle')}</h2>
-          <p className="lp-sub">{t('landing.pricingNote')}</p>
-          <div className="lp-prices">
-            {plans.filter((plan) => plan.code !== 'trial').map((plan) => (
-              <div key={plan.code} className={`lp-card lp-price ${plan.code === 'pro' ? 'featured' : ''}`}>
-                {plan.code === 'pro' ? <span className="badge brand" style={{ alignSelf: 'flex-start' }}>{t('home.recommended')}</span> : null}
-                <h3>{plan.name}</h3>
-                <div className="price">
-                  {plan.priceMinor > 0 ? <>{formatMoney(locale, plan.priceMinor, plan.currencyCode)} <span className="muted small">{t('landing.perMonth')}</span></> : t('landing.onQuote')}
-                </div>
-                <ul className="lp-list">
-                  <li><Check size={16} />{plan.maxUsers ? t('landing.users', { n: plan.maxUsers }) : t('landing.usersUnlimited')}</li>
-                  <li><Check size={16} />{plan.maxProjects ? t('landing.projects', { n: plan.maxProjects }) : t('landing.projectsUnlimited')}</li>
-                  <li><Check size={16} />{t('home.why.w1')}</li>
-                  <li><Check size={16} />{t('home.why.w3')}</li>
-                </ul>
-                <Link to="/signup" className={`btn block ${plan.code === 'pro' ? '' : 'secondary'}`}>{t('home.ctaTrial')}</Link>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 8. Objections */}
-      <section className="lp-section">
-        <div className="lp-wrap" style={{ maxWidth: 820 }}>
-          <h2 className="lp-h2">{t('home.faqTitle')}</h2>
-          <div className="stack">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <details key={n} className="lp-faq">
-                <summary>{t(`home.faq.q${n}` as MessageKey)}</summary>
-                <p>{t(`home.faq.a${n}` as MessageKey)}</p>
-              </details>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 9. Last call */}
-      <section className="lp-final">
-        <div className="lp-wrap stack loose" style={{ alignItems: 'center', textAlign: 'center' }}>
-          <ShieldCheck size={40} />
-          <h2>{t('home.finalTitle')}</h2>
-          <p>{t('home.finalSub')}</p>
-          <Link to="/signup" className="btn large lp-btn-inverse">{t('home.ctaTrial')}<ArrowRight size={18} /></Link>
-          <span className="small" style={{ opacity: .85 }}>{t('home.micro')}</span>
-        </div>
-      </section>
-      <footer className="muted small" style={{ textAlign: 'center', padding: '2rem 1rem' }}>{t('landing.footer', { year: new Date().getFullYear() })}</footer>
+        </section>
+      </main>
+      <EdFooter />
     </div>
   );
 }

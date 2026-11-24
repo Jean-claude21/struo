@@ -1,10 +1,13 @@
-import { companyKpis, digestRecipients, getSettings, listAlerts, markNotified, reportRecipients, resolveActor, type Alert } from '@struo/core';
+import { companyKpis, digestRecipients, licenceNotice, licenceNoticeTargets, markNoticeOnce, recordPlatformEvent, getSettings, listAlerts, markNotified, reportRecipients, resolveActor, type Alert } from '@struo/core';
 import { translate } from '@/i18n/index.tsx';
+import { refillDemoPool } from './demo.server.ts';
+import { runClientReports } from './notify.server.ts';
 import { monitorJob, reportError } from './monitor.server.ts';
 import type { Runtime } from './runtime.server.ts';
 
 const LOCK = 727100;
 const REPORT_LOCK = 727101;
+const LICENCE_LOCK = 727102;
 let started = false;
 
 /** Formats an alert as a line of text (e-mail, WhatsApp, MCP). */
@@ -31,6 +34,7 @@ export async function runDigest(rt: Runtime): Promise<number> {
     if (!rows[0]?.locked) return 0;
     try {
       for (const company of await digestRecipients(rt.owner)) {
+        if (localClock(company.timeZone).hour < MORNING) continue;
         const alerts = (await listAlerts(rt.db, { userId: company.ownerId, orgId: company.orgId })).filter(
           (alert) => alert.severity !== 'info',
         );
@@ -64,6 +68,20 @@ export async function runDigest(rt: Runtime): Promise<number> {
 }
 
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
+
+/** The hour and the calendar day in a company's time zone (Struo is used in many countries). */
+export function localClock(timeZone: string, now = new Date()): { hour: number; day: Date } {
+  let parts: Record<string, string>;
+  try {
+    parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
+      .formatToParts(now).map((part) => [part.type, part.value]));
+  } catch {
+    return localClock('UTC', now);
+  }
+  return { hour: Number(parts.hour), day: new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), 12)) };
+}
+/** Messages leave from 7:00 in the morning, local time. */
+const MORNING = 7;
 function moneyText(locale: 'fr' | 'en', minor: number, currency: string): string {
   const decimals = new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 0;
   return new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(minor / 10 ** decimals);
@@ -91,9 +109,7 @@ export function reportPeriods(today: Date): ReportPeriod[] {
  * The weekly (Monday) and monthly (1st) reports (spec 039): owners and admins receive the key
  * indicators of the period and a link to the full printable report. One send per company and period.
  */
-export async function runReports(rt: Runtime, today = new Date()): Promise<number> {
-  const periods = reportPeriods(today);
-  if (!periods.length) return 0;
+export async function runReports(rt: Runtime, now = new Date()): Promise<number> {
   const client = await rt.owner.connect();
   let sent = 0;
   try {
@@ -101,7 +117,9 @@ export async function runReports(rt: Runtime, today = new Date()): Promise<numbe
     if (!rows[0]?.locked) return 0;
     try {
       for (const company of await reportRecipients(rt.owner)) {
-        for (const period of periods) {
+        const local = localClock(company.timeZone, now);
+        if (local.hour < MORNING) continue;
+        for (const period of reportPeriods(local.day)) {
           if (!(await markNotified(rt.owner, company.orgId, `report.${period.kind}`, period.key, 'email'))) continue;
           try {
             const actor = await resolveActor(rt.db, company.ownerId, company.orgId, 'web');
@@ -147,16 +165,62 @@ export async function runReports(rt: Runtime, today = new Date()): Promise<numbe
   return sent;
 }
 
+/**
+ * Spec 060: owners and admins are warned before their trial or licence ends (at the start of the
+ * window, then 7, 3 and 1 days before), when it has ended (grace period), and when the space turns
+ * read-only. Each message leaves once per period, from 7:00 in the company's time zone.
+ */
+export async function runLicenceNotices(rt: Runtime, now = new Date()): Promise<number> {
+  const client = await rt.owner.connect();
+  let sent = 0;
+  try {
+    const { rows } = await client.query<{ locked: boolean }>('select pg_try_advisory_lock($1) as locked', [LICENCE_LOCK]);
+    if (!rows[0]?.locked) return 0;
+    try {
+      for (const company of await licenceNoticeTargets(rt.owner, now)) {
+        if (localClock(company.timeZone, now).hour < MORNING) continue;
+        const notice = licenceNotice(company.access, company.warnDays);
+        if (!notice) continue;
+        if (!(await markNoticeOnce(rt.owner, company.orgId, notice.target))) continue;
+        const locale = company.locale;
+        const kind = company.access.kind === 'trial' ? 'trial' : 'paid';
+        const day = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'long' }).format(new Date(iso)) : '');
+        const params = { company: company.orgName, n: company.access.daysLeft ?? 0, end: day(company.access.endsAt), grace: day(company.access.graceEndsAt), url: `${rt.env.APP_BASE_URL}/app/settings` };
+        await rt.mailer.send({
+          to: company.emails,
+          subject: translate(locale, `licence.mail.${notice.stage}.${kind}Subject`, params),
+          text: [translate(locale, `licence.mail.${notice.stage}.${kind}`, params), '', translate(locale, 'licence.mail.renew', params), '', translate(locale, 'licence.mail.sign')].join('\n'),
+        });
+        sent += 1;
+      }
+    } finally {
+      await client.query('select pg_advisory_unlock($1)', [LICENCE_LOCK]);
+    }
+  } finally {
+    client.release();
+  }
+  return sent;
+}
+
 export function startJobs(rt: Runtime): void {
   if (started) return;
   started = true;
   // Every 15 minutes the jobs check in with the error tracker: if they stop, an alert is raised.
   const tick = () => {
     monitorJob('struo-jobs', '*/15 * * * *', async () => {
-      // The digest and the reports leave after 7:00 UTC (morning in West Africa).
-      if (new Date().getUTCHours() < 7) return;
-      await runDigest(rt).catch((error: unknown) => reportError(error, { where: 'job:digest' }));
-      await runReports(rt).catch((error: unknown) => reportError(error, { where: 'job:reports' }));
+      // Demo copies (spec 042): delete the expired ones, keep a few ready for the next visitors.
+      // Spec 055: every run is noted (ok or failed) for the founder's console.
+      const run = async (name: string, work: () => Promise<unknown>) => {
+        try { const result = await work(); await recordPlatformEvent(rt.owner, { kind: 'job', name, ok: true, detail: typeof result === 'number' ? { done: result } : null }); }
+        catch (error) { reportError(error, { where: `job:${name}` }); await recordPlatformEvent(rt.owner, { kind: 'job', name, ok: false, detail: { error: String((error as Error)?.message ?? error).slice(0, 200) } }); }
+      };
+      await run('demo', () => refillDemoPool(rt));
+      // The digest and the reports leave from 7:00 in each company's own time zone.
+      await run('digest', () => runDigest(rt));
+      await run('reports', () => runReports(rt));
+      await run('licence-notices', () => runLicenceNotices(rt));
+      // Spec 049: the weekly client report, Monday morning, for the companies that chose it.
+      await run('client-reports', () => runClientReports(rt, new Date(), localClock));
     }).catch((error: unknown) => reportError(error, { where: 'jobs' }));
   };
   setTimeout(tick, 30_000).unref?.();

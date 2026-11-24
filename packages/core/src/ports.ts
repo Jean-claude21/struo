@@ -62,6 +62,14 @@ export interface Drafter {
   readonly configured: boolean;
   /** Writes a letter from facts. Never invents a figure: every figure is in `facts`. */
   draft(input: { kind: 'reminder' | 'formal_notice'; locale: 'fr' | 'en'; facts: Record<string, string> }): Promise<string>;
+  /**
+   * Writes the prose sections of a client report (spec 050) from its facts only: `summary`, `done`,
+   * `next`, `ask`. With `section` and `instruction`, rewrites that one section from `current`.
+   * Never invents a figure, a date or a name.
+   */
+  reportSections(input: {
+    locale: 'fr' | 'en'; facts: unknown; section?: 'summary' | 'done' | 'next' | 'ask'; instruction?: string; current?: string | null;
+  }): Promise<Partial<Record<'summary' | 'done' | 'next' | 'ask', string>>>;
 }
 
 export interface DeliveryNoteFields {

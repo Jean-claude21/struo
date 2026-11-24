@@ -12,6 +12,9 @@ import { z } from 'zod';
 import { translate } from '@/i18n/index.tsx';
 import { alertText } from '@/server/jobs.server.ts';
 import { invitationMail } from '@/server/mail.server.ts';
+import { outboundAllowed } from '@/server/demo.server.ts';
+import { companyLocale, deliverClientReport } from '@/server/notify.server.ts';
+import { draftSections } from '@/server/report.server.ts';
 import type { Runtime } from '@/server/runtime.server.ts';
 import { forecast } from '@/server/weather.server.ts';
 
@@ -342,6 +345,33 @@ export const CAPABILITIES: Capability[] = [
     async run({ rt, actor, projectId }, input) { return core.recordPayment(rt.db, actor, { ...input, site: undefined, projectId: await projectId(input.site) }); },
     summary: async (context, input) => `${input.site} · ${fmt(context, input.amountMinor)} · ${input.method}${input.reference ? ` · ${input.reference}` : ''}${input.receivedOn ? ` · ${input.receivedOn}` : ''}`,
   }),
+  // Spec 053: the money to come.
+  define({
+    name: 'cash_forecast', group: 'finance', permission: 'cash.read', autonomy: 1, input: z.object({}),
+    description: 'The cash forecast over 13 weeks: start (bank balance given by the company, else collected minus spent), money in (open invoices on their due date; late invoices NOT counted, given apart), money out (supplier bills on their due date, labour and usual spending at the recent pace), the balance at 30/60/90 days, the low point, and the subcontracts left to pay without a date.',
+    run: ({ rt, actor }) => core.cashForecast(rt.db, actor),
+  }),
+  define({
+    name: 'list_supplier_bills', group: 'finance', permission: 'cash.read', autonomy: 1,
+    input: z.object({ status: z.enum(['to_pay', 'paid', 'cancelled']).optional(), site: site.optional() }),
+    description: 'Supplier bills (to pay, paid, cancelled) with their due date and days late.',
+    async run({ rt, actor, projectId }, input) { return core.listSupplierBills(rt.db, actor, { status: input.status, projectId: input.site ? await projectId(input.site) : undefined }); },
+  }),
+  define({
+    name: 'add_supplier_bill', group: 'finance', permission: 'finance.write', autonomy: 2,
+    input: z.object({ supplier: z.string().min(1), label: z.string().min(1), amountMinor: money, dueOn: date, site: site.optional(), category: z.enum(core.EXPENSE_CATEGORIES).optional(), reference: z.string().optional() }),
+    description: 'Adds a supplier bill to pay, on a site or as overheads; it enters the cash forecast.',
+    async run({ rt, actor, projectId }, input) { return core.createSupplierBill(rt.db, actor, { ...input, site: undefined, projectId: input.site ? await projectId(input.site) : null }); },
+  }),
+  define({
+    name: 'pay_supplier_bill', group: 'finance', permission: 'finance.write', autonomy: 4, input: z.object({ billId: z.string().uuid(), paidOn: date.optional() }),
+    description: 'Marks a supplier bill paid; a bill of a site becomes that site’s expense.',
+    run: ({ rt, actor }, input) => core.paySupplierBill(rt.db, actor, input.billId, { paidOn: input.paidOn }),
+    summary: async ({ rt, actor }, input) => {
+      const bill = (await core.listSupplierBills(rt.db, actor)).find((row) => row.id === input.billId);
+      return bill ? `${bill.supplier} · ${bill.label} · ${bill.amountMinor}` : input.billId;
+    },
+  }),
   define({
     name: 'draft_reminder', group: 'finance', permission: 'finance.read', autonomy: 1,
     input: z.object({ invoiceId: z.string().uuid(), kind: z.enum(['reminder', 'formal_notice']) }),
@@ -461,10 +491,11 @@ export const CAPABILITIES: Capability[] = [
       const [project, settings] = await Promise.all([core.getProject(rt.db, actor, id), core.getSettings(rt.db, actor)]);
       for (const old of await core.listPortalLinksFull(rt.db, actor, id)) if (!old.revokedAt) await core.revokePortalLink(rt.db, actor, old.id);
       const link = await core.createPortalLink(rt.db, actor, id, input.contactName);
+      await core.sealPortalToken(rt.db, actor, link.id, rt.secrets.seal(link.token));
       await core.updatePortalLink(rt.db, actor, link.id, { contactName: input.contactName, contactEmail: input.contactEmail, contactPhone: input.contactPhone ?? null,
         requireCode: true, showPhotos: true, showPlanning: true, showFinance: true, showDocuments: true, showMessages: true, invited: true });
       const url = `${rt.env.APP_BASE_URL}/portal/${link.token}`;
-      await rt.mailer.send({ to: input.contactEmail, subject: translate(locale, 'clientInvite.subject', { project: project.name, company: settings.name }),
+      if (await outboundAllowed(rt, actor.orgId)) await rt.mailer.send({ to: input.contactEmail, subject: translate(locale, 'clientInvite.subject', { project: project.name, company: settings.name }),
         text: translate(locale, 'clientInvite.message', { name: input.contactName, project: project.name, company: settings.name, url }) });
       return { sent: true, to: input.contactEmail };
     },
@@ -482,6 +513,67 @@ export const CAPABILITIES: Capability[] = [
     summary: async (_context, input) => `${input.site} · « ${input.text.slice(0, 160)} »`,
   }),
 
+  // ---------------------------------------------------------------- client report (spec 050)
+  define({
+    name: 'prepare_client_report', group: 'portal', permission: 'portal.manage', autonomy: 2,
+    input: z.object({ site, from: date.optional(), to: date.optional() }),
+    description: 'Prepares a draft of the client report for a period (default: the last 7 days): prose sections written from the validated field reports, the validated photos of the period chosen. Nothing is sent. Returns the draft to read with client_report.',
+    async run({ rt, actor, projectId }, input) {
+      const id = await projectId(input.site);
+      const to = input.to ?? new Date().toISOString().slice(0, 10);
+      const from = input.from ?? new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
+      const { id: reportId } = await core.createClientReportDraft(rt.db, actor, { projectId: id, from, to });
+      const facts = await core.clientReportFacts(rt.db, actor, reportId);
+      const { sections } = await draftSections(rt, await companyLocale(rt, actor.orgId), facts, actor.orgId);
+      await core.updateClientReportDraft(rt.db, actor, reportId, { sections });
+      return { reportId, projectId: id, from, to, sections };
+    },
+    sources: (result) => { const r = result as { reportId: string; projectId: string }; return [{ kind: 'report', label: 'Client report', href: `/app/projects/${r.projectId}?tab=report&report=${r.reportId}` }]; },
+  }),
+  define({
+    name: 'client_report', group: 'portal', permission: 'portal.manage', autonomy: 1,
+    input: z.object({ site, reportId: z.string().uuid().optional() }),
+    description: 'Shows a client report section by section: its prose (summary, done, next, ask), the note, the photos offered and chosen, the figures it shows (from the records, not editable), the facts it may be written from, and warnings when the prose holds a figure the facts do not. Without reportId: the reports of the site (drafts and sent).',
+    async run({ rt, actor, projectId }, input) {
+      const id = await projectId(input.site);
+      if (!input.reportId) return { reports: await core.listClientReports(rt.db, actor, id) };
+      const draft = await core.clientReportDraft(rt.db, actor, input.reportId);
+      if (draft.projectId !== id) throw new core.DomainError('not_found', 404);
+      const { report } = draft;
+      return {
+        reportId: draft.id, status: draft.status, period: report.period, sentTo: draft.sentTo, sentAt: draft.sentAt,
+        sections: report.sections, note: report.note,
+        figures: { progressPct: report.project.progressPct, reportsCount: report.reportsCount, endDate: report.project.endDate, phases: report.phases, reached: report.reached, upcoming: report.upcoming, asks: report.asks },
+        photos: draft.candidates, warnings: draft.warnings, facts: draft.facts,
+      };
+    },
+  }),
+  define({
+    name: 'edit_client_report', group: 'portal', permission: 'portal.manage', autonomy: 2,
+    input: z.object({
+      reportId: z.string().uuid(),
+      summary: z.string().max(3000).optional(), done: z.string().max(3000).optional(), next: z.string().max(3000).optional(), ask: z.string().max(3000).optional(),
+      note: z.string().max(2000).optional(), photoIds: z.array(z.string().uuid()).max(24).optional().describe('The photos to show, replacing the choice (ids from client_report)'),
+    }),
+    description: 'Changes the prose of a draft client report (only the sections given), its note or the chosen photos. Write only from the facts: never a figure, date or name they do not hold. A sent report cannot change.',
+    async run({ rt, actor }, input) {
+      const sections = Object.fromEntries((['summary', 'done', 'next', 'ask'] as const).filter((key) => input[key] !== undefined).map((key) => [key, input[key]]));
+      await core.updateClientReportDraft(rt.db, actor, input.reportId, { sections, ...(input.note !== undefined ? { note: input.note } : {}), ...(input.photoIds ? { photoIds: input.photoIds } : {}) });
+      const draft = await core.clientReportDraft(rt.db, actor, input.reportId);
+      return { ok: true, sections: draft.report.sections, warnings: draft.warnings };
+    },
+  }),
+  define({
+    name: 'send_client_report', group: 'portal', permission: 'portal.manage', autonomy: 4, input: z.object({ reportId: z.string().uuid() }),
+    description: 'Sends a draft client report: it is frozen and the client receives an e-mail with a button to it in their space.',
+    async run({ rt, actor }, input) { return deliverClientReport(rt, actor, input.reportId); },
+    summary: async ({ rt, actor }, input) => {
+      const draft = await core.clientReportDraft(rt.db, actor, input.reportId);
+      const contact = await core.portalContact(rt.db, actor, draft.projectId);
+      return `${draft.report.project.code} · ${draft.report.period.from} → ${draft.report.period.to} · ${contact?.contactEmail ?? '—'}${Object.keys(draft.warnings).length ? ' · ⚠ figures to check' : ''}`;
+    },
+  }),
+
   // ---------------------------------------------------------------- team
   define({
     name: 'list_team', group: 'team', permission: null, autonomy: 1, input: z.object({}),
@@ -497,7 +589,7 @@ export const CAPABILITIES: Capability[] = [
       const settings = await core.getSettings(rt.db, actor);
       const url = `${rt.env.APP_BASE_URL}/invite/${invitation.id}`;
       const inviter = (await rt.db.query<{ name: string }>('select name from "user" where id = $1', [actor.userId])).rows[0]?.name ?? settings.name;
-      await rt.mailer.send(invitationMail(settings.locale, { to: invitation.email, org: settings.name, inviter, role: input.role, url }, rt.env.APP_BASE_URL))
+      if (await outboundAllowed(rt, actor.orgId)) await rt.mailer.send(invitationMail(settings.locale, { to: invitation.email, org: settings.name, inviter, role: input.role, url }, rt.env.APP_BASE_URL))
         .catch((error: unknown) => console.error('[mail] invitation', error));
       return { invited: invitation.email };
     },

@@ -1,12 +1,15 @@
 /// <reference types="vite/client" />
-import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
+import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from '@tanstack/react-router';
+import { trackPage } from '@/lib/audience.ts';
 import { useEffect, type ReactNode } from 'react';
+import { DemoBar } from '@/components/DemoBar.tsx';
 import { ToastProvider } from '@/components/kit.tsx';
 import { getShell } from '@/features/shell/server.ts';
 import { THEME_BOOT } from '@/lib/theme.ts';
 import { initBrowserMonitoring } from '@/lib/monitor.ts';
 import { I18nProvider, translate } from '@/i18n/index.tsx';
 import appCss from '@/styles.css?url';
+import { PhotoViewerProvider } from '@/components/PhotoViewer.tsx';
 
 export const Route = createRootRoute({
   loader: () => getShell(),
@@ -16,7 +19,7 @@ export const Route = createRootRoute({
       { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
       { title: `Struo — ${translate(loaderData?.locale ?? 'fr', 'app.tagline')}` },
       { name: 'description', content: translate(loaderData?.locale ?? 'fr', 'landing.heroSub') },
-      { name: 'theme-color', content: '#e8590c' },
+      { name: 'theme-color', content: '#f8f7f1' },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
@@ -33,20 +36,31 @@ function Shell({ children }: { children: ReactNode }) {
   const data = Route.useLoaderData();
   const locale = data?.locale ?? 'fr';
   const userId = data?.viewer?.userId;
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  // The demo bar (spec 042) on every page of a demo company: office, field app, client space.
+  const demo = data?.viewer?.demo && data.viewer.company && path !== '/' ? data.viewer : null;
+  const demoRole = path.startsWith('/portal') ? 'client' : path.startsWith('/field') ? 'site_lead' : (demo?.company?.role ?? 'owner');
   useEffect(() => { void initBrowserMonitoring(data?.monitoring, userId); }, [data?.monitoring, userId]);
+  // The script loads after the page: give it a moment on the first view.
+  useEffect(() => { const handle = window.setTimeout(() => trackPage(path), 400); return () => window.clearTimeout(handle); }, [path]);
   return (
     <html lang={locale}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <HeadContent />
         {data?.monitoring?.umami ? (
-          // Audience analytics without cookies (spec 041): pages and named clicks, on this domain only.
-          <script defer src={data.monitoring.umami.src} data-website-id={data.monitoring.umami.id} data-domains={data.monitoring.umami.domain} />
+          // Audience analytics without cookies (spec 041): public pages only, by path, and named clicks (spec 055).
+          <script defer src={data.monitoring.umami.src} data-website-id={data.monitoring.umami.id} data-domains={data.monitoring.umami.domain} data-auto-track="false" />
         ) : null}
       </head>
       <body>
         <I18nProvider locale={locale}>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <PhotoViewerProvider>
+              {demo ? <DemoBar role={demoRole} expiresAt={demo.demo?.expiresAt ?? null} /> : null}
+              {children}
+            </PhotoViewerProvider>
+          </ToastProvider>
         </I18nProvider>
         <Scripts />
       </body>

@@ -10,7 +10,8 @@ export interface Alert {
     | 'milestone_late'
     | 'collection_gap'
     | 'incident_open'
-    | 'reports_to_review';
+    | 'reports_to_review'
+    | 'task_late';
   severity: 'critical' | 'important' | 'info';
   projectId: string | null;
   target: string;
@@ -26,7 +27,16 @@ export async function listAlerts(db: Db, actor: Pick<Actor, 'userId' | 'orgId'>)
       'select kind, severity, project_id, target, params, sort_key from struo_alerts($1)',
       [actor.orgId],
     );
-    return rows
+    // Spec 048: tasks past their due date, with who has them.
+    const tasks = await tx.query<Alert & { sort_key: number; project_id: string | null }>(
+      `select 'task_late' as kind, case when t.priority = 'urgent' then 'critical' else 'important' end as severity,
+              t.project_id, t.id::text as target, (current_date - t.due_on)::int as sort_key,
+              jsonb_build_object('project', p.code, 'title', t.title, 'assignee', coalesce(u.name, '—'), 'days', current_date - t.due_on) as params
+         from project_task t join project p on p.id = t.project_id left join "user" u on u.id = t.assignee_id
+        where t.org_id = $1 and t.status <> 'done' and t.due_on < current_date and p.archived_at is null`,
+      [actor.orgId],
+    );
+    return [...rows, ...tasks.rows]
       .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.sort_key - a.sort_key)
       .map((row) => ({ kind: row.kind, severity: row.severity, projectId: row.project_id, target: row.target, params: row.params }));
   });
@@ -83,8 +93,8 @@ export async function recentActivity(db: Db, actor: Actor, limit = 30) {
  * connection by the scheduled job. Then each company's alerts are read as one of its owners.
  */
 export async function digestRecipients(owner: Db) {
-  const { rows } = await owner.query<{ orgId: string; orgName: string; locale: 'fr' | 'en'; ownerId: string; emails: string[] }>(
-    `select o.id as "orgId", o.name as "orgName", s.locale,
+  const { rows } = await owner.query<{ orgId: string; orgName: string; locale: 'fr' | 'en'; timeZone: string; ownerId: string; emails: string[] }>(
+    `select o.id as "orgId", o.name as "orgName", s.locale, s.time_zone as "timeZone",
             (select m."userId" from member m where m."organizationId" = o.id and m.role = 'owner' order by m."createdAt" limit 1) as "ownerId",
             array(select u.email from member m join "user" u on u.id = m."userId"
                    where m."organizationId" = o.id and m.role in ('owner', 'admin')) as emails
@@ -96,8 +106,8 @@ export async function digestRecipients(owner: Db) {
 
 /** Every active company with its owner and the e-mails of its owners and admins, for the periodic reports (spec 039). */
 export async function reportRecipients(owner: Db) {
-  const { rows } = await owner.query<{ orgId: string; orgName: string; locale: 'fr' | 'en'; ownerId: string; emails: string[] }>(
-    `select o.id as "orgId", o.name as "orgName", s.locale,
+  const { rows } = await owner.query<{ orgId: string; orgName: string; locale: 'fr' | 'en'; timeZone: string; ownerId: string; emails: string[] }>(
+    `select o.id as "orgId", o.name as "orgName", s.locale, s.time_zone as "timeZone",
             (select m."userId" from member m where m."organizationId" = o.id and m.role = 'owner' order by m."createdAt" limit 1) as "ownerId",
             array(select u.email from member m join "user" u on u.id = m."userId"
                    where m."organizationId" = o.id and m.role in ('owner', 'admin')) as emails

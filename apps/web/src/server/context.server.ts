@@ -3,6 +3,7 @@ import {
 } from '@struo/core';
 import { getCookie, getRequestHeaders, setCookie } from '@tanstack/react-start/server';
 import { isLocale, LOCALE_COOKIE, localeFromHeaders, type Locale } from '@/i18n/index.tsx';
+import { COUNTRY_COOKIE, countryFromLanguages, DEFAULT_COUNTRY, isCountry } from '@/features/settings/countries.ts';
 import { reportError } from './monitor.server.ts';
 import { runtime } from './runtime.server.ts';
 
@@ -18,6 +19,8 @@ export interface Viewer {
   /** The company being worked on (cookie, else the first one). */
   company: { id: string; name: string; role: Role } | null;
   platformAdmin: boolean;
+  /** A demonstration company (spec 042): when the visitor's copy expires, null for the seeded demo. */
+  demo: { expiresAt: string | null } | null;
 }
 
 /** The signed-in person, from the session cookie of the current request. */
@@ -28,6 +31,10 @@ export async function loadViewer(): Promise<Viewer | null> {
   const companies = await listCompanies(db, session.user.id);
   const chosen = getCookie(ORG_COOKIE);
   const company = companies.find((candidate) => candidate.id === chosen) ?? companies[0] ?? null;
+  const demoRow = company
+    ? (await runtime().owner.query<{ demo: boolean; expires: string | null }>(
+        'select s.is_demo as demo, d.expires_at as expires from org_settings s left join demo_sandbox d on d.org_id = s.org_id where s.org_id = $1', [company.id])).rows[0]
+    : undefined;
   return {
     userId: session.user.id,
     name: session.user.name,
@@ -36,6 +43,7 @@ export async function loadViewer(): Promise<Viewer | null> {
     companies,
     company,
     platformAdmin: env.PLATFORM_ADMIN_EMAILS.includes(session.user.email.toLowerCase()),
+    demo: demoRow?.demo ? { expiresAt: demoRow.expires ? new Date(demoRow.expires).toISOString() : null } : null,
   };
 }
 
@@ -60,11 +68,42 @@ export async function requirePlatformAdmin(): Promise<Viewer> {
   return viewer;
 }
 
+/**
+ * The request's headers as a plain lower-case map. The runtime hands a `Headers` object: indexing it
+ * like a record silently returned nothing, so language and country were never read from the browser.
+ */
+function requestHeaders(): Record<string, string | undefined> {
+  const raw = getRequestHeaders() as unknown;
+  if (raw && typeof (raw as Headers).get === 'function' && typeof (raw as Headers).forEach === 'function') {
+    const map: Record<string, string> = {};
+    (raw as Headers).forEach((value, key) => { map[key.toLowerCase()] = value; });
+    return map;
+  }
+  return Object.fromEntries(Object.entries((raw ?? {}) as Record<string, string | undefined>).map(([key, value]) => [key.toLowerCase(), value]));
+}
+
 export function requestLocale(): Locale {
   const chosen = getCookie(LOCALE_COOKIE);
   if (isLocale(chosen)) return chosen;
-  const headers = getRequestHeaders() as unknown as Record<string, string | undefined>;
+  const headers = requestHeaders();
   return localeFromHeaders(null, headers['accept-language'] ?? null);
+}
+
+/**
+ * The visitor's country for public prices (spec 045): the country they picked (cookie), else the
+ * country a proxy or CDN in front of the app tells us, else the region of their browser's language,
+ * else the default. Only used to choose a currency, never stored.
+ */
+export function requestCountry(): { country: string; detected: boolean } {
+  const chosen = getCookie(COUNTRY_COOKIE)?.toUpperCase();
+  if (isCountry(chosen)) return { country: chosen, detected: true };
+  const headers = requestHeaders();
+  for (const name of ['cf-ipcountry', 'x-vercel-ip-country', 'cloudfront-viewer-country', 'x-country-code']) {
+    const value = headers[name]?.toUpperCase();
+    if (isCountry(value)) return { country: value, detected: true };
+  }
+  const fromLanguage = countryFromLanguages(headers['accept-language']);
+  return fromLanguage ? { country: fromLanguage, detected: true } : { country: DEFAULT_COUNTRY, detected: false };
 }
 
 /**
@@ -96,6 +135,8 @@ export function toClientError(error: unknown): Error {
 export function jsonError(error: unknown): Response {
   if (isMalformedId(error)) return Response.json({ error: 'not_found', params: {} }, { status: 404 });
   if (error instanceof DomainError) return Response.json({ error: error.code, params: error.params }, { status: error.status });
+  // A body that is not the expected JSON is the caller's mistake, not a failure of ours.
+  if (error instanceof SyntaxError) return Response.json({ error: 'invalid_input', params: { field: 'body', detail: '' } }, { status: 422 });
   reportError(error, { where: 'api' });
   return Response.json({ error: 'generic' }, { status: 500 });
 }

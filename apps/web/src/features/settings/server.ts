@@ -4,8 +4,11 @@ import { createServerFn } from '@tanstack/react-start';
 import { translate } from '@/i18n/index.tsx';
 import { monerooGateway, simulatorGateway } from '@/server/adapters.server.ts';
 import { createChariow } from '@/server/chariow.server.ts';
-import { invitationMail } from '@/server/mail.server.ts';
-import { chooseCompany, guarded, loadViewer, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
+import { invitationMail, mailMessage } from '@/server/mail.server.ts';
+import { chooseCompany, guarded, loadViewer, requestCountry, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
+import { COUNTRIES } from './countries.ts';
+import { outboundAllowed } from '@/server/demo.server.ts';
+import { reportError } from '@/server/monitor.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 
 const act = <T>(work: (actor: core.Actor) => Promise<T>, permission?: core.Permission) =>
@@ -20,6 +23,7 @@ export const createCompany = createServerFn({ method: 'POST' })
       const viewer = await loadViewer();
       if (!viewer) throw new core.DomainError('not_signed_in', 401);
       const { orgId } = await core.createCompany(runtime().db, viewer.userId, data);
+      await core.recordPlatformEvent(runtime().owner, { kind: 'signup', orgId });
       chooseCompany(orgId);
       return { orgId };
     }),
@@ -52,21 +56,21 @@ export const acceptInvitation = createServerFn({ method: 'POST' })
 export const getSettingsPage = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { db, env } = runtime();
-    const [settings, configuration, members, invitations, provider, keys, subscription, connections, subscriptionPayments, plans] = await Promise.all([
+    const [settings, configuration, members, invitations, keys, subscription, connections, subscriptionPayments] = await Promise.all([
       core.getSettings(db, actor),
       core.getConfiguration(db, actor),
       core.listMembers(db, actor),
       core.can(actor.role, 'members.manage') ? core.listInvitations(db, actor) : Promise.resolve([]),
-      core.getPaymentProvider(db, actor),
       core.can(actor.role, 'apikeys.manage') ? core.listApiKeys(db, actor) : Promise.resolve([]),
       core.getSubscription(db, actor),
       core.listMcpConnections(db, actor),
       core.listSubscriptionPayments(db, actor),
-      core.listPlans(db),
     ]);
+    // Spec 045: plans priced in the company's own currency.
+    const plans = await core.listPlansIn(db, settings.currencyCode);
     const journal = core.can(actor.role, 'org.manage') ? await core.recentActivity(db, actor, 200) : [];
     return {
-      role: actor.role, userId: actor.userId, settings, configuration, members, invitations, provider, keys, subscription, connections, subscriptionPayments, plans, journal,
+      role: actor.role, userId: actor.userId, settings, configuration, members, invitations, keys, subscription, connections, subscriptionPayments, plans, journal,
       platformPayment: platformGatewayCode(),
       baseUrl: env.APP_BASE_URL, orgId: actor.orgId, simulatorAvailable: env.PAYMENTS_SIMULATOR,
     };
@@ -100,7 +104,7 @@ export const inviteMember = createServerFn({ method: 'POST' })
       const url = `${env.APP_BASE_URL}/invite/${invitation.id}`;
       const locale = settings.locale;
       const inviter = (await loadViewer())?.name ?? settings.name;
-      await mailer
+      if (await outboundAllowed(runtime(), actor.orgId)) await mailer
         .send(invitationMail(locale, { to: invitation.email, org: settings.name, inviter, role: data.role, url }, env.APP_BASE_URL))
         .catch((error: unknown) => console.error('[mail] invitation', error));
       return { url };
@@ -136,21 +140,6 @@ export const removeMember = createServerFn({ method: 'POST' })
   .validator((input: { memberId: string }) => input)
   .handler(({ data }) => act((actor) => core.removeMember(runtime().db, actor, data.memberId)));
 
-export const setPaymentProvider = createServerFn({ method: 'POST' })
-  .validator((input: { provider: string; secretKey?: string; webhookSecret?: string; enabled: boolean }) => input)
-  .handler(({ data }) =>
-    act(async (actor) => {
-      const { db, secrets, env } = runtime();
-      const provider = data.provider === 'simulator' && env.PAYMENTS_SIMULATOR ? 'simulator' : 'moneroo';
-      await core.setPaymentProvider(db, actor, {
-        provider,
-        secretEnc: data.secretKey?.trim() ? secrets.seal(data.secretKey.trim()) : null,
-        webhookSecretEnc: data.webhookSecret?.trim() ? secrets.seal(data.webhookSecret.trim()) : null,
-        enabled: Boolean(data.enabled),
-      });
-    }),
-  );
-
 export const createApiKey = createServerFn({ method: 'POST' })
   .validator((input: { name: string }) => input)
   .handler(({ data }) => act((actor) => core.createApiKey(runtime().db, actor, data.name)));
@@ -162,7 +151,15 @@ export const revokeApiKey = createServerFn({ method: 'POST' })
 // ---------------------------------------------------------------- public: plans, console
 
 export const getPlans = createServerFn({ method: 'GET' }).handler(() =>
-  guarded(async () => ({ plans: await core.listPlans(runtime().db), locale: requestLocale() })),
+  guarded(async () => {
+    // Spec 045: the public prices are those of the visitor's country currency, never converted.
+    const { country, detected } = requestCountry();
+    const currency = COUNTRIES[country]!.currency;
+    // Spec 062: until the founder turns public prices on, every plan is « on quote ».
+    const { db } = runtime();
+    const [plans, pricesOn] = await Promise.all([core.listPlansIn(db, currency), core.publicPrices(db)]);
+    return { plans: pricesOn ? plans : plans.map((plan) => ({ ...plan, priceMinor: 0 })), pricesOn, country, currency, detected, locale: requestLocale() };
+  }),
 );
 
 export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
@@ -172,10 +169,98 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
     const [companies, plans, revenue, products, redemptions, journal] = await Promise.all([
       core.platformOverview(owner), core.listPlans(db), core.platformRevenue(owner), core.listLicenseProducts(owner),
       core.listAllRedemptions(owner), core.platformJournalList(owner)]);
+    const [prices, leads] = await Promise.all([core.listPlanPrices(owner), core.listContactRequests(owner)]);
     const health = await core.productHealth(owner);
-    return { companies, plans, revenue, products, redemptions, journal, health, chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
+    // Spec 055: true money, who to call today, where companies stand, whether the platform runs,
+    // the plans as edited, announcements and what users report.
+    const [money, todo, onboarding, runs, editablePlans, announcements, feedback] = await Promise.all([
+      core.founderMoney(owner), core.founderTodo(owner), core.onboardingSteps(owner), core.platformRuns(owner),
+      core.listEditablePlans(owner), core.listAnnouncements(owner), core.listFeedback(owner)]);
+    const [platformKeys, grants, oauthConnections, licenceSettings, publicPrices] = await Promise.all([core.listPlatformKeys(owner), core.featureGrants(owner), core.listPlatformMcpGrants(owner), core.licenceSettings(owner), core.publicPrices(owner)]);
+    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, oauthConnections, licenceSettings, publicPrices, mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
   }),
 );
+
+/** Spec 062: show the prices on the public site, or « on quote » for every plan. */
+export const savePublicPrices = createServerFn({ method: 'POST' })
+  .validator((input: { on: boolean }) => ({ on: Boolean(input.on) }))
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    return core.setPublicPrices(runtime().owner, viewer.userId, data.on);
+  }));
+
+/** Spec 060: how early companies are warned, and how long the grace period lasts. */
+export const saveLicenceSettings = createServerFn({ method: 'POST' })
+  .validator((input: { warnDays: number; graceDays: number }) => ({ warnDays: Number(input.warnDays), graceDays: Number(input.graceDays) }))
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    return core.setLicenceSettings(runtime().owner, viewer.userId, data);
+  }));
+
+// ---------------------------------------------------------------- checklists (spec 048)
+
+export const getChecklistSettings = createServerFn({ method: 'GET' }).handler(() =>
+  guarded(async () => {
+    const actor = await requireActor();
+    const { db } = runtime();
+    const [templates, configuration] = await Promise.all([core.listChecklistTemplates(db, actor), core.getConfiguration(db, actor)]);
+    return { templates, phaseNames: [...new Set((configuration.phases as { name: string }[]).map((phase) => phase.name))], canWrite: core.can(actor.role, 'projects.write') };
+  }),
+);
+
+export const saveChecklistTemplate = createServerFn({ method: 'POST' })
+  .validator((input: { id: string | null; template: Record<string, unknown> }) => input)
+  .handler(({ data }) => guarded(async () => core.saveChecklistTemplate(runtime().db, await requireActor(), data.id, data.template)));
+
+export const archiveChecklistTemplate = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => guarded(async () => core.archiveChecklistTemplate(runtime().db, await requireActor(), data.id)));
+
+/** Spec 045: a prospect asks to be called back (public, no account). A filled honeypot is dropped. */
+export const sendContactRequest = createServerFn({ method: 'POST' })
+  .validator((input: { name: string; company: string; reach: string; activeSites: number | null; message: string; website?: string }) => input)
+  .handler(({ data }) =>
+    guarded(async () => {
+      if (data.website) return { ok: true };
+      const { country } = requestCountry();
+      const rt = runtime();
+      const created = await core.createContactRequest(rt.owner, { ...data, countryCode: country, locale: requestLocale() });
+      // Spec 062: the founder hears about every new request at once, not only in the console.
+      if (created && rt.env.PLATFORM_ADMIN_EMAILS.length) {
+        const line = (key: string, value: string | number | null | undefined) => (value === null || value === undefined || value === '' ? null : `${translate('fr', key)} : ${value}`);
+        await rt.mailer.send({
+          to: rt.env.PLATFORM_ADMIN_EMAILS,
+          subject: translate('fr', 'leadMail.subject', { name: data.name, company: data.company }),
+          text: [translate('fr', 'leadMail.intro'), '',
+            line('leadMail.name', data.name), line('leadMail.company', data.company), line('leadMail.reach', data.reach),
+            line('leadMail.sites', data.activeSites), line('leadMail.country', country), line('leadMail.message', data.message), '',
+            translate('fr', 'leadMail.open', { url: `${rt.env.APP_BASE_URL}/console` })].filter((item) => item !== null).join('\n'),
+        }).catch((error: unknown) => reportError(error, { where: 'lead-mail' }));
+      }
+      return { ok: true };
+    }),
+  );
+
+export const markContactHandled = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) =>
+    guarded(async () => {
+      const viewer = await requirePlatformAdmin();
+      await core.markContactHandled(runtime().owner, data.id, viewer.userId);
+      return { ok: true };
+    }),
+  );
+
+/** Spec 045: the operator sets a plan's price in one currency (null removes it). */
+export const setPlanPrice = createServerFn({ method: 'POST' })
+  .validator((input: { planCode: string; currencyCode: string; priceMinor: number | null }) => input)
+  .handler(({ data }) =>
+    guarded(async () => {
+      const viewer = await requirePlatformAdmin();
+      await core.setPlanPrice(runtime().owner, data, viewer.userId);
+      return { ok: true };
+    }),
+  );
 
 export const setCompanyPlan = createServerFn({ method: 'POST' })
   .validator((input: { orgId: string; planCode: string }) => input)
@@ -191,7 +276,76 @@ export const setCompanyPlan = createServerFn({ method: 'POST' })
 
 export const getConsoleCompany = createServerFn({ method: 'GET' })
   .validator((input: { orgId: string }) => input)
-  .handler(({ data }) => guarded(async () => { await requirePlatformAdmin(); return core.platformCompany(runtime().owner, data.orgId); }));
+  .handler(({ data }) => guarded(async () => {
+    await requirePlatformAdmin();
+    const { owner } = runtime();
+    const [company, notes, steps, grants] = await Promise.all([core.platformCompany(owner, data.orgId), core.companyNotes(owner, data.orgId), core.onboardingSteps(owner, data.orgId), core.featureGrants(owner, data.orgId)]);
+    return { ...company, notes, steps: steps[data.orgId] ?? null, grants };
+  }));
+
+// ---------------------------------------------------------------- the founder's console (spec 055)
+
+export const addCompanyNote = createServerFn({ method: 'POST' })
+  .validator((input: { orgId: string; body: string; nextOn?: string | null; done?: boolean }) => input)
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    if (data.done) await core.clearNoteReminders(runtime().owner, data.orgId);
+    if (data.body?.trim()) await core.addCompanyNote(runtime().owner, viewer.userId, data);
+  }));
+
+export const previewPlan = createServerFn({ method: 'POST' })
+  .validator((input: Record<string, unknown>) => input)
+  .handler(({ data }) => guarded(async () => { await requirePlatformAdmin(); return core.planImpact(runtime().owner, data); }));
+
+export const savePlan = createServerFn({ method: 'POST' })
+  .validator((input: { plan: Record<string, unknown>; confirmCode?: string; note?: string | null }) => input)
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    return core.savePlan(runtime().owner, viewer.userId, data.plan, { confirmCode: data.confirmCode, note: data.note ?? null });
+  }));
+
+export const getPlanRevisions = createServerFn({ method: 'GET' })
+  .validator((input: { code: string }) => input)
+  .handler(({ data }) => guarded(async () => {
+    await requirePlatformAdmin();
+    return (await core.planRevisions(runtime().owner, data.code)).map(({ snapshot, ...rest }) => ({ ...rest, name: String(snapshot.name ?? '') }));
+  }));
+
+export const restorePlan = createServerFn({ method: 'POST' })
+  .validator((input: { id: number; confirmCode?: string }) => input)
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    await core.restorePlanRevision(runtime().owner, viewer.userId, data.id, data.confirmCode);
+  }));
+
+export const createAnnouncement = createServerFn({ method: 'POST' })
+  .validator((input: { title: string; body?: string | null; level?: 'info' | 'warning'; endsOn?: string | null; email?: boolean }) => input)
+  .handler(({ data }) => guarded(async () => {
+    const viewer = await requirePlatformAdmin();
+    const rt = runtime();
+    const { id } = await core.createAnnouncement(rt.owner, viewer.userId, data);
+    let emailed = 0;
+    if (data.email) {
+      for (const recipient of (await core.announcementRecipients(rt.owner, id)) ?? []) {
+        await rt.mailer.send(mailMessage(recipient.locale, recipient.email, data.title, { preheader: data.title, title: data.title, paragraphs: data.body ? data.body.split('\n').map((line) => line.trim()).filter(Boolean) : [], button: { label: translate(recipient.locale, 'announce.open'), url: `${rt.env.APP_BASE_URL}/app` } }, rt.env.APP_BASE_URL))
+          .then(() => { emailed++; }).catch(() => undefined);
+      }
+    }
+    return { id, emailed };
+  }));
+
+export const endAnnouncement = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.endAnnouncement(runtime().owner, viewer.userId, data.id); }));
+
+export const handleFeedback = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.handleFeedback(runtime().owner, viewer.userId, data.id); }));
+
+/** Any member reports a problem or an idea from the app. */
+export const sendFeedback = createServerFn({ method: 'POST' })
+  .validator((input: { kind: 'problem' | 'idea'; body: string; page?: string | null }) => input)
+  .handler(({ data }) => guarded(async () => { await core.submitFeedback(runtime().db, await requireActor(), data); return { ok: true }; }));
 
 export const consoleCompanyAction = createServerFn({ method: 'POST' })
   .validator((input: { orgId: string; action: 'suspend' | 'reactivate' | 'trial' | 'paid'; reason?: string; days?: number; months?: number }) => input)
@@ -235,8 +389,16 @@ export const redeemLicense = createServerFn({ method: 'POST' })
 export const getLicenseOffer = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { owner, db, env } = runtime();
-    const [products, redemptions] = await Promise.all([core.listLicenseProducts(owner, true), core.myRedemptions(db, actor)]);
-    return { products: products.filter((product) => product.buyUrl), redemptions, storeConfigured: Boolean(env.CHARIOW_API_KEY) };
+    const [products, redemptions, settings] = await Promise.all([core.listLicenseProducts(owner, true), core.myRedemptions(db, actor), core.getSettings(db, actor)]);
+    // Spec 055: each offer with its price in the company's currency (plan price × months) and its plan's words.
+    const plans = await core.listPlansIn(db, settings.currencyCode);
+    return {
+      products: products.filter((product) => product.buyUrl).map((product) => {
+        const plan = plans.find((candidate) => candidate.code === product.planCode);
+        return { ...product, priceMinor: plan && plan.priceMinor > 0 ? plan.priceMinor * product.months : null, plan: plan ?? null };
+      }),
+      currency: settings.currencyCode, redemptions, storeConfigured: Boolean(env.CHARIOW_API_KEY),
+    };
   }),
 );
 
@@ -250,13 +412,29 @@ export const getConsent = createServerFn({ method: 'GET' })
       const viewer = await loadViewer();
       const params = new URLSearchParams(data.query);
       const clientId = params.get('client_id') ?? '';
-      if (!viewer) return { signedIn: false as const, valid: false, clientId, clientName: clientId, companies: [] };
+      // Spec 056 bis: a request for the platform console (its own resource), not for a company.
+      const platform = params.getAll('resource').some((resource) => resource.replace(/\/$/u, '').endsWith('/mcp/platform'));
+      if (!viewer) return { signedIn: false as const, valid: false, clientId, clientName: clientId, companies: [], platform, platformAdmin: false };
       const { db, env } = runtime();
       const valid = data.query.length > 0 && (await verifyOAuthQueryParams(data.query, env.BETTER_AUTH_SECRET).catch(() => false));
       const { rows } = await db.query<{ name: string | null }>('select name from "oauthClient" where "clientId" = $1', [clientId]);
-      return { signedIn: true as const, valid: Boolean(valid), clientId, clientName: rows[0]?.name || clientId, companies: viewer.companies };
+      return { signedIn: true as const, valid: Boolean(valid), clientId, clientName: rows[0]?.name || clientId, companies: viewer.companies, platform, platformAdmin: Boolean(viewer.platformAdmin) };
     }),
   );
+
+/** Spec 056 bis: a platform admin connects an assistant to the console (read-only or not). */
+export const grantMcpPlatform = createServerFn({ method: 'POST' })
+  .validator((input: { clientId: string; readOnly: boolean }) => ({ clientId: String(input.clientId).slice(0, 200), readOnly: Boolean(input.readOnly) }))
+  .handler(({ data }) =>
+    guarded(async () => {
+      const viewer = await requirePlatformAdmin();
+      await core.grantPlatformMcp(runtime().owner, viewer.userId, data.clientId, data.readOnly);
+    }),
+  );
+
+export const revokePlatformMcp = createServerFn({ method: 'POST' })
+  .validator((input: { userId: string; clientId: string }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.revokePlatformMcpGrant(runtime().owner, viewer.userId, data.userId, data.clientId); }));
 
 export const grantMcpCompany = createServerFn({ method: 'POST' })
   .validator((input: { clientId: string; orgId: string }) => ({ clientId: String(input.clientId).slice(0, 200), orgId: String(input.orgId) }))
@@ -349,3 +527,21 @@ export const eraseCompany = createServerFn({ method: 'POST' })
       return { erased: true };
     }),
   );
+
+// ---------------------------------------------------------------- the console through MCP (spec 056)
+
+export const createPlatformKey = createServerFn({ method: 'POST' })
+  .validator((input: { name: string; readOnly: boolean }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); return core.createPlatformKey(runtime().owner, viewer.userId, data); }));
+
+export const revokePlatformKey = createServerFn({ method: 'POST' })
+  .validator((input: { id: string }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.revokePlatformKey(runtime().owner, viewer.userId, data.id); }));
+
+export const grantFeature = createServerFn({ method: 'POST' })
+  .validator((input: { orgId: string; feature: string; until?: string | null; reason?: string | null }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.grantFeature(runtime().owner, viewer.userId, data); }));
+
+export const revokeFeature = createServerFn({ method: 'POST' })
+  .validator((input: { orgId: string; feature: string }) => input)
+  .handler(({ data }) => guarded(async () => { const viewer = await requirePlatformAdmin(); await core.revokeFeatureGrant(runtime().owner, viewer.userId, data.orgId, data.feature); }));

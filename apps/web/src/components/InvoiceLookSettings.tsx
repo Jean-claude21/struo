@@ -10,7 +10,7 @@ import { useI18n } from '@/i18n/index.tsx';
 type Preview = Awaited<ReturnType<typeof getInvoicePreview>>;
 type Look = Preview['settings'];
 
-const SWATCHES = ['#e8590c', '#1c6dd0', '#2f9e44', '#7048c8', '#c2255c', '#0c8599', '#1f1f1f'];
+const SWATCHES = ['#b9461e', '#2f5f8a', '#3d704e', '#6a4ba8', '#a8445f', '#2a7a78', '#1f1f1f'];
 
 export function InvoiceLookSettings({ canWrite }: { canWrite: boolean }) {
   const { t, errorText } = useI18n();
@@ -73,7 +73,7 @@ export function InvoiceLookSettings({ canWrite }: { canWrite: boolean }) {
           <div className="row tight">
             <span className="small">{t('inv.accent')}</span>
             {SWATCHES.map((color) => <button key={color} type="button" className={`swatch ${look.accentColor === color ? 'on' : ''}`} style={{ background: color }} aria-label={color} onClick={() => set({ accentColor: color })} />)}
-            <input type="color" value={look.accentColor ?? '#e8590c'} onChange={(event) => set({ accentColor: event.target.value })} aria-label={t('inv.accent')} />
+            <input type="color" value={look.accentColor ?? '#b9461e'} onChange={(event) => set({ accentColor: event.target.value })} aria-label={t('inv.accent')} />
           </div>
           <div className="row tight">
             <span className="small">{t('inv.font')}</span>
@@ -151,6 +151,8 @@ export function InvoiceLookSettings({ canWrite }: { canWrite: boolean }) {
           {input('mobileMoney', t('inv.mobileMoney'), { rows: 2, max: 300 })}
           {input('paymentTerms', t('inv.paymentTerms'), { rows: 2, hint: t('inv.paymentTermsHint') })}
           {input('footer', t('inv.footer'), { rows: 2 })}
+          {toggle('clientCanDeclare', t('inv.clientCanDeclare'))}
+          <span className="faint xsmall">{t('inv.paymentInSpace')}</span>
         </>)}
       </fieldset>
 

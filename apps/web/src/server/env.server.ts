@@ -23,6 +23,9 @@ export interface Env {
   OPENAI_SIWC_CLIENT_SECRET: string;
   /** The platform's Chariow store (subscriptions sold as licences, spec 038). */
   CHARIOW_API_KEY: string;
+  /** Web Push (spec 051): the application's VAPID key pair. Empty: no phone notifications. */
+  VAPID_PUBLIC_KEY: string;
+  VAPID_PRIVATE_KEY: string;
   JOBS_ENABLED: boolean;
   PLATFORM_MONEROO_SECRET_KEY: string;
   PLATFORM_MONEROO_WEBHOOK_SECRET: string;
@@ -32,6 +35,9 @@ export interface Env {
   UMAMI_WEBSITE_ID: string;
   UMAMI_SCRIPT_URL: string;
   APP_VERSION: string;
+  /** Try without an account (spec 042): on unless DEMO_ENABLED=false; copies kept ready in advance. */
+  DEMO_ENABLED: boolean;
+  DEMO_POOL: number;
 }
 
 const read = (name: string, fallback = '') => (process.env[name] ?? fallback).trim();
@@ -74,6 +80,8 @@ export function env(): Env {
     OPENAI_SIWC_CLIENT_ID: read('OPENAI_SIWC_CLIENT_ID'),
     OPENAI_SIWC_CLIENT_SECRET: read('OPENAI_SIWC_CLIENT_SECRET'),
     CHARIOW_API_KEY: read('CHARIOW_API_KEY'),
+    VAPID_PUBLIC_KEY: read('VAPID_PUBLIC_KEY'),
+    VAPID_PRIVATE_KEY: read('VAPID_PRIVATE_KEY'),
     JOBS_ENABLED: read('JOBS_ENABLED', 'true') !== 'false',
     PLATFORM_MONEROO_SECRET_KEY: read('PLATFORM_MONEROO_SECRET_KEY'),
     PLATFORM_MONEROO_WEBHOOK_SECRET: read('PLATFORM_MONEROO_WEBHOOK_SECRET'),
@@ -83,6 +91,8 @@ export function env(): Env {
     UMAMI_WEBSITE_ID: read('UMAMI_WEBSITE_ID'),
     UMAMI_SCRIPT_URL: read('UMAMI_SCRIPT_URL'),
     APP_VERSION: read('APP_VERSION'),
+    DEMO_ENABLED: appEnv !== 'test' && read('DEMO_ENABLED', 'true') !== 'false',
+    DEMO_POOL: Math.max(0, Math.min(10, Number(read('DEMO_POOL', '2')) || 0)),
   };
   if (!cached.DATABASE_URL) throw new Error('DATABASE_URL is empty.');
   if (!cached.BETTER_AUTH_SECRET) throw new Error('BETTER_AUTH_SECRET is empty.');

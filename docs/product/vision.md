@@ -32,10 +32,10 @@ Une seule application web (TanStack Start), plusieurs portes :
 
 | Porte | Pour qui | Ce qu'elle fait |
 |---|---|---|
-| **Site** (`/`) | Prospects | Présentation, tarifs en FCFA, inscription, essai |
+| **Site** (`/`) | Prospects | Présentation, tarifs dans la devise du pays du visiteur, inscription, essai, demande de rappel |
 | **Bureau** (`/app`) | Gérant·e, ingénieur·e, comptable, admin | Projets, terrain, finances, dépenses, documents, planning, clients, alertes, paramètres |
 | **Terrain** (`/field`) | Chefs de chantier | PWA installable, hors-ligne : rapport photo géolocalisé, avancement par phase, imprévus, synchronisation |
-| **Portail client** (`/portal`) | Clients finaux | Avancement, photos, documents, situations à régler, paiement, messages, validation des jalons |
+| **Portail client** (`/portal`) | Clients finaux | Avancement, photos, documents, rapports, factures à régler (l'entreprise encaisse elle-même), messages, validation des jalons et des avenants |
 | **Console** (`/console`) | L'éditeur de Struo | Entreprises clientes, formules, usage |
 | **API et MCP** (`/api`, `/mcp`) | Intégrations, Claude, ChatGPT | Les mêmes services que l'interface, par groupes d'outils |
 

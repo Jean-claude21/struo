@@ -6,6 +6,7 @@ import { ErrorText, Field } from '@/components/ui.tsx';
 import { authErrorKey } from '@/features/auth/call.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 import { authenticate, nextSearch } from './login.tsx';
+import { trackSuccess } from '@/lib/audience.ts';
 
 export const Route = createFileRoute('/signup')({ validateSearch: nextSearch, component: Signup });
 
@@ -39,7 +40,7 @@ function Signup() {
             });
             setBusy(false);
             if (!result.ok) setError(result.code ? t(authErrorKey(result.code) as MessageKey) : t('errors.sign_up_failed'));
-            else window.location.href = result.url ?? next ?? '/onboarding';
+            else { trackSuccess('signup-done'); window.location.href = result.url ?? next ?? '/onboarding'; }
           }}
         >
           <Field label={t('auth.yourName')}>

@@ -25,6 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY --from=build /app/apps/web/.output ./.output
 COPY --from=build /app/packages/core/db/migrations ./migrations
 COPY --from=build /app/start.mjs ./start.mjs
+# The demo company's generated photos (try without an account, spec 042).
+COPY --from=build /app/apps/web/scripts/demo ./demo-assets
 RUN mkdir -p /data/storage && chown -R node:node /app /data
 USER node
 EXPOSE 3000

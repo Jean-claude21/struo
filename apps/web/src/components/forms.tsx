@@ -4,6 +4,7 @@ import {
 } from '@/features/office/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 import { Badge, DateText, DialogButton, ErrorText, Field, FormButtons, formData, orNull, parseMoney, todayIso, useAction } from './ui.tsx';
+import { usePhotoViewer } from './PhotoViewer.tsx';
 
 type ProjectOption = { id: string; code: string; name: string };
 
@@ -231,9 +232,9 @@ export function DocumentDialog({
             const done = await run(() =>
               addDocument({
                 data: {
-                  projectId: v.projectId, docTypeId: orNull(v.docTypeId), title: v.title, status: v.status,
+                  projectId: v.projectId, docTypeId: orNull(v.docTypeId), title: v.title, status: v.status || undefined,
                   reference: orNull(v.reference), issuedOn: orNull(v.issuedOn), expiresOn: orNull(v.expiresOn),
-                  sharedWithClient: v.sharedWithClient === 'on',
+                  sharedWithClient: v.sharedWithClient === 'on', family: v.family || undefined,
                 },
               }),
             );
@@ -255,8 +256,15 @@ export function DocumentDialog({
                 ))}
               </select>
             </Field>
+            <Field label={t('families.family')}>
+              <select name="family" defaultValue="">
+                <option value="">{t('families.auto')}</option>
+                {(['admin', 'technical', 'contract', 'other'] as const).map((family) => <option key={family} value={family}>{t(`families.${family}`)}</option>)}
+              </select>
+            </Field>
             <Field label={t('app.status')}>
-              <select name="status" defaultValue="pending">
+              <select name="status" defaultValue="">
+                <option value="">{t('families.auto')}</option>
                 {DOC_STATUSES.map((status) => (
                   <option key={status} value={status}>
                     {t(`documents.statuses.${status}`)}
@@ -457,6 +465,7 @@ export interface ReportView {
 }
 
 export function ReportCard({ report, canReview }: { report: ReportView; canReview: boolean }) {
+  const view = usePhotoViewer();
   const { t } = useI18n();
   const { run, busy, error } = useAction();
   return (
@@ -492,8 +501,9 @@ export function ReportCard({ report, canReview }: { report: ReportView; canRevie
       ) : null}
       {report.photos.length ? (
         <div className="thumbs">
-          {report.photos.map((photo) => (
-            <a key={photo.id} href={`/api/files/photo/${photo.id}`} target="_blank" rel="noreferrer">
+          {report.photos.map((photo, index) => (
+            <a key={photo.id} href={`/api/files/photo/${photo.id}`}
+              onClick={(event) => { event.preventDefault(); view(report.photos.map((item) => ({ url: `/api/files/photo/${item.id}`, title: [report.projectName, report.phaseName].filter(Boolean).join(' · '), detail: report.authorName, latitude: report.latitude, longitude: report.longitude })), index); }}>
               <img src={`/api/files/photo/${photo.id}`} alt="" loading="lazy" />
             </a>
           ))}

@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { setCookie } from '@tanstack/react-start/server';
 import { isLocale, LOCALE_COOKIE } from '@/i18n/index.tsx';
-import { searchCompany } from '@struo/core';
+import { companyAccess, currentAnnouncement, searchCompany } from '@struo/core';
 import { chooseCompany, guarded, loadViewer, requestLocale, requireActor } from '@/server/context.server.ts';
 import { deployEnvironment, reportError } from '@/server/monitor.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
@@ -21,7 +21,11 @@ export const getShell = createServerFn({ method: 'GET' }).handler(async () => {
     dsn: env.SENTRY_DSN, environment: deployEnvironment(env), release: env.APP_VERSION,
     umami: env.UMAMI_WEBSITE_ID && env.UMAMI_SCRIPT_URL ? { id: env.UMAMI_WEBSITE_ID, src: env.UMAMI_SCRIPT_URL, domain: new URL(env.APP_BASE_URL).hostname } : null,
   };
-  return { locale, viewer, monitoring };
+  // Spec 055: the platform's announcement of the moment, for signed-in members.
+  const announcement = viewer ? await currentAnnouncement(runtime().db).catch(() => null) : null;
+  // Spec 060: where the company stands with its trial or licence (bar shown before and after the end).
+  const access = viewer?.company ? await companyAccess(runtime().owner, viewer.company.id).catch(() => null) : null;
+  return { locale, viewer, monitoring, announcement, access };
 });
 
 export const setLocale = createServerFn({ method: 'POST' })
