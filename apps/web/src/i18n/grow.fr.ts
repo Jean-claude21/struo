@@ -151,7 +151,7 @@ export const growFr = {
       title: "Activation automatique (Pulse Chariow)",
       sub: "À chaque licence vendue, Chariow prévient Struo : la licence s’applique seule à l’entreprise de l’acheteur, retrouvée par son e-mail.",
       url: "Adresse à coller dans le Pulse",
-      step1: "Chariow › Automatisations › Pulses › Nouveau Pulse : collez l’adresse ci-dessus, événement « Licence émise » (license.issued).",
+      step1: "Chariow › Automatisations › Pulses › Nouveau Pulse : collez l’adresse ci-dessus, événement « Licence émise » (license.issued), « Appliquer à tous les produits ». Les produits qui ne sont liés à aucune offre Struo sont ignorés.",
       step2: "Copiez le secret de signature du Pulse (whsec_…) et transmettez-le pour qu’il soit posé sur le serveur (variable CHARIOW_PULSE_SECRET).",
       step3: "Testez avec le bouton de test du Pulse : la ligne apparaît ci-dessous.",
       on: "Secret posé : les licences s’appliquent toutes seules.",

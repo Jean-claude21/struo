@@ -1,8 +1,8 @@
-// Spec 069: the store's Pulses (Chariow signed webhooks). On `license.issued` the licence is applied
+// Spec 069/070: the store's Pulses (Chariow signed webhooks). On `license.issued` the licence is applied
 // to the buyer's company by itself — the buyer pastes nothing. The buyer is matched by e-mail (owner
 // or admin of a real company; the « Buy » link pre-fills that e-mail). Every delivery is kept for the
 // founder's console; a retry of the same delivery changes nothing.
-import { companyForBuyer, recordStorePulse, resolveActor, settleStorePulse, type DomainError } from '@struo/core';
+import { companyForBuyer, listLicenseProducts, recordStorePulse, resolveActor, settleStorePulse, type DomainError } from '@struo/core';
 import { createFileRoute } from '@tanstack/react-router';
 import { translate } from '@/i18n/index.tsx';
 import { applyLicenceKey, pulseSignatureValid } from '@/server/licence.server.ts';
@@ -39,6 +39,13 @@ async function handle(request: Request): Promise<Response> {
   // Only a licence being issued moves anything; the other events are kept for the console.
   if (event !== 'license.issued' || !pulse.license?.key) {
     await settleStorePulse(rt.owner, deliveryId, 'ignored');
+    return Response.json({ ok: true });
+  }
+  // One Pulse can cover the whole store (several platforms): a product not linked to a Struo offer
+  // (Console › Licences) belongs to another platform and is left alone, without alerting anyone.
+  const productId = pulse.product?.id ?? '';
+  if (!(await listLicenseProducts(rt.owner)).some((product) => product.productId === productId)) {
+    await settleStorePulse(rt.owner, deliveryId, 'ignored', { text: 'Product not linked to a Struo offer (another platform, or a test).' });
     return Response.json({ ok: true });
   }
   const company = email ? await companyForBuyer(rt.owner, email) : null;
