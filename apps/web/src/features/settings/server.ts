@@ -3,7 +3,7 @@ import { verifyOAuthQueryParams } from '@better-auth/oauth-provider';
 import { createServerFn } from '@tanstack/react-start';
 import { translate } from '@/i18n/index.tsx';
 import { monerooGateway, simulatorGateway } from '@/server/adapters.server.ts';
-import { createChariow } from '@/server/chariow.server.ts';
+import { applyLicenceKey } from '@/server/licence.server.ts';
 import { invitationMail, mailMessage } from '@/server/mail.server.ts';
 import { chooseCompany, guarded, loadViewer, requestCountry, requestLocale, requireActor, requirePlatformAdmin } from '@/server/context.server.ts';
 import { COUNTRIES } from './countries.ts';
@@ -176,8 +176,8 @@ export const getConsole = createServerFn({ method: 'GET' }).handler(() =>
     const [money, todo, onboarding, runs, editablePlans, announcements, feedback] = await Promise.all([
       core.founderMoney(owner), core.founderTodo(owner), core.onboardingSteps(owner), core.platformRuns(owner),
       core.listEditablePlans(owner), core.listAnnouncements(owner), core.listFeedback(owner)]);
-    const [platformKeys, grants, oauthConnections, licenceSettings, publicPrices] = await Promise.all([core.listPlatformKeys(owner), core.featureGrants(owner), core.listPlatformMcpGrants(owner), core.licenceSettings(owner), core.publicPrices(owner)]);
-    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, oauthConnections, licenceSettings, publicPrices, mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
+    const [platformKeys, grants, oauthConnections, licenceSettings, publicPrices, pulses] = await Promise.all([core.listPlatformKeys(owner), core.featureGrants(owner), core.listPlatformMcpGrants(owner), core.licenceSettings(owner), core.publicPrices(owner), core.listStorePulses(owner)]);
+    return { companies, plans, prices, leads, revenue, products, redemptions, journal, health, money, todo, onboarding, runs, editablePlans, announcements, feedback, platformKeys, grants, oauthConnections, licenceSettings, publicPrices, pulses, pulseUrl: `${env.APP_BASE_URL}/api/payments/chariow`, pulseConfigured: Boolean(env.CHARIOW_PULSE_SECRET), mcpUrl: `${env.APP_BASE_URL}/mcp/platform`, sentryOn: Boolean(env.SENTRY_DSN), chariowConfigured: Boolean(env.CHARIOW_API_KEY), monitoring: { errors: Boolean(env.SENTRY_DSN), audience: Boolean(env.UMAMI_WEBSITE_ID) } };
   }),
 );
 
@@ -373,16 +373,7 @@ export const redeemLicense = createServerFn({ method: 'POST' })
   .validator((input: { key: string }) => ({ key: String(input.key ?? '').trim() }))
   .handler(({ data }) =>
     act(async (actor) => {
-      const { owner, env } = runtime();
-      if (data.key.length < 6 || data.key.length > 200) throw new core.DomainError('license_invalid', 422);
-      const store = createChariow(env.CHARIOW_API_KEY);
-      const license = await store.license(data.key);
-      if (license.status === 'revoked') throw new core.DomainError('license_revoked', 422);
-      if (license.isExpired || license.status === 'expired') throw new core.DomainError('license_expired', 422);
-      await core.licenseProductFor(owner, license.productId);
-      if (await core.licenseAlreadyUsed(owner, data.key)) throw new core.DomainError('license_already_used', 409);
-      const activated = license.status === 'pending_activation' || license.canActivate ? await store.activate(data.key, `struo:${actor.orgId}`) : license;
-      return core.redeemLicense(owner, actor, { key: data.key, maskedKey: activated.maskedKey || license.maskedKey, productId: license.productId, customerEmail: license.customerEmail });
+      return applyLicenceKey(runtime(), actor, data.key);
     }, 'org.manage'),
   );
 
@@ -390,14 +381,23 @@ export const getLicenseOffer = createServerFn({ method: 'GET' }).handler(() =>
   act(async (actor) => {
     const { owner, db, env } = runtime();
     const [products, redemptions, settings] = await Promise.all([core.listLicenseProducts(owner, true), core.myRedemptions(db, actor), core.getSettings(db, actor)]);
+    // Spec 069: the store's page opens with the person's e-mail filled in, so the licence the store
+    // issues comes back to this company by itself (Pulse).
+    const me = (await owner.query<{ email: string; name: string }>('select email, name from "user" where id = $1', [actor.userId])).rows[0];
+    const prefill = (url: string) => {
+      if (!me) return url;
+      const [first, ...rest] = me.name.trim().split(/\s+/u);
+      const params = new URLSearchParams({ email: me.email, ...(first ? { first_name: first } : {}), ...(rest.length ? { last_name: rest.join(' ') } : {}) });
+      return `${url}${url.includes('?') ? '&' : '?'}${params.toString()}`;
+    };
     // Spec 055: each offer with its price in the company's currency (plan price × months) and its plan's words.
     const plans = await core.listPlansIn(db, settings.currencyCode);
     return {
       products: products.filter((product) => product.buyUrl).map((product) => {
         const plan = plans.find((candidate) => candidate.code === product.planCode);
-        return { ...product, priceMinor: plan && plan.priceMinor > 0 ? plan.priceMinor * product.months : null, plan: plan ?? null };
+        return { ...product, buyUrl: prefill(product.buyUrl!), priceMinor: plan && plan.priceMinor > 0 ? plan.priceMinor * product.months : null, plan: plan ?? null };
       }),
-      currency: settings.currencyCode, redemptions, storeConfigured: Boolean(env.CHARIOW_API_KEY),
+      currency: settings.currencyCode, redemptions, storeConfigured: Boolean(env.CHARIOW_API_KEY), automatic: Boolean(env.CHARIOW_PULSE_SECRET),
     };
   }),
 );

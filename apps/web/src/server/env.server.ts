@@ -23,6 +23,8 @@ export interface Env {
   OPENAI_SIWC_CLIENT_SECRET: string;
   /** The platform's Chariow store (subscriptions sold as licences, spec 038). */
   CHARIOW_API_KEY: string;
+  /** Spec 069: signing secret(s) of the store's Pulse (`whsec_…`, comma-separated to rotate). */
+  CHARIOW_PULSE_SECRET: string;
   /** Web Push (spec 051): the application's VAPID key pair. Empty: no phone notifications. */
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
@@ -80,6 +82,7 @@ export function env(): Env {
     OPENAI_SIWC_CLIENT_ID: read('OPENAI_SIWC_CLIENT_ID'),
     OPENAI_SIWC_CLIENT_SECRET: read('OPENAI_SIWC_CLIENT_SECRET'),
     CHARIOW_API_KEY: read('CHARIOW_API_KEY'),
+    CHARIOW_PULSE_SECRET: read('CHARIOW_PULSE_SECRET'),
     VAPID_PUBLIC_KEY: read('VAPID_PUBLIC_KEY'),
     VAPID_PRIVATE_KEY: read('VAPID_PRIVATE_KEY'),
     JOBS_ENABLED: read('JOBS_ENABLED', 'true') !== 'false',

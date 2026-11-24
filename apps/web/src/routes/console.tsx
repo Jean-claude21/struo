@@ -13,7 +13,7 @@ import { BarChart } from '@/components/charts.tsx';
 import { Drawer, KpiTile, Panel, useToast } from '@/components/kit.tsx';
 import { consoleCompanyAction, getConsole, getConsoleCompany, markContactHandled, removeLicenseProduct, saveLicenseProduct, setCompanyPlan, setPlanPrice, saveLicenceSettings, savePublicPrices } from '@/features/settings/server.ts';
 import { getShell } from '@/features/shell/server.ts';
-import { useI18n } from '@/i18n/index.tsx';
+import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 
 export const Route = createFileRoute('/console')({
   loader: async () => {
@@ -330,6 +330,24 @@ function Licenses({ data }: { data: Data }) {
   return (
     <div className="stack">
       {!data.chariowConfigured ? <p className="notice warn">{t('console2.chariowOff')}</p> : <p className="notice ok small">{t('console2.chariowOn')}</p>}
+      <Panel title={t('pulse.console.title')} sub={t('pulse.console.sub')}>
+        <div className="stack">
+          <div><b className="small">{t('pulse.console.url')}</b><div className="secret" style={{ userSelect: 'all' }}>{data.pulseUrl}</div></div>
+          <ol className="small" style={{ margin: 0, paddingLeft: '1.2rem', display: 'grid', gap: '.25rem' }}>
+            <li>{t('pulse.console.step1')}</li><li>{t('pulse.console.step2')}</li><li>{t('pulse.console.step3')}</li>
+          </ol>
+          <p className={`notice ${data.pulseConfigured ? 'ok' : 'warn'} small`} style={{ margin: 0 }}>{data.pulseConfigured ? t('pulse.console.on') : t('pulse.console.off')}</p>
+          {data.pulses.length ? (
+            <div className="table-wrap"><table><tbody>{data.pulses.map((item) => (
+              <tr key={item.deliveryId}>
+                <td className="small muted">{item.at}</td><td><code>{item.event}</code></td>
+                <td><Badge tone={item.outcome === 'applied' ? 'ok' : item.outcome === 'failed' || item.outcome === 'unmatched' ? 'bad' : 'neutral'}>{t(`pulse.outcome.${item.outcome}` as MessageKey)}</Badge></td>
+                <td className="small">{item.companyName ?? item.buyerEmail ?? ''}{item.detail ? <div className="muted">{item.detail}</div> : null}</td>
+              </tr>
+            ))}</tbody></table></div>
+          ) : <p className="muted small" style={{ margin: 0 }}>{t('pulse.console.none')}</p>}
+        </div>
+      </Panel>
       <LicenceLifecycle value={data.licenceSettings} />
       <Panel title={t('console2.products')} sub={t('console2.productsSub')}>
         <div className="stack">
