@@ -1,4 +1,5 @@
-import { ArrowRight, HardHat } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import { BrandMark } from './BrandMark.tsx';
 import { Link, useRouter } from '@tanstack/react-router';
 import { setLocale } from '@/features/shell/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
@@ -6,8 +7,8 @@ import { useI18n } from '@/i18n/index.tsx';
 export function Logo() {
   return (
     <span className="logo" style={{ padding: 0 }}>
-      <span className="logo-mark"><HardHat size={16} /></span>
-      <span>Struo</span>
+      <BrandMark size={26} />
+      <span>struo</span>
     </span>
   );
 }
