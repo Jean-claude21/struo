@@ -244,6 +244,8 @@ const variables = {
   // Phone notifications (spec 051): one VAPID key pair per environment, generated once.
   ...vapid(),
   ...((own.CHARIOW_API_KEY || admin.CHARIOW_API_KEY) ? { CHARIOW_API_KEY: own.CHARIOW_API_KEY || admin.CHARIOW_API_KEY } : {}),
+  // Spec 069: the Pulse signing secret (Chariow › Automations › Pulses), so licences apply by themselves.
+  ...((own.CHARIOW_PULSE_SECRET || admin.CHARIOW_PULSE_SECRET) ? { CHARIOW_PULSE_SECRET: own.CHARIOW_PULSE_SECRET || admin.CHARIOW_PULSE_SECRET } : {}),
   // Monitoring (spec 041): errors from both environments; audience analytics in production only,
   // so tests on staging never count as visits.
   ...(own.SENTRY_DSN ? { SENTRY_DSN: own.SENTRY_DSN } : {}),

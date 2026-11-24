@@ -584,7 +584,7 @@ function LicenseSection() {
   return (
     <section className="card stack" id="licence">
       <h2>{t('lic.title')}</h2>
-      <p className="muted small" style={{ margin: 0 }}>{t('lic.how')}</p>
+      <p className="muted small" style={{ margin: 0 }}>{offer?.automatic ? t('pulse.howAuto') : t('lic.how')}</p>
       {offer?.products.length ? (
         <div className="offer-grid">{offer.products.map((product) => {
           const points = lines(locale === 'en' ? product.descriptionEn || product.description : product.description);
