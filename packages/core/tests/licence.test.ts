@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  accessStage, companyAccess, companyForBuyer, createContactRequest, listStorePulses, recordStorePulse, settleStorePulse, publicPrices, setPublicPrices, createProject, licenceNotice, licenceNoticeTargets, licenceSettings, listProjects, markNoticeOnce, resolveActor,
+  accessStage, companyAccess, companyForBuyer, createCompany, demoPerDay, resetDemoLimits, setDemoPerDay, setTrialSettings, trialSettings, createContactRequest, listStorePulses, recordStorePulse, settleStorePulse, publicPrices, setPublicPrices, createProject, licenceNotice, licenceNoticeTargets, licenceSettings, listProjects, markNoticeOnce, resolveActor,
   setLicenceSettings, type Actor,
 } from '../src/index.ts';
 import { createTestCompany, createUser, setupDatabase, type TestDb } from './helpers.ts';
@@ -111,5 +111,28 @@ describe('store Pulses (spec 069)', () => {
     const { rows } = await db.owner.query<{ email: string }>('select email from "user" where id = $1', [company.userId]);
     expect(await companyForBuyer(db.owner, rows[0]!.email.toUpperCase())).toMatchObject({ orgId: company.orgId, userId: company.userId });
     expect(await companyForBuyer(db.owner, 'nobody@example.com')).toBeNull();
+  });
+});
+
+describe('the free trial belongs to the founder (spec 072)', () => {
+  it('new companies get the trial length set in the console', async () => {
+    await setTrialSettings(db.owner, admin, { days: 30, public: false });
+    expect(await trialSettings(db.app)).toEqual({ days: 30, public: false });
+    const { orgId } = await createCompany(db.app, company.userId, { name: 'Essai Trente SARL', countryCode: 'TG', currencyCode: 'XOF', vatBps: 1800, retentionBps: 500, locale: 'fr' });
+    const { rows } = await db.owner.query<{ days: number }>(`select round(extract(epoch from (trial_ends_at - now())) / 86400)::int as days from org_settings where org_id = $1`, [orgId]);
+    expect(rows[0]!.days).toBe(30);
+    await setTrialSettings(db.owner, admin, { days: 14, public: true });
+    await expect(setTrialSettings(db.owner, admin, { days: 0, public: true })).rejects.toMatchObject({ code: 'invalid_input' });
+  });
+});
+
+describe('the demo limit belongs to the founder (spec 072)', () => {
+  it('sets the limit per address, opens it fully, and lifts the counts of the day', async () => {
+    expect(await demoPerDay(db.owner)).toBe(10);
+    expect(await setDemoPerDay(db.owner, admin, 0)).toBe(0);
+    expect(await demoPerDay(db.owner)).toBe(0);
+    await expect(resetDemoLimits(db.owner, admin)).resolves.toEqual(expect.any(Number));
+    await setDemoPerDay(db.owner, admin, 10);
+    await expect(setDemoPerDay(db.owner, admin, -1)).rejects.toMatchObject({ code: 'invalid_input' });
   });
 });

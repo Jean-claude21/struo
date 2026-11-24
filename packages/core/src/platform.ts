@@ -298,3 +298,42 @@ export async function companyForBuyer(owner: Db, email: string): Promise<{ orgId
       order by o."createdAt" desc limit 1`, [email]);
   return rows[0] ?? null;
 }
+
+// ---------------------------------------------------------------- free trial (spec 072)
+
+export interface TrialSettings { days: number; public: boolean }
+
+export async function trialSettings(q: Pick<Db, 'query'>): Promise<TrialSettings> {
+  const { rows } = await q.query<TrialSettings>('select trial_days as days, trial_public as public from platform_settings');
+  return rows[0] ?? { days: 14, public: true };
+}
+
+/** The founder sets how long a new company's trial lasts and whether the public site offers it. */
+export async function setTrialSettings(owner: Db, adminId: string, input: TrialSettings): Promise<TrialSettings> {
+  const value = parse(z.object({ days: z.number().int().min(1).max(90), public: z.boolean() }), input);
+  await owner.query('update platform_settings set trial_days = $1, trial_public = $2, updated_at = now(), updated_by = $3', [value.days, value.public, adminId]);
+  await platformJournal(owner, adminId, 'trial.settings', 'platform', value);
+  return value;
+}
+
+// ---------------------------------------------------------------- demo limit (spec 072)
+
+/** Demos one address may open per day; 0 means no limit. */
+export async function demoPerDay(q: Pick<Db, 'query'>): Promise<number> {
+  const { rows } = await q.query<{ n: number }>('select demo_per_day as n from platform_settings');
+  return rows[0]?.n ?? 10;
+}
+
+export async function setDemoPerDay(owner: Db, adminId: string, perDay: number): Promise<number> {
+  const value = parse(z.number().int().min(0).max(1000), perDay);
+  await owner.query('update platform_settings set demo_per_day = $1, updated_at = now(), updated_by = $2', [value, adminId]);
+  await platformJournal(owner, adminId, 'demo.limit', 'platform', { perDay: value });
+  return value;
+}
+
+/** Lifts today's count for every address (the copies already open stay open). */
+export async function resetDemoLimits(owner: Db, adminId: string): Promise<number> {
+  const { rowCount } = await owner.query(`update demo_sandbox set visitor_hash = null where visitor_hash is not null and assigned_at > now() - interval '1 day'`);
+  await platformJournal(owner, adminId, 'demo.reset', 'platform', { addresses: rowCount ?? 0 });
+  return rowCount ?? 0;
+}

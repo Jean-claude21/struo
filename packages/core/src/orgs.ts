@@ -53,8 +53,8 @@ export async function createCompany(db: Db, userId: string, input: unknown): Pro
       randomUUID(), orgId, userId, 'owner',
     ]);
     await tx.query(
-      `insert into org_settings (org_id, country_code, currency_code, vat_bps, retention_bps, locale)
-       values ($1, $2, $3, $4, $5, $6)`,
+      `insert into org_settings (org_id, country_code, currency_code, vat_bps, retention_bps, locale, trial_ends_at)
+       values ($1, $2, $3, $4, $5, $6, now() + make_interval(days => coalesce((select trial_days from platform_settings), 14)))`,
       [orgId, data.countryCode, data.currencyCode, data.vatBps, data.retentionBps, data.locale],
     );
     await tx.query('select struo_seed_org_defaults($1, $2)', [orgId, data.locale]);
