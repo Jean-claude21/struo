@@ -205,13 +205,13 @@ export { platformJournal as recordPlatformGesture };
 // ---------------------------------------------------------------- contact requests (spec 045)
 
 export interface ContactRequest {
-  id: string; createdAt: string; name: string; company: string; reach: string; activeSites: number | null;
+  id: string; createdAt: string; name: string; company: string | null; reach: string; activeSites: number | null;
   message: string | null; countryCode: string | null; locale: string; handledAt: string | null;
 }
 
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  company: z.string().trim().min(1).max(160),
+  company: z.string().trim().max(160).nullable().optional().transform((value) => value || null),
   reach: z.string().trim().min(3).max(160),
   activeSites: z.number().int().min(0).max(10000).nullable().optional(),
   message: z.string().trim().max(2000).nullable().optional(),

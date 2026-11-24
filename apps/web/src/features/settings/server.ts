@@ -218,7 +218,7 @@ export const archiveChecklistTemplate = createServerFn({ method: 'POST' })
 
 /** Spec 045: a prospect asks to be called back (public, no account). A filled honeypot is dropped. */
 export const sendContactRequest = createServerFn({ method: 'POST' })
-  .validator((input: { name: string; company: string; reach: string; activeSites: number | null; message: string; website?: string }) => input)
+  .validator((input: { name: string; company?: string | null; reach: string; activeSites: number | null; message: string; website?: string }) => input)
   .handler(({ data }) =>
     guarded(async () => {
       if (data.website) return { ok: true };
@@ -230,7 +230,7 @@ export const sendContactRequest = createServerFn({ method: 'POST' })
         const line = (key: string, value: string | number | null | undefined) => (value === null || value === undefined || value === '' ? null : `${translate('fr', key)} : ${value}`);
         await rt.mailer.send({
           to: rt.env.PLATFORM_ADMIN_EMAILS,
-          subject: translate('fr', 'leadMail.subject', { name: data.name, company: data.company }),
+          subject: translate('fr', 'leadMail.subject', { name: data.name, company: data.company || '—' }),
           text: [translate('fr', 'leadMail.intro'), '',
             line('leadMail.name', data.name), line('leadMail.company', data.company), line('leadMail.reach', data.reach),
             line('leadMail.sites', data.activeSites), line('leadMail.country', country), line('leadMail.message', data.message), '',

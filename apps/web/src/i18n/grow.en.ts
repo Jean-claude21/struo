@@ -127,6 +127,7 @@ export const growEn = {
       sites: "Sites in progress",
       send: "Get a call back",
       sending: "Sending…",
+      required: "Required fields",
       sent: "Thank you, noted. We will call you back very soon.",
       error: "Sending failed. Try again in a moment.",
     },
