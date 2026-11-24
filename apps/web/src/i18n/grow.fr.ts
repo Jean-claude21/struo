@@ -128,6 +128,7 @@ export const growFr = {
       sites: "Chantiers en cours",
       send: "Être rappelé",
       sending: "Envoi…",
+      required: "Champs obligatoires",
       sent: "Merci, c’est noté. On vous rappelle très vite.",
       error: "L’envoi n’a pas abouti. Réessayez dans un instant.",
     },
