@@ -11,7 +11,7 @@ import { Badge, DateText, formatMoney, parseMoney, Tabs } from '@/components/ui.
 import { COUNTRIES, sortedCountries } from '@/features/settings/countries.ts';
 import { BarChart } from '@/components/charts.tsx';
 import { Drawer, KpiTile, Panel, useToast } from '@/components/kit.tsx';
-import { consoleCompanyAction, getConsole, getConsoleCompany, markContactHandled, removeLicenseProduct, saveLicenseProduct, setCompanyPlan, setPlanPrice, saveLicenceSettings, savePublicPrices } from '@/features/settings/server.ts';
+import { consoleCompanyAction, getConsole, getConsoleCompany, markContactHandled, removeLicenseProduct, saveLicenseProduct, setCompanyPlan, setPlanPrice, saveLicenceSettings, savePublicPrices, saveTrialSettings, saveDemoLimit, resetDemoLimits } from '@/features/settings/server.ts';
 import { getShell } from '@/features/shell/server.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 
@@ -240,6 +240,53 @@ function Leads({ data }: { data: Data }) {
  * Spec 045: one price per plan and currency. The public page shows the visitor's country currency;
  * a plan without a price there is shown on quote, never converted from another currency.
  */
+/** Spec 072: the demo limit per address and per day (0: no limit), and lifting today's counts. */
+function DemoLimitPanel({ value }: { value: number }) {
+  const { t, errorText } = useI18n();
+  const toast = useToast();
+  const router = useRouter();
+  const [perDay, setPerDay] = useState(value);
+  const run = async (work: () => Promise<unknown>) => {
+    try { await work(); toast({ text: t('console2.done') }); await router.invalidate(); }
+    catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
+  };
+  return (
+    <Panel title={t('demoLimit.title')} sub={perDay === 0 ? t('demoLimit.unlimited') : t('demoLimit.limited', { n: perDay })}>
+      <form className="form-grid" onSubmit={(event) => { event.preventDefault(); void run(() => saveDemoLimit({ data: { perDay } })); }}>
+        <label className="field">{t('demoLimit.perDay')}<input type="number" min={0} max={1000} value={perDay} onChange={(event) => setPerDay(Number(event.target.value))} /></label>
+        <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>{t('demoLimit.note')}</p>
+        <div className="row" style={{ gap: '.6rem', flexWrap: 'wrap' }}>
+          <button type="submit" className="btn small">{t('app.save')}</button>
+          <button type="button" className="btn secondary small" onClick={() => { setPerDay(0); void run(() => saveDemoLimit({ data: { perDay: 0 } })); }}>{t('demoLimit.open')}</button>
+          <button type="button" className="btn ghost small" onClick={() => void run(() => resetDemoLimits())}>{t('demoLimit.reset')}</button>
+        </div>
+      </form>
+    </Panel>
+  );
+}
+
+/** Spec 072: the free trial offered to new companies, and whether the site shows it. */
+function TrialPanel({ value }: { value: { days: number; public: boolean } }) {
+  const { t, errorText } = useI18n();
+  const toast = useToast();
+  const router = useRouter();
+  const [form, setForm] = useState(value);
+  const save = async (next = form) => {
+    try { await saveTrialSettings({ data: next }); toast({ text: t('console2.done') }); await router.invalidate(); }
+    catch (caught) { toast({ text: errorText(caught), kind: 'err' }); }
+  };
+  return (
+    <Panel title={t('trialCfg.title')} sub={form.public ? t('trialCfg.onHelp', { n: form.days }) : t('trialCfg.offHelp')}>
+      <form className="form-grid" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <label className="field">{t('trialCfg.days')}<input type="number" min={1} max={90} value={form.days} onChange={(event) => setForm({ ...form, days: Number(event.target.value) })} /></label>
+        <label className="check" style={{ alignSelf: 'end' }}><input type="checkbox" checked={form.public} onChange={(event) => setForm({ ...form, public: event.target.checked })} />{t('trialCfg.public')}</label>
+        <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>{t('trialCfg.note')}</p>
+        <div><button type="submit" className="btn small">{t('app.save')}</button></div>
+      </form>
+    </Panel>
+  );
+}
+
 function Prices({ data }: { data: Data }) {
   const { t, locale, errorText } = useI18n();
   const toast = useToast();
@@ -262,6 +309,8 @@ function Prices({ data }: { data: Data }) {
   };
   return (
     <div className="stack">
+      <TrialPanel value={data.trial} />
+      <DemoLimitPanel value={data.demoLimit} />
       <Panel title={t('prices.publicTitle')} sub={data.publicPrices ? t('prices.publicOnHelp') : t('prices.publicOffHelp')}>
         <div className="row" style={{ flexWrap: 'wrap', gap: '.8rem' }}>
           <Badge tone={data.publicPrices ? 'ok' : 'warn'}>{data.publicPrices ? t('prices.publicOn') : t('prices.publicOff')}</Badge>

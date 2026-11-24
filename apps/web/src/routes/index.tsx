@@ -153,7 +153,7 @@ function CallBack() {
 
 function Landing() {
   const { t, locale } = useI18n();
-  const { plans, currency, country } = Route.useLoaderData();
+  const { plans, currency, country, trial } = Route.useLoaderData();
   const [role, setRole] = useState<(typeof ROLES)[number]['key']>('owner');
   const shown = ROLES.find((item) => item.key === role)!;
   const list = (key: MessageKey) => t(key).split('|');
@@ -174,7 +174,8 @@ function Landing() {
               <a className="ed-button ed-button-orange" href="#rappel" data-umami-event="lp-call-hero">{t('lp.hero.call')} <span>→</span></a>
               <a className="ed-under-link" href="#preuve">{t('lp.hero.demo')} <span>↗</span></a>
             </div>
-            <ul className="ed-reassure">{list('lp.hero.reassure').map((item) => <li key={item}>{item}</li>)}</ul>
+            {trial.public ? <a className="ed-trial-link" href="/signup" data-umami-event="lp-trial-hero">{t('lp.trial.link', { n: trial.days })} <span>→</span></a> : null}
+            <ul className="ed-reassure">{[t('lp.hero.setup'), ...(trial.public ? [t('lp.trial.free', { n: trial.days })] : []), t('lp.hero.noCommitment')].map((item) => <li key={item}>{item}</li>)}</ul>
           </div>
           <Cockpit />
         </section>
@@ -275,11 +276,12 @@ function Landing() {
                     {plan.code === 'enterprise' ? <li>{t('lp.pricing.dedicated')}</li> : null}
                   </ul>
                   <a href="#rappel" data-umami-event={`lp-plan-${plan.code}`}>{t('lp.pricing.talk')}</a>
+                  {trial.public && plan.code !== 'enterprise' ? <a className="ed-plan-trial" href="/signup" data-umami-event={`lp-trial-${plan.code}`}>{t('lp.trial.short', { n: trial.days })}</a> : null}
                 </article>
               );
             })}
           </div>
-          <div className="ed-risk-strip">{list('lp.pricing.risk').map((item) => <span key={item}>{item}</span>)}</div>
+          <div className="ed-risk-strip">{[...(trial.public ? [t('lp.trial.free', { n: trial.days })] : []), ...list('lp.pricing.risk')].map((item) => <span key={item}>{item}</span>)}</div>
         </section>
 
         <section className="ed-final" id="rappel">

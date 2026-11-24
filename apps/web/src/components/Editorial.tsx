@@ -22,9 +22,12 @@ export function EdHeader({ base = '' }: { base?: string }) {
         <a href={`${base}#preuve`}>{t('lp.nav.proof')}</a>
         <a href={`${base}#tarifs`}>{t('lp.nav.pricing')}</a>
       </nav>
-      {viewer
-        ? <Link className="ed-nav-cta" to="/app">{t('nav.dashboard')} <span>↗</span></Link>
-        : <a className="ed-nav-cta" href={`${base}#rappel`} data-umami-event="lp-call-nav">{t('lp.cta')} <span>↗</span></a>}
+      <div className="ed-nav-end">
+        {viewer ? null : <Link className="ed-nav-login" to="/login" data-umami-event="lp-login-nav">{t('landing.signIn')}</Link>}
+        {viewer
+          ? <Link className="ed-nav-cta" to="/app">{t('nav.dashboard')} <span>↗</span></Link>
+          : <a className="ed-nav-cta" href={`${base}#rappel`} data-umami-event="lp-call-nav">{t('lp.cta')} <span>↗</span></a>}
+      </div>
     </header>
   );
 }

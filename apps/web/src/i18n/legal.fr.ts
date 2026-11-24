@@ -152,7 +152,7 @@ export const legalFr: LegalPages = {
       {
         "id": "acces",
         "title": "Accès au service",
-        "html": "<p>Struo est réservé aux professionnels. La personne qui crée l’espace déclare avoir le pouvoir d’engager l’entreprise.</p>\n<p><strong>Essai :</strong> 14 jours gratuits, avec toutes les fonctions, sans carte bancaire. Les règles de fin sont les mêmes que pour une licence (voir plus bas).</p>\n<p><strong>Démonstration :</strong> la démo sans compte ouvre une entreprise fictive pendant 24 heures, puis elle est effacée. N’y saisissez pas de données réelles.</p>"
+        "html": "<p>Struo est réservé aux professionnels. La personne qui crée l’espace déclare avoir le pouvoir d’engager l’entreprise.</p>\n<p><strong>Essai :</strong> gratuit, avec toutes les fonctions, sans carte bancaire, pendant la durée indiquée au moment de l’inscription. Les règles de fin sont les mêmes que pour une licence (voir plus bas).</p>\n<p><strong>Démonstration :</strong> la démo sans compte ouvre une entreprise fictive pendant 24 heures, puis elle est effacée. N’y saisissez pas de données réelles.</p>"
       },
       {
         "id": "formules",

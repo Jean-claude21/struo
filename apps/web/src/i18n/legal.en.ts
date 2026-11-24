@@ -170,7 +170,7 @@ export const legalEn: LegalPages = {
   <li><strong>Licence:</strong> the right to use a Struo plan for a period paid in advance.</li>
 </ul>` },
       { id: 'acces', title: 'Access to the service', html: `<p>Struo is reserved for professionals. The person who creates the space declares they have the power to commit the company.</p>
-<p><strong>Trial:</strong> 14 days free, with every feature, no bank card. The end rules are the same as for a licence (see below).</p>
+<p><strong>Trial:</strong> free, with every feature, no bank card, for the length shown when signing up. The end rules are the same as for a licence (see below).</p>
 <p><strong>Demo:</strong> the demo without an account opens a fictitious company for 24 hours, then it is erased. Do not enter real data in it.</p>` },
       { id: 'formules', title: 'Plans and prices', html: `<p>The plans (Starter, Pro, Enterprise) and their limits are described on the pricing page. Prices are shown in the currency of the chosen country, excluding taxes, and are never converted. The Enterprise plan and countries without a published price are quoted.</p>
 <p>The licence is paid in advance, for the number of months chosen, on our payment provider’s store. It extends access by that period. <strong>There is no automatic renewal:</strong> to carry on, the Customer buys a new licence.</p>
