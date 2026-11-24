@@ -150,7 +150,7 @@ export const growEn = {
       title: "Automatic activation (Chariow Pulse)",
       sub: "For each licence sold, Chariow tells Struo: the licence applies by itself to the buyer's company, found by their e-mail.",
       url: "Address to paste in the Pulse",
-      step1: "Chariow › Automations › Pulses › New Pulse: paste the address above, event « License issued » (license.issued).",
+      step1: "Chariow › Automations › Pulses › New Pulse: paste the address above, event « License issued » (license.issued), « Apply to all products ». Products linked to no Struo offer are ignored.",
       step2: "Copy the Pulse's signing secret (whsec_…) and pass it on so it is set on the server (variable CHARIOW_PULSE_SECRET).",
       step3: "Test with the Pulse's test button: the line appears below.",
       on: "Secret set: licences apply by themselves.",
