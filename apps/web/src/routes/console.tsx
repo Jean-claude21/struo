@@ -32,11 +32,14 @@ function Console() {
   const data = Route.useLoaderData();
   const [tab, setTab] = useState<Tab>('today');
   const [company, setCompany] = useState<string | null>(null);
-  const realCompanies = data.companies.filter((item) => !item.isDemo);
+  const realCompanies = data.companies.filter((item) => !item.isDemo && !item.isInternal);
   return (
     <div className="public" style={{ maxWidth: 1240 }}>
       <PublicHeader signedIn />
-      <h1>{t('console.title')}</h1>
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '.6rem' }}>
+        <h1 style={{ margin: 0 }}>{t('console.title')}</h1>
+        <a className="btn secondary small" href="/onboarding?internal=1">{t('internal.create')}</a>
+      </div>
       <Tabs value={tab} onChange={setTab} items={[
         { value: 'today', label: `${t('founder.tab')} · ${data.todo.length}` },
         { value: 'overview', label: t('console2.overview') },
@@ -124,7 +127,7 @@ function Companies({ data }: { data: Data }) {
         <thead><tr><th>{t('clientInvite.contactName')}</th><th>{t('console.created')}</th><th>{t('console.plan')}</th><th>{t('console.users')}</th><th>{t('console.projects')}</th><th>{t('console.reports30')}</th><th>{t('founder.stepsTitle')}</th><th /></tr></thead>
         <tbody>{shown.map((company) => (
           <tr key={company.orgId} style={{ cursor: 'pointer' }} onClick={() => setOpen(company.orgId)}>
-            <td><b>{company.name}</b> <span className="muted small">{company.countryCode}</span>{company.isDemo ? <> <Badge>{t('founder.demo')}</Badge></> : null}{company.suspended ? <> <Badge tone="bad">{t('founder.suspended')}</Badge></> : null}</td>
+            <td><b>{company.name}</b> <span className="muted small">{company.countryCode}</span>{company.isDemo ? <> <Badge>{t('founder.demo')}</Badge></> : null}{company.isInternal ? <> <Badge tone="info">{t('internal.badge')}</Badge></> : null}{company.suspended ? <> <Badge tone="bad">{t('founder.suspended')}</Badge></> : null}</td>
             <td><DateText value={company.createdAt} /></td>
             <td><span className="badge">{company.planCode}</span></td>
             <td>{company.users}</td><td>{company.projects}</td>
@@ -177,6 +180,8 @@ function CompanyDrawer({ orgId, plans, onClose }: { orgId: string; plans: Data['
                 <button type="button" className="btn secondary small" onClick={() => void act(() => consoleCompanyAction({ data: { orgId, action: 'trial', days: 14 } }))}>{t('console2.trial14')}</button>
                 <button type="button" className="btn secondary small" onClick={() => void act(() => consoleCompanyAction({ data: { orgId, action: 'paid', months: 1 } }))}>{t('console2.paid1')}</button>
               </div>
+              <label className="check small"><input type="checkbox" checked={Boolean(company.isInternal)} onChange={(event) => void act(() => consoleCompanyAction({ data: { orgId, action: event.target.checked ? 'internal' : 'external' } }))} />{t('internal.toggle')}</label>
+              <p className="xsmall muted" style={{ margin: 0 }}>{t('internal.help')}</p>
               {company.suspendedAt ? (
                 <button type="button" className="btn small" onClick={() => void act(() => consoleCompanyAction({ data: { orgId, action: 'reactivate' } }))}>{t('console2.reactivate')}</button>
               ) : (

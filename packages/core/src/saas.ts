@@ -135,7 +135,7 @@ export interface CompanyOverview {
   users: number;
   projects: number;
   reportsLast30Days: number;
-  isDemo: boolean; paidUntil: string | null; suspended: boolean; ownerEmail: string | null; phone: string | null;
+  isDemo: boolean; isInternal: boolean; paidUntil: string | null; suspended: boolean; ownerEmail: string | null; phone: string | null;
 }
 
 /** Every company, for the platform console. Owner connection only (it crosses companies). */
@@ -147,7 +147,7 @@ export async function platformOverview(owner: Db): Promise<CompanyOverview[]> {
             (select count(*)::int from project p where p.org_id = o.id and p.archived_at is null) as projects,
             (select count(*)::int from site_report r where r.org_id = o.id
                and r.created_at > now() - interval '30 days') as "reportsLast30Days",
-            s.is_demo as "isDemo", to_char(s.paid_until, 'YYYY-MM-DD') as "paidUntil", s.suspended_at is not null as suspended,
+            s.is_demo as "isDemo", s.is_internal as "isInternal", to_char(s.paid_until, 'YYYY-MM-DD') as "paidUntil", s.suspended_at is not null as suspended,
             (select u.email from member m join "user" u on u.id = m."userId" where m."organizationId" = o.id and m.role = 'owner' order by m."createdAt" limit 1) as "ownerEmail",
             (select i.phone from invoice_settings i where i.org_id = o.id) as phone
        from organization o join org_settings s on s.org_id = o.id
@@ -215,7 +215,7 @@ export async function productHealth(owner: Db) {
             count(distinct r.author_id)::int as leads,
             count(distinct r.org_id)::int as companies
        from w left join site_report r on r.created_at >= w.week and r.created_at < w.week + interval '1 week'
-             and r.org_id in (select org_id from org_settings where not is_demo)
+             and r.org_id in (select org_id from org_settings where not is_demo and not is_internal)
       group by w.week order by w.week`,
   );
   const cohort = await owner.query<{ orgId: string; createdAt: string; firstReport: string | null; firstInvoice: string | null; hasLead: boolean; invitedClient: boolean; week4: boolean; ageDays: number }>(
@@ -227,11 +227,11 @@ export async function productHealth(owner: Db) {
             exists (select 1 from site_report r where r.org_id = o.id and r.created_at between o."createdAt" + interval '21 days' and o."createdAt" + interval '28 days') as week4,
             extract(day from now() - o."createdAt")::int as "ageDays"
        from organization o join org_settings s on s.org_id = o.id
-      where not s.is_demo and o."createdAt" > now() - interval '90 days'`,
+      where not s.is_demo and not s.is_internal and o."createdAt" > now() - interval '90 days'`,
   );
   const now = await owner.query<{ leads7: number; reports7: number; activeSites: number; sitesReported: number; trialsOver: number; converted: number; companies: number }>(
-    `select (select count(distinct r.author_id) from site_report r join org_settings s on s.org_id = r.org_id where not s.is_demo and r.created_at > now() - interval '7 days')::int as leads7,
-            (select count(*) from site_report r join org_settings s on s.org_id = r.org_id where not s.is_demo and r.created_at > now() - interval '7 days')::int as reports7,
+    `select (select count(distinct r.author_id) from site_report r join org_settings s on s.org_id = r.org_id where not s.is_demo and not s.is_internal and r.created_at > now() - interval '7 days')::int as leads7,
+            (select count(*) from site_report r join org_settings s on s.org_id = r.org_id where not s.is_demo and not s.is_internal and r.created_at > now() - interval '7 days')::int as reports7,
             (select count(*) from project p join org_settings s on s.org_id = p.org_id where not s.is_demo and p.status = 'active' and p.archived_at is null)::int as "activeSites",
             (select count(*) from project p join org_settings s on s.org_id = p.org_id where not s.is_demo and p.status = 'active' and p.archived_at is null
                and exists (select 1 from site_report r where r.project_id = p.id and r.created_at > now() - interval '7 days'))::int as "sitesReported",

@@ -104,7 +104,7 @@ export async function listCompaniesFor(owner: Db, filter: CompanyFilter = {}) {
             (select u.email from member m join "user" u on u.id = m."userId" where m."organizationId" = o.id and m.role = 'owner' order by m."createdAt" limit 1) as "ownerEmail"
        from organization o join org_settings s on s.org_id = o.id
       where not exists (select 1 from demo_sandbox d where d.org_id = o.id)
-        and ($1 or not s.is_demo)
+        and ($1 or (not s.is_demo and not s.is_internal))
         and ($2::text is null or s.plan_code = $2)
         and ($3::text is null
              or ($3 = 'paying' and s.paid_until > now() and s.plan_code <> 'trial')
@@ -128,13 +128,13 @@ export async function changesSince(owner: Db, since: string) {
   const p = [at.toISOString()];
   const [companies, licences, payments, expired, feedback, leads, claims] = await Promise.all([
     owner.query(`select o.id as "orgId", o.name, s.country_code as country, to_char(o."createdAt", 'YYYY-MM-DD') as at from organization o join org_settings s on s.org_id = o.id
-                  where not s.is_demo and o."createdAt" > $1 and not exists (select 1 from demo_sandbox d where d.org_id = o.id) order by o."createdAt"`, p),
+                  where not s.is_demo and not s.is_internal and o."createdAt" > $1 and not exists (select 1 from demo_sandbox d where d.org_id = o.id) order by o."createdAt"`, p),
     owner.query(`select o.name, r.plan_code as plan, r.months, to_char(r.redeemed_at, 'YYYY-MM-DD') as at from license_redemption r join organization o on o.id = r.org_id
-                  join org_settings s on s.org_id = r.org_id where not s.is_demo and r.redeemed_at > $1 order by r.redeemed_at`, p),
+                  join org_settings s on s.org_id = r.org_id where not s.is_demo and not s.is_internal and r.redeemed_at > $1 order by r.redeemed_at`, p),
     owner.query(`select o.name, sp.amount_minor::float8 as "amountMinor", sp.currency_code as currency, to_char(sp.paid_at, 'YYYY-MM-DD') as at from subscription_payment sp
-                  join organization o on o.id = sp.org_id join org_settings s on s.org_id = sp.org_id where not s.is_demo and sp.status = 'succeeded' and sp.paid_at > $1`, p),
+                  join organization o on o.id = sp.org_id join org_settings s on s.org_id = sp.org_id where not s.is_demo and not s.is_internal and sp.status = 'succeeded' and sp.paid_at > $1`, p),
     owner.query(`select o.name, s.plan_code as plan, to_char(s.paid_until, 'YYYY-MM-DD') as at from organization o join org_settings s on s.org_id = o.id
-                  where not s.is_demo and s.paid_until between $1 and now()`, p),
+                  where not s.is_demo and not s.is_internal and s.paid_until between $1 and now()`, p),
     owner.query(`select o.name as company, f.kind, left(f.body, 300) as body, to_char(f.created_at, 'YYYY-MM-DD') as at from feedback f join organization o on o.id = f.org_id where f.created_at > $1 order by f.created_at`, p),
     owner.query(`select coalesce(nullif(company, ''), name) as name, reach, left(message, 300) as message, to_char(created_at, 'YYYY-MM-DD') as at from contact_request where created_at > $1 order by created_at`, p),
     owner.query(`select count(*)::int as n from payment_claim c join org_settings s on s.org_id = c.org_id where not s.is_demo and c.created_at > $1`, p),

@@ -46,24 +46,24 @@ export async function founderMoney(owner: Db): Promise<FounderMoney> {
       `select s.currency_code as currency, coalesce(sum(coalesce(pp.price_minor, case when p.currency_code = s.currency_code then p.price_minor end, 0)), 0)::float8 as "amountMinor",
               count(*)::int as companies
          from org_settings s join plan p on p.code = s.plan_code left join plan_price pp on pp.plan_code = p.code and pp.currency_code = s.currency_code
-        where not s.is_demo and s.paid_until > now() and s.plan_code <> 'trial' group by s.currency_code order by 2 desc`),
+        where not s.is_demo and not s.is_internal and s.paid_until > now() and s.plan_code <> 'trial' group by s.currency_code order by 2 desc`),
     owner.query<{ month: string; currency: string; amountMinor: number; sales: number }>(
       `with sales as (
          select date_trunc('month', sp.paid_at) as month, sp.currency_code as currency, sp.amount_minor::float8 as amount
            from subscription_payment sp join org_settings s on s.org_id = sp.org_id
-          where sp.status = 'succeeded' and not s.is_demo and sp.paid_at > date_trunc('month', now()) - interval '5 months'
+          where sp.status = 'succeeded' and not s.is_demo and not s.is_internal and sp.paid_at > date_trunc('month', now()) - interval '5 months'
          union all
          select date_trunc('month', r.redeemed_at), s.currency_code, (coalesce(pp.price_minor, 0) * r.months)::float8
            from license_redemption r join org_settings s on s.org_id = r.org_id
            left join plan_price pp on pp.plan_code = r.plan_code and pp.currency_code = s.currency_code
-          where not s.is_demo and r.redeemed_at > date_trunc('month', now()) - interval '5 months')
+          where not s.is_demo and not s.is_internal and r.redeemed_at > date_trunc('month', now()) - interval '5 months')
        select to_char(month, 'YYYY-MM') as month, currency, sum(amount)::float8 as "amountMinor", count(*)::int as sales
          from sales group by month, currency order by month, currency`),
     owner.query<{ paying: number; trials: number; companies: number }>(
       `select count(*) filter (where paid_until > now() and plan_code <> 'trial')::int as paying,
               count(*) filter (where plan_code = 'trial' and trial_ends_at > now())::int as trials,
               count(*)::int as companies
-         from org_settings where not is_demo`),
+         from org_settings where not is_demo and not is_internal`),
   ]);
   return { mrr: mrr.rows, months: months.rows, ...counts.rows[0]! };
 }
@@ -79,7 +79,7 @@ export interface FounderTodo {
 export async function founderTodo(owner: Db): Promise<FounderTodo[]> {
   const contact = `(select u.email from member m join "user" u on u.id = m."userId" where m."organizationId" = o.id and m.role = 'owner' order by m."createdAt" limit 1) as email,
                    (select i.phone from invoice_settings i where i.org_id = o.id) as phone`;
-  const real = `join org_settings s on s.org_id = o.id and not s.is_demo`;
+  const real = `join org_settings s on s.org_id = o.id and not s.is_demo and not s.is_internal`;
   const [idle, slowing, expiring, expired, leads, feedback, notes] = await Promise.all([
     owner.query<FounderTodo>(
       `select 'trial_idle' as kind, o.id as "orgId", o.name, to_char(s.trial_ends_at, 'YYYY-MM-DD') as at, null as detail, ${contact}
@@ -130,7 +130,7 @@ export async function onboardingSteps(owner: Db, orgId?: string): Promise<Record
             exists (select 1 from invoice i where i.org_id = o.id and i.status = 'issued') as invoice,
             exists (select 1 from portal_link l where l.org_id = o.id) as client
        from organization o join org_settings s on s.org_id = o.id
-      where not s.is_demo and ($1::text is null or o.id = $1)`, [orgId ?? null]);
+      where not s.is_demo and not s.is_internal and ($1::text is null or o.id = $1)`, [orgId ?? null]);
   return Object.fromEntries(rows.map(({ orgId: id, ...steps }) => [id, steps]));
 }
 
@@ -286,9 +286,9 @@ const planColumns = `p.code, p.name, p.name_en as "nameEn", p.tagline, p.tagline
 export async function listEditablePlans(owner: Db): Promise<EditablePlan[]> {
   const { rows } = await owner.query<EditablePlan>(
     `select ${planColumns},
-            (select count(*) from org_settings s where s.plan_code = p.code and not s.is_demo)::int as companies,
-            (select count(*) from org_settings s where s.plan_code = p.code and not s.is_demo and s.paid_until > now())::int as paying,
-            (select count(*) from org_settings s where s.plan_code = p.code and not s.is_demo and s.trial_ends_at > now() and s.paid_until is null)::int as trials,
+            (select count(*) from org_settings s where s.plan_code = p.code and not s.is_demo and not s.is_internal)::int as companies,
+            (select count(*) from org_settings s where s.plan_code = p.code and not s.is_demo and not s.is_internal and s.paid_until > now())::int as paying,
+            (select count(*) from org_settings s where s.plan_code = p.code and not s.is_demo and not s.is_internal and s.trial_ends_at > now() and s.paid_until is null)::int as trials,
             coalesce((select jsonb_agg(jsonb_build_object('currency', pp.currency_code, 'priceMinor', pp.price_minor) order by pp.currency_code) from plan_price pp where pp.plan_code = p.code), '[]') as prices
        from plan p order by p.position, p.code`);
   return rows;
@@ -333,11 +333,11 @@ export async function planImpact(owner: Db, input: unknown): Promise<PlanImpact>
       `select count(*)::int as companies, count(*) filter (where paid_until > now())::int as paying from org_settings where plan_code = $1 and not is_demo`, [draft.code]),
     draft.maxUsers === null ? { rows: [] } : owner.query<{ orgId: string; name: string; count: number }>(
       `select o.id as "orgId", o.name, (select count(*) from member m where m."organizationId" = o.id)::int as count
-         from organization o join org_settings s on s.org_id = o.id where s.plan_code = $1 and not s.is_demo
+         from organization o join org_settings s on s.org_id = o.id where s.plan_code = $1 and not s.is_demo and not s.is_internal
           and (select count(*) from member m where m."organizationId" = o.id) > $2 order by 3 desc limit 50`, [draft.code, draft.maxUsers]),
     draft.maxProjects === null ? { rows: [] } : owner.query<{ orgId: string; name: string; count: number }>(
       `select o.id as "orgId", o.name, (select count(*) from project p where p.org_id = o.id and p.archived_at is null and p.status <> 'done')::int as count
-         from organization o join org_settings s on s.org_id = o.id where s.plan_code = $1 and not s.is_demo
+         from organization o join org_settings s on s.org_id = o.id where s.plan_code = $1 and not s.is_demo and not s.is_internal
           and (select count(*) from project p where p.org_id = o.id and p.archived_at is null and p.status <> 'done') > $2 order by 3 desc limit 50`, [draft.code, draft.maxProjects]),
   ]);
   const before = current.features.filter((feature) => (PLAN_FEATURES as readonly string[]).includes(feature));
