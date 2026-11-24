@@ -271,11 +271,11 @@ try {
 }
 
 if (!args['no-deploy']) {
-  // A restart recreates the container with the variables just written; a « deploy » of the same
-  // image is skipped by Coolify and would leave the old variables running.
-  const restart = await coolify(`/applications/${application.uuid}/restart`, { method: 'POST' });
-  console.log(`Coolify: restart requested → ${domain}`);
-  const deployment = restart?.deployment_uuid;
+  // A forced deployment recreates the container with the variables just written. (A plain restart
+  // kept the old environment: a new secret was stored in Coolify but not seen by the app.)
+  const forced = await coolify(`/deploy?uuid=${application.uuid}&force=true`, { method: 'POST' });
+  console.log(`Coolify: forced deployment requested → ${domain}`);
+  const deployment = forced?.deployments?.[0]?.deployment_uuid;
   for (let i = 0; deployment && i < 60; i += 1) {
     await sleep(10_000);
     const state = await coolify(`/deployments/${deployment}`).catch(() => null);
