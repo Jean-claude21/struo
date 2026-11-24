@@ -69,7 +69,7 @@ export const growEn = {
       t2: "9:00", h2: "The report arrives", b2: "Dated photos, transcribed voice note, approved progress.",
       t3: "12:00", h3: "The client understands", b3: "Your report has been read. They do not call you.",
       t4: "Month end", h4: "The progress invoice is ready", b4: "Calculated from the approved progress, VAT and retention.",
-      t5: "18:00", h5: "You know where everything stands", b5: "You go home. You did not call to check.",
+      t5: "18:00", h5: "You know where every site stands", b5: "You go home. You did not call to check.",
     },
     offer: {
       kicker: "Putting things in order",
@@ -93,7 +93,7 @@ export const growEn = {
       title2: "is the screen.",
       lead: "A demo company for 24 hours. Each role only sees what it needs.",
       open: "Open this demo",
-      owner: "Owner", ownerS: "Today, map, cash", ownerL: "Owner view", ownerT: "Does anything still need your attention?", ownerA: "A company owner checking her sites in the morning",
+      owner: "Owner", ownerS: "Today, map, cash", ownerL: "Owner view", ownerT: "What needs your attention today?", ownerA: "A company owner checking her sites in the morning",
       engineer: "Engineer", engineerS: "Reports, incidents, planning", engineerL: "Engineer view", engineerT: "Which reports must be approved today?", engineerA: "An engineer presenting a Struo overview",
       site_lead: "Site lead", site_leadS: "Photos, checklist, offline", site_leadL: "Site lead view", site_leadT: "A complete report, even without network", site_leadA: "A site team getting started on Struo in the morning",
       accountant: "Accountant", accountantS: "Progress invoices, invoices, reminders", accountantL: "Accountant view", accountantT: "Which progress invoice is ready to issue?", accountantA: "Management reviewing costs and indicators",
