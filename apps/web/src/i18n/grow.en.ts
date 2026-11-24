@@ -50,6 +50,7 @@ export const growEn = {
       lead2: "just to find a piece of information.",
       source: "Source: PlanGrid & FMI, Construction Disconnected, 2018 · nearly 600 leaders surveyed.",
       alt: "Site management reviewing plans, costs and indicators",
+      country: "Your country · currency",
       people: "People who coordinate",
       hours: "Hours spent searching each week",
       hourCost: "Cost of one hour ({currency})",

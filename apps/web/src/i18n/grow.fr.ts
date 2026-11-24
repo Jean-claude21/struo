@@ -51,6 +51,7 @@ export const growFr = {
       lead2: "rien que pour retrouver une information.",
       source: "Source : PlanGrid & FMI, Construction Disconnected, 2018 · près de 600 dirigeants interrogés.",
       alt: "Direction de chantier analysant des plans, coûts et indicateurs",
+      country: "Votre pays · devise",
       people: "Personnes qui coordonnent",
       hours: "Heures à chercher par semaine",
       hourCost: "Coût d’une heure ({currency})",

@@ -3,8 +3,9 @@
 // What the mockup only pretended is real here: the cockpit pins switch the site, the estimate uses
 // the visitor's currency, prices come from the visitor's country (on quote when none is published),
 // each role opens its own demo, and the call-back form sends a real request.
-import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useState, type FormEvent } from 'react';
+import { createFileRoute, useRouter } from '@tanstack/react-router';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { COUNTRY_COOKIE, sortedCountries } from '@/features/settings/countries.ts';
 import { EdFooter, EdHeader } from '@/components/Editorial.tsx';
 import { formatMoney } from '@/components/ui.tsx';
 import { planWords } from '@/components/PlanWords.tsx';
@@ -80,8 +81,18 @@ function Cockpit() {
 }
 
 /** The visitor's own estimate, in their currency. */
-function Calculator({ currency }: { currency: string }) {
+function Calculator({ currency, country }: { currency: string; country: string }) {
   const { t, locale } = useI18n();
+  const router = useRouter();
+  // Country names come from Intl, which the server and the browser may spell differently: the full
+  // list is built in the browser, the server renders only the current country.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const countries = useMemo(() => (mounted ? sortedCountries(locale) : sortedCountries(locale).filter((item) => item.code === country)), [locale, mounted, country]);
+  const choose = async (code: string) => {
+    document.cookie = `${COUNTRY_COOKIE}=${code}; path=/; max-age=31536000; samesite=lax`;
+    await router.invalidate();
+  };
   const [people, setPeople] = useState(3);
   const [hours, setHours] = useState(5.5);
   const [cost, setCost] = useState(HOURLY[currency] ?? 15);
@@ -91,6 +102,9 @@ function Calculator({ currency }: { currency: string }) {
   const number = (value: number, digits = 0) => value.toLocaleString(locale === 'en' ? 'en-GB' : 'fr-FR', { maximumFractionDigits: digits });
   return (
     <form className="ed-calculator" onSubmit={(event) => event.preventDefault()}>
+      <label>{t('lp.cost.country')}<select className="ed-country" value={country} onChange={(event) => void choose(event.target.value)}>
+        {countries.map((item) => <option key={item.code} value={item.code} suppressHydrationWarning>{item.name} · {item.currency}</option>)}
+      </select></label>
       <label>{t('lp.cost.people')} <output>{people}</output><input type="range" min={1} max={30} value={people} onChange={(event) => setPeople(Number(event.target.value))} /></label>
       <label>{t('lp.cost.hours')} <output>{t('lp.cost.hoursUnit', { n: number(hours, 1) })}</output><input type="range" min={1} max={20} step={0.5} value={hours} onChange={(event) => setHours(Number(event.target.value))} /></label>
       <label>{t('lp.cost.hourCost', { currency })} <input type="number" min={0} step="any" inputMode="decimal" value={cost} onChange={(event) => setCost(Math.max(0, Number(event.target.value) || 0))} /></label>
@@ -138,7 +152,7 @@ function CallBack() {
 
 function Landing() {
   const { t, locale } = useI18n();
-  const { plans, currency } = Route.useLoaderData();
+  const { plans, currency, country } = Route.useLoaderData();
   const [role, setRole] = useState<(typeof ROLES)[number]['key']>('owner');
   const shown = ROLES.find((item) => item.key === role)!;
   const list = (key: MessageKey) => t(key).split('|');
@@ -190,7 +204,7 @@ function Landing() {
             <small>{t('lp.cost.source')}</small>
             <img className="ed-cost-image" src={`${IMG}/value-cost.webp`} alt={t('lp.cost.alt')} loading="lazy" width={1672} height={941} />
           </div>
-          <Calculator currency={currency} />
+          <Calculator currency={currency} country={country} />
         </section>
 
         <section className="ed-day" id="systeme">
