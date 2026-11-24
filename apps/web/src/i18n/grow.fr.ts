@@ -70,7 +70,7 @@ export const growFr = {
       t2: "9 h", h2: "Le rapport arrive", b2: "Photos datées, note vocale transcrite, avancement validé.",
       t3: "12 h", h3: "Le client comprend", b3: "Votre rapport est consulté. Il ne vous appelle pas.",
       t4: "Fin de mois", h4: "La situation est prête", b4: "Calculée depuis l’avancement validé, la TVA et la retenue.",
-      t5: "18 h", h5: "Vous savez où en est tout", b5: "Vous rentrez. Vous n’avez pas appelé pour vérifier.",
+      t5: "18 h", h5: "Vous savez où en est chaque chantier", b5: "Vous rentrez. Vous n’avez pas appelé pour vérifier.",
     },
     offer: {
       kicker: "La mise en ordre",
@@ -94,7 +94,7 @@ export const growFr = {
       title2: "c’est l’écran.",
       lead: "Une entreprise de démonstration pendant 24 heures. Chaque rôle voit seulement ce dont il a besoin.",
       open: "Ouvrir cette démo",
-      owner: "Gérante", ownerS: "Aujourd’hui, carte, trésorerie", ownerL: "Vue gérante", ownerT: "Tout demanderait-il encore votre attention ?", ownerA: "Dirigeante consultant ses chantiers le matin",
+      owner: "Gérante", ownerS: "Aujourd’hui, carte, trésorerie", ownerL: "Vue gérante", ownerT: "Qu’est-ce qui demande votre attention aujourd’hui ?", ownerA: "Dirigeante consultant ses chantiers le matin",
       engineer: "Ingénieur", engineerS: "Rapports, imprévus, planning", engineerL: "Vue ingénieur", engineerT: "Quels rapports doivent être validés aujourd’hui ?", engineerA: "Ingénieur présentant une vue de pilotage Struo",
       site_lead: "Chef de chantier", site_leadS: "Photos, checklist, hors ligne", site_leadL: "Vue chef de chantier", site_leadT: "Un rapport complet, même sans réseau", site_leadA: "Équipe de chantier lancée sur Struo le matin",
       accountant: "Comptable", accountantS: "Situations, factures, relances", accountantL: "Vue comptable", accountantT: "Quelle situation est prête à être facturée ?", accountantA: "Direction analysant des coûts et indicateurs",

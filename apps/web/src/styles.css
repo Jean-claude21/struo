@@ -1884,3 +1884,48 @@ div.lp-risk li span { color: var(--ink-soft); font-size: .92rem; }
 .ed .ed-prose .ed-contact-box a{color:#b8401f;font-weight:800}
 @media(max-width:1000px){.ed .ed-doc{grid-template-columns:1fr;gap:40px}.ed .ed-toc{position:static}}
 @media(max-width:700px){.ed .ed-doc-hero{padding:120px 20px 0}.ed .ed-doc{padding:50px 20px 80px}.ed .ed-doc-hero h1{font-size:44px}.ed .ed-final-panel{padding:24px}}
+
+/* spec 063: final polish of the editorial landing. Round pins, readable small labels (10px at
+   least, a darker orange for text on light paper), the site panel kept on phones. */
+.ed{--muted:#5a665d;--orange-text:#b23c1a}
+.ed .ed-pin{padding:0;appearance:none;-webkit-appearance:none;line-height:0;font-size:0;aspect-ratio:1}
+.ed .ed-pin:hover{transform:scale(1.2)}
+.ed .ed-pin.ed-is-active{transform:scale(1.35)}
+.ed .ed-map-count small{font-size:9px;text-transform:uppercase;letter-spacing:.08em}
+.ed .ed-kicker{font-size:11px}
+.ed .ed-reassure{font-size:10.5px;gap:16px}
+.ed .ed-cockpit-top{font-size:10px}
+.ed .ed-cockpit-foot{font-size:10px}
+.ed .ed-site-status,.ed .ed-problem-copy span,.ed .ed-timeline time,.ed .ed-role span,.ed .ed-pricing-grid article>span,.ed .ed-calculator output{color:var(--orange-text)}
+.ed .ed-site-status{font-size:10px}
+.ed .ed-problem-copy span{font-size:11px}
+.ed .ed-timeline time{font-size:12px}
+.ed .ed-timeline li.ed-active time{font-weight:700}
+.ed .ed-section-index>b{font-size:10px}
+.ed .ed-role span{font-size:10px}
+.ed .ed-role small{font-size:11.5px}
+.ed .ed-role.ed-active span{color:var(--orange)}
+.ed .ed-pricing-grid article>span{font-size:10.5px;letter-spacing:.06em}
+.ed .ed-pricing-grid .ed-featured>span{color:#d4dbd2}
+.ed .ed-pricing-grid .ed-featured>b{font-size:9px}
+.ed .ed-pricing-grid ul,.ed .ed-pricing-grid article>p{font-size:13px}
+.ed .ed-risk-strip span{font-size:10.5px}
+.ed .ed-calc-result span,.ed .ed-calc-result p{font-size:10.5px}
+.ed .ed-offer-steps b{font-size:10px}
+.ed .ed-day-layout figcaption{font-size:10px}
+.ed .ed-cost-copy small{font-size:10.5px}
+.ed .ed-button-orange,.ed .ed-final button{background:#cf4519}
+.ed .ed-button-orange:hover,.ed .ed-final button:hover{background:#b33a12}
+.ed .ed-button,.ed .ed-nav-cta,.ed .ed-under-link{font-size:13px}
+.ed .ed-nav nav{font-size:13px}
+.ed .ed-nav nav a:hover,.ed .ed-nav-cta:hover{color:#ffd9cc}
+@media(max-width:700px){
+  .ed .ed-cockpit{height:auto;grid-template-rows:44px auto auto auto}
+  .ed .ed-map{min-height:300px}
+  .ed .ed-site-panel{display:block;padding:24px 20px}
+  .ed .ed-site-panel h2{font-size:32px;margin:18px 0 8px}
+  .ed .ed-progress{margin-top:20px}
+  .ed .ed-site-panel>strong{font-size:30px}
+  .ed .ed-cockpit-foot{min-height:58px;font-size:9px}
+  .ed .ed-cockpit-foot b{display:block;margin:0}
+}
