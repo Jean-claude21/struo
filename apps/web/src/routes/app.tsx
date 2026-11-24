@@ -23,7 +23,8 @@ export const Route = createFileRoute('/app')({
   loader: async ({ location }) => {
     const { viewer } = await getShell();
     if (!viewer) throw redirect({ to: '/login', search: { next: location.pathname } });
-    if (!viewer.company) throw redirect({ to: '/onboarding' });
+    // Spec 074: a platform admin needs no company — the console is their place.
+    if (!viewer.company) throw redirect({ to: viewer.platformAdmin ? '/console' : '/onboarding' });
     // Spec 045: a role only opens its own screens; anything else leads to where it starts.
     const screen = screenOf(location.pathname);
     if (screen && !sees(viewer.company.role, screen)) {

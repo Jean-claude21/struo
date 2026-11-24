@@ -135,6 +135,13 @@ export const growEn = {
     footer: { tagline: "The operating system of construction companies.", top: "Back to top ↑" },
     trial: { link: "Or try it on your own, {n} days free", short: "Try {n} days free", free: "{n} days free" },
   },
+  internal: {
+    create: "Create an internal company",
+    creating: "Internal company: it works like a real one (e-mails, licences, notifications) but stays out of your figures.",
+    badge: "Internal",
+    toggle: "Internal company (tests)",
+    help: "Stays fully usable, but out of money, trials, product health and the MCP briefs.",
+  },
   notices: {
     label: "Notifications",
     labelUnread: "Notifications, {n} unread",

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  accessStage, companyAccess, companyForBuyer, createCompany, demoPerDay, resetDemoLimits, setDemoPerDay, setTrialSettings, trialSettings, createContactRequest, listStorePulses, recordStorePulse, settleStorePulse, publicPrices, setPublicPrices, createProject, licenceNotice, licenceNoticeTargets, licenceSettings, listProjects, markNoticeOnce, resolveActor,
+  accessStage, companyAccess, companyForBuyer, createCompany, founderTodo, platformOverview, productHealth, setCompanyInternal, demoPerDay, resetDemoLimits, setDemoPerDay, setTrialSettings, trialSettings, createContactRequest, listStorePulses, recordStorePulse, settleStorePulse, publicPrices, setPublicPrices, createProject, licenceNotice, licenceNoticeTargets, licenceSettings, listProjects, markNoticeOnce, resolveActor,
   setLicenceSettings, type Actor,
 } from '../src/index.ts';
 import { createTestCompany, createUser, setupDatabase, type TestDb } from './helpers.ts';
@@ -134,5 +134,19 @@ describe('the demo limit belongs to the founder (spec 072)', () => {
     await expect(resetDemoLimits(db.owner, admin)).resolves.toEqual(expect.any(Number));
     await setDemoPerDay(db.owner, admin, 10);
     await expect(setDemoPerDay(db.owner, admin, -1)).rejects.toMatchObject({ code: 'invalid_input' });
+  });
+});
+
+describe('internal companies stay out of the figures (spec 074)', () => {
+  it('works normally but leaves the founder figures', async () => {
+    const { orgId } = await createCompany(db.app, company.userId, { name: 'Tests Internes SARL', countryCode: 'TG', currencyCode: 'XOF', vatBps: 1800, retentionBps: 500, locale: 'fr' });
+    await db.owner.query(`update org_settings set trial_ends_at = now() + interval '2 days' where org_id = $1`, [orgId]);
+    expect((await founderTodo(db.owner)).some((item) => item.orgId === orgId)).toBe(true);
+    await setCompanyInternal(db.owner, admin, orgId, true);
+    expect((await founderTodo(db.owner)).some((item) => item.orgId === orgId)).toBe(false);
+    expect((await platformOverview(db.owner)).find((item) => item.orgId === orgId)?.isInternal).toBe(true);
+    await expect(productHealth(db.owner)).resolves.toBeTruthy();
+    // Still a working company: its access is computed like any other.
+    expect((await companyAccess(db.owner, orgId)).stage).toBe('ending');
   });
 });

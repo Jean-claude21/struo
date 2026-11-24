@@ -13,9 +13,13 @@ import { COUNTRIES, countryFromLanguages, DEFAULT_COUNTRY, sortedCountries } fro
 import { trackSuccess } from '@/lib/audience.ts';
 
 export const Route = createFileRoute('/onboarding')({
-  loader: async () => {
+  validateSearch: (search: Record<string, unknown>): { internal?: boolean } => (search.internal === true || search.internal === '1' || search.internal === 1 ? { internal: true } : {}),
+  loaderDeps: ({ search }) => ({ internal: Boolean(search.internal) }),
+  loader: async ({ deps: search }) => {
     const { viewer } = await getShell();
     if (!viewer) throw redirect({ to: '/login', search: { next: '/onboarding' } });
+    // Spec 074: just signed up as a platform admin, without asking for an internal company: the console.
+    if (viewer.platformAdmin && !viewer.company && !search.internal) throw redirect({ to: '/console' });
     return { viewer };
   },
   component: Onboarding,
@@ -28,6 +32,7 @@ type Config = Awaited<ReturnType<typeof getConfiguration>>;
 
 function Onboarding() {
   const { t, locale } = useI18n();
+  const { internal } = Route.useSearch();
   const { viewer } = Route.useLoaderData();
   const { run, error, busy } = useAction();
   const [step, setStep] = useState(1);
@@ -42,13 +47,14 @@ function Onboarding() {
       </div>
       {step === 1 ? (
         <div className="card stack loose">
-          <div><h1 style={{ margin: 0 }}>{t('onboarding.title')}</h1><p className="muted" style={{ margin: '.3rem 0 0' }}>{t('onboarding.subtitle')}</p></div>
+          <div>{internal ? <p className="notice info small" style={{ marginTop: 0 }}>{t('internal.creating')}</p> : null}<h1 style={{ margin: 0 }}>{t('onboarding.title')}</h1><p className="muted" style={{ margin: '.3rem 0 0' }}>{t('onboarding.subtitle')}</p></div>
           <form className="stack" onSubmit={async (event) => {
             event.preventDefault();
             const v = formData(event.currentTarget);
             const done = await run(() => createCompany({ data: {
               name: v.name, countryCode: country, currencyCode: v.currencyCode?.toUpperCase(),
               vatBps: Math.round(Number(v.vat?.replace(',', '.')) * 100), retentionBps: Math.round(Number(v.retention?.replace(',', '.')) * 100), locale: v.locale,
+              ...(internal ? { internal: true } : {}),
             } }), { reload: false });
             if (done) { trackSuccess('company-created'); setStep(2); }
           }}>

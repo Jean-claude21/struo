@@ -108,6 +108,10 @@ const TOOLS: Tool[] = [
     preview: async ({ rt }, input) => ({ company: (await core.platformCompany(rt.owner, input.orgId)).name, revoke: input.feature }),
     run: async ({ rt, adminId }, input) => { await core.revokeFeatureGrant(rt.owner, adminId, input.orgId, input.feature); return { ok: true }; } }),
 
+  tool({ name: 'set_company_internal', level: 'commit', input: { orgId, internal: z.boolean() },
+    description: 'Marks a company as internal (the founder\'s tests): it works normally but stays out of the figures.',
+    preview: async ({ rt }, input) => ({ company: (await core.platformCompany(rt.owner, input.orgId)).name, internal: input.internal }),
+    run: async ({ rt, adminId }, input) => { await core.setCompanyInternal(rt.owner, adminId, input.orgId, input.internal); return { ok: true }; } }),
   tool({ name: 'set_demo_limit', level: 'commit', input: { perDay: z.number().int().min(0).max(1000) },
     description: 'Sets how many demos one address may open per day (0 = no limit).',
     preview: async ({ rt }, input) => ({ before: await core.demoPerDay(rt.owner), after: input.perDay }),
