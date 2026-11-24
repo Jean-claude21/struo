@@ -129,7 +129,7 @@ function CallBack() {
     const text = (name: string) => String(form.get(name) ?? '').trim();
     setState('sending');
     try {
-      await sendContactRequest({ data: { name: text('name'), company: text('company'), reach: text('reach'), activeSites: text('sites') ? Number(text('sites')) : null, message: '', website: text('website') } });
+      await sendContactRequest({ data: { name: text('name'), company: text('company') || null, reach: text('reach'), activeSites: text('sites') ? Number(text('sites')) : null, message: '', website: text('website') } });
       setState('sent');
       trackSuccess('contact-sent');
     } catch {
@@ -139,11 +139,12 @@ function CallBack() {
   if (state === 'sent') return <form><p className="ed-sent" role="status">{t('lp.final.sent')}</p></form>;
   return (
     <form onSubmit={(event) => void submit(event)}>
-      <label>{t('lp.final.name')}<input name="name" required maxLength={120} autoComplete="name" /></label>
-      <label>{t('lp.final.company')}<input name="company" required maxLength={160} autoComplete="organization" /></label>
-      <label>{t('lp.final.reach')}<input name="reach" required minLength={3} maxLength={160} autoComplete="tel" /></label>
+      <label>{t('lp.final.name')} <span className="ed-req" aria-hidden="true">*</span><input name="name" required aria-required="true" maxLength={120} autoComplete="name" /></label>
+      <label>{t('lp.final.company')}<input name="company" maxLength={160} autoComplete="organization" /></label>
+      <label>{t('lp.final.reach')} <span className="ed-req" aria-hidden="true">*</span><input name="reach" required aria-required="true" minLength={3} maxLength={160} autoComplete="tel" /></label>
       <label>{t('lp.final.sites')}<input name="sites" type="number" min={0} max={10000} inputMode="numeric" /></label>
       <input name="website" tabIndex={-1} autoComplete="off" className="ed-trap" aria-hidden="true" />
+      <p className="ed-req-note"><span aria-hidden="true">*</span> {t('lp.final.required')}</p>
       {state === 'error' ? <p className="ed-error" role="alert">{t('lp.final.error')}</p> : null}
       <button type="submit" disabled={state === 'sending'} data-umami-event="lp-contact">{state === 'sending' ? t('lp.final.sending') : t('lp.final.send')} <span>→</span></button>
     </form>

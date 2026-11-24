@@ -224,7 +224,7 @@ function Leads({ data }: { data: Data }) {
         <div className="table-wrap"><table><tbody>{data.leads.map((lead) => (
           <tr key={lead.id} className={lead.handledAt ? 'muted' : undefined}>
             <td className="nowrap small">{when(lead.createdAt)}</td>
-            <td><b>{lead.company}</b><div className="small">{lead.name}</div></td>
+            <td><b>{lead.company ?? lead.name}</b>{lead.company ? <div className="small">{lead.name}</div> : null}</td>
             <td><code>{lead.reach}</code></td>
             <td className="small">{lead.countryCode ?? ''}{lead.activeSites !== null ? ` · ${t('leads.sites', { n: lead.activeSites })}` : ''}</td>
             <td className="small" style={{ maxWidth: 360 }}>{lead.message ?? ''}</td>

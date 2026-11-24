@@ -94,4 +94,10 @@ describe('public prices and call-back requests (spec 062)', () => {
     expect(await createContactRequest(db.owner, request)).toBe(true);
     expect(await createContactRequest(db.owner, request)).toBe(false);
   });
+
+  it('only the name and a way to reach the person are required (spec 068)', async () => {
+    expect(await createContactRequest(db.owner, { name: 'Kossi', company: '', reach: 'kossi@example.com', activeSites: null, message: '', locale: 'fr' })).toBe(true);
+    await expect(createContactRequest(db.owner, { name: '', company: 'X', reach: 'kossi2@example.com', locale: 'fr' })).rejects.toMatchObject({ code: 'invalid_input' });
+    await expect(createContactRequest(db.owner, { name: 'Kossi', company: 'X', reach: '', locale: 'fr' })).rejects.toMatchObject({ code: 'invalid_input' });
+  });
 });
