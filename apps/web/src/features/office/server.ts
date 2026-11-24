@@ -6,7 +6,7 @@ import { translate } from '@/i18n/index.tsx';
 import { guarded, requestLocale, requireActor } from '@/server/context.server.ts';
 import { alertText } from '@/server/jobs.server.ts';
 import { outboundAllowed } from '@/server/demo.server.ts';
-import { authorName, companyLocale, deliverClientReport, notifyChangeOrderSent, notifyClient, notifyTaskAssigned, notifyTeam, threadPeople } from '@/server/notify.server.ts';
+import { authorName, companyLocale, deliverClientReport, notifyChangeOrderSent, notifyClient, notifyTaskAssigned, notifyTeam, threadPeople, notifyReviewed } from '@/server/notify.server.ts';
 import { draftSections, rewriteSection } from '@/server/report.server.ts';
 import { runtime } from '@/server/runtime.server.ts';
 import { forecast, RAIN_LIMIT } from '@/server/weather.server.ts';
@@ -180,9 +180,20 @@ export const getField = createServerFn({ method: 'GET' })
     }),
   );
 
+/** Spec 073: the person's notification choices, per kind (phone, e-mail). */
+export const getNoticePrefs = createServerFn({ method: 'GET' }).handler(() => act((actor) => core.myNoticePrefs(runtime().db, actor)));
+
+export const saveNoticePref = createServerFn({ method: 'POST' })
+  .validator((input: { kind: string; push: boolean; email: boolean }) => input)
+  .handler(({ data }) => act((actor) => core.setMyNoticePref(runtime().db, actor, data)));
+
 export const reviewReport = createServerFn({ method: 'POST' })
   .validator((input: { id: string; decision: string; note?: string }) => input)
-  .handler(({ data }) => act((actor) => core.reviewReport(runtime().db, actor, data.id, data)));
+  .handler(({ data }) => act(async (actor) => {
+    await core.reviewReport(runtime().db, actor, data.id, data);
+    // Spec 073: the site lead hears it (approved, or sent back with the reason).
+    void notifyReviewed(runtime(), actor, data.id);
+  }));
 
 export const resolveIncident = createServerFn({ method: 'POST' })
   .validator(idOf)
