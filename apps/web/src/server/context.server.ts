@@ -135,6 +135,8 @@ export function toClientError(error: unknown): Error {
 export function jsonError(error: unknown): Response {
   if (isMalformedId(error)) return Response.json({ error: 'not_found', params: {} }, { status: 404 });
   if (error instanceof DomainError) return Response.json({ error: error.code, params: error.params }, { status: error.status });
+  // A body that is not the expected JSON is the caller's mistake, not a failure of ours.
+  if (error instanceof SyntaxError) return Response.json({ error: 'invalid_input', params: { field: 'body', detail: '' } }, { status: 422 });
   reportError(error, { where: 'api' });
   return Response.json({ error: 'generic' }, { status: 500 });
 }
