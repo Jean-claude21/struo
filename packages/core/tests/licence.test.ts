@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  accessStage, companyAccess, createContactRequest, publicPrices, setPublicPrices, createProject, licenceNotice, licenceNoticeTargets, licenceSettings, listProjects, markNoticeOnce, resolveActor,
+  accessStage, companyAccess, companyForBuyer, createContactRequest, listStorePulses, recordStorePulse, settleStorePulse, publicPrices, setPublicPrices, createProject, licenceNotice, licenceNoticeTargets, licenceSettings, listProjects, markNoticeOnce, resolveActor,
   setLicenceSettings, type Actor,
 } from '../src/index.ts';
 import { createTestCompany, createUser, setupDatabase, type TestDb } from './helpers.ts';
@@ -99,5 +99,17 @@ describe('public prices and call-back requests (spec 062)', () => {
     expect(await createContactRequest(db.owner, { name: 'Kossi', company: '', reach: 'kossi@example.com', activeSites: null, message: '', locale: 'fr' })).toBe(true);
     await expect(createContactRequest(db.owner, { name: '', company: 'X', reach: 'kossi2@example.com', locale: 'fr' })).rejects.toMatchObject({ code: 'invalid_input' });
     await expect(createContactRequest(db.owner, { name: 'Kossi', company: 'X', reach: '', locale: 'fr' })).rejects.toMatchObject({ code: 'invalid_input' });
+  });
+});
+
+describe('store Pulses (spec 069)', () => {
+  it('records each delivery once and finds the company of the buyer by e-mail', async () => {
+    expect(await recordStorePulse(db.owner, { deliveryId: 'del_1', event: 'license.issued', buyerEmail: 'X@Example.com', productId: 'prd_1' })).toBe(true);
+    expect(await recordStorePulse(db.owner, { deliveryId: 'del_1', event: 'license.issued' })).toBe(false);
+    await settleStorePulse(db.owner, 'del_1', 'applied', { companyName: 'Fin de licence SARL', text: 'pro until 2027-01-01' });
+    expect((await listStorePulses(db.owner)).find((item) => item.deliveryId === 'del_1')).toMatchObject({ outcome: 'applied', buyerEmail: 'x@example.com' });
+    const { rows } = await db.owner.query<{ email: string }>('select email from "user" where id = $1', [company.userId]);
+    expect(await companyForBuyer(db.owner, rows[0]!.email.toUpperCase())).toMatchObject({ orgId: company.orgId, userId: company.userId });
+    expect(await companyForBuyer(db.owner, 'nobody@example.com')).toBeNull();
   });
 });

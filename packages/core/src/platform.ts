@@ -260,3 +260,41 @@ export async function setPublicPrices(owner: Db, adminId: string, on: boolean): 
   await platformJournal(owner, adminId, 'prices.public', 'platform', { on: value });
   return value;
 }
+
+// ---------------------------------------------------------------- store pulses (spec 069)
+
+export type PulseOutcome = 'received' | 'applied' | 'already' | 'unmatched' | 'ignored' | 'failed';
+
+/** Records a delivery once; false when the same delivery already arrived (a retry). */
+export async function recordStorePulse(owner: Db, input: { deliveryId: string; event: string; buyerEmail?: string | null; productId?: string | null }): Promise<boolean> {
+  const { rowCount } = await owner.query(
+    `insert into store_pulse (delivery_id, event, buyer_email, product_id) values ($1, $2, $3, $4) on conflict (delivery_id) do nothing`,
+    [input.deliveryId.slice(0, 200), input.event.slice(0, 80), input.buyerEmail?.toLowerCase() ?? null, input.productId ?? null]);
+  return rowCount === 1;
+}
+
+export async function settleStorePulse(owner: Db, deliveryId: string, outcome: PulseOutcome, detail?: { companyName?: string | null; text?: string | null }): Promise<void> {
+  await owner.query('update store_pulse set outcome = $2, company_name = $3, detail = $4 where delivery_id = $1',
+    [deliveryId, outcome, detail?.companyName ?? null, detail?.text?.slice(0, 500) ?? null]);
+}
+
+export async function listStorePulses(owner: Db, limit = 30) {
+  const { rows } = await owner.query<{ deliveryId: string; event: string; at: string; outcome: PulseOutcome; buyerEmail: string | null; productId: string | null; companyName: string | null; detail: string | null }>(
+    `select delivery_id as "deliveryId", event, to_char(received_at, 'YYYY-MM-DD HH24:MI') as at, outcome, buyer_email as "buyerEmail",
+            product_id as "productId", company_name as "companyName", detail
+       from store_pulse order by received_at desc limit $1`, [limit]);
+  return rows;
+}
+
+/**
+ * The company a buyer pays for: the real (not demo) companies where this e-mail is owner or admin.
+ * One company: it; several: the one most recently created; none: null (the founder is told).
+ */
+export async function companyForBuyer(owner: Db, email: string): Promise<{ orgId: string; userId: string; name: string } | null> {
+  const { rows } = await owner.query<{ orgId: string; userId: string; name: string }>(
+    `select o.id as "orgId", u.id as "userId", o.name
+       from "user" u join member m on m."userId" = u.id join organization o on o.id = m."organizationId" join org_settings s on s.org_id = o.id
+      where lower(u.email) = lower($1) and m.role in ('owner', 'admin') and not s.is_demo
+      order by o."createdAt" desc limit 1`, [email]);
+  return rows[0] ?? null;
+}
