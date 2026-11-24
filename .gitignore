@@ -13,3 +13,6 @@ apps/web/src/routeTree.gen.ts
 .vinxi/
 storage/
 apps/web/.impeccable/review/
+e2e/shots/
+e2e/report/
+test-results/
