@@ -20,6 +20,7 @@
     "db:seed": "cd apps/web && tsx --env-file=.env.local scripts/seed.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@types/node": "^22.20.4",
     "@types/pg": "^8.23.1",
     "esbuild": "0.25.12",

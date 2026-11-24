@@ -1,0 +1,65 @@
+# End-to-end simulation (spec 077) against staging: after each staging deployment and on demand.
+# Simulated computer, iPhone (WebKit) and Android; on demand, BrowserStack's real browsers too.
+# Screenshots and the report are kept as an artifact « e2e-shots ».
+name: e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      browserstack:
+        description: Also run on BrowserStack's real browsers
+        type: boolean
+        default: false
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [dev]
+
+concurrency:
+  group: e2e
+  cancel-in-progress: false
+
+jobs:
+  simulate:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      E2E_BASE_URL: https://struo-staging.kete.digital
+      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+      E2E_PORTAL_URL: ${{ secrets.E2E_PORTAL_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Wait for staging to run this version
+        if: github.event_name == 'workflow_run'
+        run: |
+          for i in $(seq 1 40); do
+            if curl -s "$E2E_BASE_URL/api/health" | grep -q "${{ github.event.workflow_run.head_sha }}"; then echo "staging is up to date"; exit 0; fi
+            sleep 15
+          done
+          echo "staging did not reach ${{ github.event.workflow_run.head_sha }} in 10 minutes"; exit 1
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Simulate (computer, iPhone, Android)
+        run: npx playwright test -c e2e
+      - name: Real browsers (BrowserStack)
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.browserstack
+        env:
+          BROWSERSTACK: '1'
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: npx playwright test -c e2e --grep-invert "offline"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-shots
+          path: |
+            e2e/shots
+            e2e/report
+            test-results
+          retention-days: 14
