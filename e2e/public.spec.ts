@@ -1,6 +1,6 @@
 // The visitor: landing, estimate in their currency, demo, trial, call-back form, legal pages.
 import { expect, test } from '@playwright/test';
-import { fitsWidth, shot } from './helpers.ts';
+import { fitsWidth, isMobile, shot } from './helpers.ts';
 
 test('the landing reads well and fits the screen @visual', async ({ page }, info) => {
   const errors: string[] = [];
@@ -14,7 +14,8 @@ test('the landing reads well and fits the screen @visual', async ({ page }, info
     await page.waitForTimeout(400);
     await shot(page, info, `02-landing-${id}`);
   }
-  await shot(page, info, '03-landing-full', true);
+  // A phone's full page is taller than a screenshot can be: the sections above already show it.
+  if (!isMobile(info)) await shot(page, info, '03-landing-full', true);
   expect(errors, 'JavaScript errors on the landing').toEqual([]);
 });
 
@@ -34,9 +35,10 @@ test('the main actions lead somewhere', async ({ page }) => {
   await expect(page.locator('a[href="/signup"]').first()).toBeVisible();
   await expect(page.locator('a[href="#rappel"]').first()).toBeVisible();
   await page.goto('/demo');
+  await page.waitForLoadState('networkidle');
   await expect(page.locator('body')).toContainText(/démo|Démo/u);
   for (const path of ['/signup', '/login']) {
-    const response = await page.goto(path);
+    const response = await page.goto(path, { waitUntil: 'networkidle' });
     expect(response?.status()).toBe(200);
   }
 });

@@ -22,6 +22,9 @@ export function PushPrompt() {
   const { t } = useI18n();
   const [later, setLater] = useState(true);
   useEffect(() => {
+    // Only while this device can still be asked (supported, never answered): otherwise nothing to do.
+    const askable = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && Notification.permission === 'default';
+    if (!askable) { setLater(true); return; }
     try { const until = Number(localStorage.getItem(DISMISS) ?? 0); setLater(until > Date.now()); } catch { setLater(false); }
   }, []);
   if (later) return null;

@@ -23,12 +23,26 @@ export async function shot(page: Page, info: TestInfo, name: string, fullPage = 
   await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage });
 }
 
+/**
+ * Signs in through the real form. The server slows down repeated sign-ins from one address (a
+ * protection): on « too many requests » the test waits and tries again, like a patient person.
+ */
 export async function signIn(page: Page, role: keyof typeof ACCOUNTS) {
-  await page.goto('/login');
-  await page.locator('input[name="email"]').fill(ACCOUNTS[role]);
-  await page.locator('input[name="password"]').fill(password());
-  await page.locator('form button.btn').first().click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30_000 });
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await page.goto('/login');
+    await page.waitForLoadState('networkidle');
+    await page.locator('input[name="email"]').fill(ACCOUNTS[role]);
+    await page.locator('input[name="password"]').fill(password());
+    const answer = page.waitForResponse((response) => response.url().includes('/api/auth/sign-in'), { timeout: 30_000 });
+    await page.locator('form button.btn').first().click();
+    const status = (await answer).status();
+    if (status === 429) { await page.waitForTimeout(12_000); continue; }
+    expect(status, 'sign-in refused').toBe(200);
+    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 30_000 });
+    await page.waitForLoadState('networkidle');
+    return;
+  }
+  throw new Error(`could not sign in as ${role}: too many attempts`);
 }
 
 /** No horizontal scroll on the page: the layout fits the screen. */
