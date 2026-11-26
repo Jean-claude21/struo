@@ -39,10 +39,11 @@ export function formatDate(locale: string, value: string | null | undefined, wit
   }).format(date);
 }
 
+/** The person's local day (YYYY-MM-DD): `toISOString` would give the UTC day, a day off near midnight. */
 export const todayIso = (offsetDays = 0) => {
   const date = new Date();
   date.setDate(date.getDate() + offsetDays);
-  return date.toISOString().slice(0, 10);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
 // ---------------------------------------------------------------- small components

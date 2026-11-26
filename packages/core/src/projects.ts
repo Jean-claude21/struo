@@ -218,8 +218,37 @@ const projectInput = z.object({
   phases: z.array(z.object({ name: z.string().trim().min(1).max(80), budgetMinor: z.number().int().min(0).default(0) })).optional(),
 });
 
+/** An end before the start is refused in words, not by the database's bare check. */
+function ensureDateOrder(start: string | null | undefined, end: string | null | undefined): void {
+  if (start && end && end < start) throw new DomainError('end_before_start', 422);
+}
+
+/**
+ * What would refuse this new project, checked without writing: dates in order, a free code, a client
+ * of the company. Lets a door show the refusal on the preview rather than after the « yes ».
+ */
+async function checkNewProjectTx(tx: Tx, actor: Actor, data: z.infer<typeof projectInput>): Promise<void> {
+  ensureDateOrder(data.startDate, data.endDate);
+  const code = data.code?.trim();
+  if (code) {
+    const taken = await tx.query('select 1 from project where org_id = $1 and code = $2', [actor.orgId, code]);
+    if (taken.rowCount) throw new DomainError('code_taken', 409, { code });
+  }
+  if (data.clientId) {
+    const client = await tx.query('select 1 from client where id = $1 and org_id = $2', [data.clientId, actor.orgId]);
+    if (!client.rowCount) throw notFound();
+  }
+}
+
+export async function checkNewProject(db: Db, actor: Actor, input: unknown): Promise<void> {
+  ensure(actor, 'projects.write');
+  const data = parse(projectInput, input);
+  await asActor(db, actor, (tx) => checkNewProjectTx(tx, actor, data));
+}
+
 async function createProjectTx(tx: Tx, actor: Actor, data: z.infer<typeof projectInput>): Promise<string> {
   await assertWithinLimit(tx, actor.orgId, 'projects');
+  ensureDateOrder(data.startDate, data.endDate);
   const settings = (
     await tx.query<{ currency: string; vat: number; retention: number }>(
       'select currency_code as currency, vat_bps as vat, retention_bps as retention from org_settings where org_id = $1',
@@ -299,6 +328,8 @@ export async function updateProject(db: Db, actor: Actor, id: string, input: unk
   await asActor(db, actor, async (tx) => {
     const before = (await tx.query('select * from project where id = $1 and org_id = $2 for update', [id, actor.orgId])).rows[0];
     if (!before) throw notFound();
+    const patched = Object.fromEntries(entries) as { startDate?: string | null; endDate?: string | null };
+    ensureDateOrder('startDate' in patched ? patched.startDate : before.start_date, 'endDate' in patched ? patched.endDate : before.end_date);
     if (entries.length) {
       try {
         await tx.query(
@@ -338,6 +369,7 @@ export async function updatePhase(db: Db, actor: Actor, phaseId: string, input: 
   await asActor(db, actor, async (tx) => {
     const before = (await tx.query('select * from project_phase where id = $1 and org_id = $2 for update', [phaseId, actor.orgId])).rows[0];
     if (!before) throw notFound();
+    ensureDateOrder(data.startDate !== undefined ? data.startDate : before.start_date, data.endDate !== undefined ? data.endDate : before.end_date);
     await tx.query(
       `update project_phase set name = coalesce($3, name), budget_minor = coalesce($4, budget_minor),
               progress_pct = coalesce($5, progress_pct),

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { asActor, ensure, journal, parse } from './access.ts';
+import { asActor, ensure, journal, orgToday, parse } from './access.ts';
 import type { Actor, Db, Tx } from './db.ts';
 import { DomainError, notFound } from './errors.ts';
 
@@ -58,6 +58,7 @@ export async function addMilestone(db: Db, actor: Actor, input: unknown): Promis
   return asActor(db, actor, async (tx) => {
     const project = await tx.query('select 1 from project where id = $1 and org_id = $2', [data.projectId, actor.orgId]);
     if (!project.rowCount) throw notFound();
+    if (data.actualOn && data.actualOn > await orgToday(tx, actor.orgId)) throw new DomainError('reached_in_future', 422);
     const { rows } = await tx.query<{ id: string }>(
       `insert into milestone (org_id, project_id, name, category, planned_on, actual_on, note, action, priority, client_validation, position)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
@@ -84,6 +85,14 @@ export async function updateMilestone(db: Db, actor: Actor, id: string, input: u
   await asActor(db, actor, async (tx) => {
     const before = (await tx.query('select * from milestone where id = $1 and org_id = $2 for update', [id, actor.orgId])).rows[0];
     if (!before) throw notFound();
+    if (data.actualOn && 'actualOn' in raw) await ensureReachable(tx, actor.orgId, id, data.actualOn);
+    // Back to « not reached » only while nothing waiting for it is reached: the order stays true.
+    if (data.actualOn === null && 'actualOn' in raw && before.actual_on) {
+      const { rows } = await tx.query<{ name: string }>(
+        `select m.name from milestone_dependency d join milestone m on m.id = d.milestone_id
+          where d.org_id = $1 and d.depends_on_id = $2 and m.actual_on is not null order by m.planned_on`, [actor.orgId, id]);
+      if (rows.length) throw new DomainError('successors_reached', 409, { reached: rows.map((row) => row.name).join(', ') });
+    }
     if (entries.length) {
       await tx.query(
         `update milestone set ${entries.map(([key], index) => `${columns[key]} = $${index + 3}`).join(', ')}
@@ -93,6 +102,37 @@ export async function updateMilestone(db: Db, actor: Actor, id: string, input: u
     }
     await journal(tx, actor, 'milestone.update', id, before, Object.fromEntries(entries));
   });
+}
+
+/**
+ * A milestone is reached on a day that has come, and only once every milestone it waits for is
+ * reached: the reception cannot be done while the foundations are still ahead.
+ */
+async function ensureReachable(tx: Tx, orgId: string, id: string, actualOn: string): Promise<void> {
+  if (actualOn > await orgToday(tx, orgId)) throw new DomainError('reached_in_future', 422);
+  const { rows } = await tx.query<{ name: string }>(
+    `select p.name from milestone_dependency d join milestone p on p.id = d.depends_on_id
+      where d.org_id = $1 and d.milestone_id = $2 and p.actual_on is null order by p.planned_on`,
+    [orgId, id],
+  );
+  if (rows.length) throw new DomainError('predecessors_pending', 409, { pending: rows.map((row) => row.name).join(', ') });
+}
+
+/** What would refuse marking this milestone reached, checked without writing (for a preview). */
+export async function checkMilestoneReachable(db: Db, actor: Actor, id: string, input: { actualOn?: string } = {}): Promise<void> {
+  ensure(actor, 'planning.write');
+  await asActor(db, actor, async (tx) => {
+    const found = await tx.query('select 1 from milestone where id = $1 and org_id = $2', [id, actor.orgId]);
+    if (!found.rowCount) throw notFound();
+    await ensureReachable(tx, actor.orgId, id, input.actualOn ?? await orgToday(tx, actor.orgId));
+  });
+}
+
+/** Marks a milestone reached, on the given day or today in the company's time zone. */
+export async function markMilestoneReached(db: Db, actor: Actor, id: string, input: { actualOn?: string } = {}): Promise<{ actualOn: string }> {
+  const actualOn = input.actualOn ?? await asActor(db, actor, (tx) => orgToday(tx, actor.orgId));
+  await updateMilestone(db, actor, id, { actualOn });
+  return { actualOn };
 }
 
 export async function removeMilestone(db: Db, actor: Actor, id: string): Promise<void> {
@@ -222,7 +262,9 @@ async function pushSuccessors(tx: Tx, orgId: string, startId: string): Promise<S
  * Moves a milestone to a new planned date and pushes what waits for it (spec 031). The answer lists
  * the milestones moved in cascade, with their former dates.
  */
-export async function moveMilestone(db: Db, actor: Actor, id: string, input: unknown): Promise<{ shifted: ShiftedMilestone[] }> {
+export interface BeyondSiteEnd { id: string; name: string; plannedOn: string; siteCode: string; siteEnd: string }
+
+export async function moveMilestone(db: Db, actor: Actor, id: string, input: unknown): Promise<{ shifted: ShiftedMilestone[]; beyondSiteEnd: BeyondSiteEnd[] }> {
   ensure(actor, 'planning.write');
   const data = parse(z.object({ plannedOn: dateString }), input);
   return asActor(db, actor, async (tx) => {
@@ -232,7 +274,16 @@ export async function moveMilestone(db: Db, actor: Actor, id: string, input: unk
     await tx.query('update milestone set planned_on = $3 where id = $1 and org_id = $2', [id, actor.orgId, data.plannedOn]);
     const shifted = await pushSuccessors(tx, actor.orgId, id);
     await journal(tx, actor, 'milestone.move', id, before, { ...data, shifted: shifted.length });
-    return { shifted };
+    // The move is kept, but what now falls after its site's planned end is said, not hidden.
+    const { rows: beyondSiteEnd } = await tx.query<BeyondSiteEnd>(
+      `select m.id, m.name, to_char(m.planned_on, 'YYYY-MM-DD') as "plannedOn", p.code as "siteCode",
+              to_char(p.end_date, 'YYYY-MM-DD') as "siteEnd"
+         from milestone m join project p on p.id = m.project_id
+        where m.org_id = $1 and m.id = any($2::uuid[]) and p.end_date is not null and m.planned_on > p.end_date
+        order by m.planned_on`,
+      [actor.orgId, [id, ...shifted.map((item) => item.id)]],
+    );
+    return { shifted, beyondSiteEnd };
   });
 }
 

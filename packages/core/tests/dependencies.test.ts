@@ -63,8 +63,9 @@ describe('milestone dependencies (spec 031)', () => {
   it('never moves a reached milestone, and stays inside the company', async () => {
     const first = await ms(siteB, 'Implantation', 1);
     const done = await ms(siteB, 'Réception partielle', 3);
-    await setMilestoneDependencies(db.app, owner, done, { dependsOn: [{ id: first }] });
+    // Reached first (nothing to wait for yet), then linked: a reached milestone stays where it is.
     await updateMilestone(db.app, owner, done, { actualOn: today(0) });
+    await setMilestoneDependencies(db.app, owner, done, { dependsOn: [{ id: first }] });
     expect((await moveMilestone(db.app, owner, first, { plannedOn: today(20) })).shifted).toEqual([]);
     await expect(moveMilestone(db.app, owner, done, { plannedOn: today(9) })).rejects.toMatchObject({ code: 'already_validated' });
     await expect(setMilestoneDependencies(db.app, other, done, { dependsOn: [] })).rejects.toMatchObject({ status: 404 });
@@ -76,6 +77,6 @@ describe('milestone dependencies (spec 031)', () => {
     await updatePhase(db.app, owner, phase.id, { startDate: today(0), endDate: today(20) });
     const row = (await gantt(db.app, owner)).sites.find((site) => site.id === siteA)!;
     expect(row.phases.find((item) => item.id === phase.id)).toMatchObject({ startDate: today(0), endDate: today(20) });
-    await expect(updatePhase(db.app, owner, phase.id, { startDate: today(10), endDate: today(1) })).rejects.toBeTruthy();
+    await expect(updatePhase(db.app, owner, phase.id, { startDate: today(10), endDate: today(1) })).rejects.toMatchObject({ code: 'end_before_start' });
   });
 });

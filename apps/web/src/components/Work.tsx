@@ -6,7 +6,7 @@ import { Link, useRouter } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { CalendarClock, Check, Circle, CircleDot, Download, Flag, History, Layers, ListChecks, MessagesSquare, Trash2, TriangleAlert } from 'lucide-react';
 import { Avatar, EmptyState, Panel, Seg, useRelative, useToast } from './kit.tsx';
-import { DateText } from './ui.tsx';
+import { DateText, todayIso } from './ui.tsx';
 import { createTask, getDocumentVersions, postNote, removeTask, updateTask } from '@/features/office/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
@@ -33,7 +33,7 @@ export function TaskBoard({ tasks, members, projects, projectId, role, userId, m
   const toast = useToast();
   const writer = can(role, 'projects.write');
   const [filter, setFilter] = useState<'open' | 'week' | 'mine' | 'done'>('open');
-  const weekEnd = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+  const weekEnd = todayIso(7);
   const [busy, setBusy] = useState(false);
   const shown = tasks.filter((task) => (filter === 'done' ? task.status === 'done' : task.status !== 'done')
     && (filter !== 'mine' || task.assigneeId === userId)

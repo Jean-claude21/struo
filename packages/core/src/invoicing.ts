@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { asActor, ensure, journal, parse } from './access.ts';
+import { asActor, ensure, journal, orgToday, parse } from './access.ts';
 import type { Actor, Db, Tx } from './db.ts';
 import { DomainError, notFound } from './errors.ts';
 // Kept here, not imported from finance.ts (which imports this module): avoids a load cycle.
@@ -151,8 +151,8 @@ export async function createDraftInvoice(db: Db, actor: Actor, input: unknown): 
       [data.projectId, actor.orgId])).rows[0];
     if (!project) throw notFound();
     const settings = await readSettings(tx, actor.orgId);
-    const today = new Date().toISOString().slice(0, 10);
-    const due = data.dueOn ?? new Date(Date.now() + settings.dueDays * 86_400_000).toISOString().slice(0, 10);
+    const today = await orgToday(tx, actor.orgId);
+    const due = data.dueOn ?? new Date(Date.parse(`${today}T12:00:00Z`) + settings.dueDays * 86_400_000).toISOString().slice(0, 10);
     const { rows } = await tx.query<{ id: string }>(
       `insert into invoice (org_id, project_id, number, kind, label, issued_on, due_on, currency_code, amount_minor, vat_bps, retention_bps,
                             deduction_minor, status, terms, created_by)

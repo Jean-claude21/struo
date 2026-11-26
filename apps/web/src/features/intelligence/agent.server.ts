@@ -99,6 +99,7 @@ export async function runTurn(rt: Runtime, actor: core.Actor, locale: 'fr' | 'en
           try {
             const args = capability.input.parse(JSON.parse(String(call.arguments || '{}')));
             if (capability.autonomy >= 3) {
+              await capability.check?.(context, args);
               const summary = capability.summary ? await capability.summary(context, args) : JSON.stringify(args);
               const token = sign(rt, JSON.stringify({ c: name, i: args, o: actor.orgId, u: actor.userId, e: Date.now() + 24 * 3_600_000 }));
               emit({ type: 'draft', id, name, level: capability.autonomy, summary, token });

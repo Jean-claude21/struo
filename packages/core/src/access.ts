@@ -35,8 +35,29 @@ export async function resolveActor(db: Db, userId: string, orgId: string, door: 
   return locked ? { userId, orgId, role: found.role, door, locked } : { userId, orgId, role: found.role, door };
 }
 
-/** Runs work as the actor, in their company. */
-export const asActor = <T>(db: Db, actor: Actor, work: (tx: Tx) => Promise<T>) => asUser(db, actor.userId, work);
+/**
+ * Runs work as the actor, in their company. The transaction's time zone is the company's, so every
+ * `current_date` in SQL (overdue, cash forecast, indicators) is the company's day, not the server's.
+ */
+export const asActor = <T>(db: Db, actor: Actor, work: (tx: Tx) => Promise<T>) => asUser(db, actor.userId, async (tx) => {
+  await tx.query(`select set_config('TimeZone', coalesce((select time_zone from org_settings where org_id = $1), 'UTC'), true)`, [actor.orgId]);
+  return work(tx);
+});
+
+/**
+ * Today in the company's time zone (YYYY-MM-DD). A server clock in UTC says « tomorrow » to a company
+ * in Douala from 23:00, so a date written as « today » is always read here, never from `new Date()`.
+ */
+export async function orgToday(tx: Tx, orgId: string): Promise<string> {
+  const { rows } = await tx.query<{ day: string }>(
+    `select to_char((now() at time zone coalesce((select time_zone from org_settings where org_id = $1), 'UTC'))::date, 'YYYY-MM-DD') as day`,
+    [orgId],
+  );
+  return rows[0]!.day;
+}
+
+/** Today in the actor's company time zone. */
+export const companyToday = (db: Db, actor: Actor): Promise<string> => asActor(db, actor, (tx) => orgToday(tx, actor.orgId));
 
 /** Journal row: who did what, before and after, through which door (constitution IV). */
 export async function journal(

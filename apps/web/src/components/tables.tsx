@@ -1,5 +1,5 @@
 import { ReminderDialog } from './forms.tsx';
-import { Badge, DateText, Empty, ErrorText, Money, useAction } from './ui.tsx';
+import { Badge, DateText, Empty, ErrorText, Money, todayIso, useAction } from './ui.tsx';
 import { updateDocument, updateMilestone } from '@/features/office/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 import { DocumentVersions } from './Work.tsx';
@@ -242,7 +242,7 @@ export function MilestoneRows({ milestones, canWrite, showProject }: { milestone
                   <button
                     type="button"
                     className="btn secondary small"
-                    onClick={() => run(() => updateMilestone({ data: { id: milestone.id, patch: { actualOn: new Date().toISOString().slice(0, 10) } } }))}
+                    onClick={() => run(() => updateMilestone({ data: { id: milestone.id, patch: { actualOn: todayIso() } } }))}
                   >
                     {t('planning.markDone')}
                   </button>
