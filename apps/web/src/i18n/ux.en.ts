@@ -232,7 +232,7 @@ export const uxEn: typeof uxFr = {
     redemptions: "Licences activated by companies",
   },
   lic: {
-    title: "Pay with a licence",
+    title: "My licence",
     how: "Buy a Struo licence on Chariow (mobile money or card), then paste the key you received by e-mail here: the subscription is extended at once.",
     buy: "Buy",
     storeOff: "Paying with a licence is not open yet.",
@@ -240,6 +240,10 @@ export const uxEn: typeof uxFr = {
     activate: "Activate",
     applied: "Licence activated: subscription paid until {date}.",
     history: "Licences already activated",
+    haveKey: "Already have a key, or paid with another e-mail address?",
+    waiting: "Checking your payment: your licence activates by itself in a few moments. You can keep this page open.",
+    arrived: "Done: your licence is active until {date}. Thank you!",
+    late: "Still nothing? If you paid with another e-mail address, paste the key you received from the store below.",
   },
   views: {
     byDay: "By day",

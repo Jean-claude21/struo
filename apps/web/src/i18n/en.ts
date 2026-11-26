@@ -76,7 +76,7 @@ export const en: Catalog = {
     license_expired: "This licence expired.",
     license_already_used: "This licence was already used.",
     license_unknown_product: "This licence matches no Struo plan.",
-    licence_locked: "Your trial or licence has ended: the space is read-only. Enter a licence in Settings to carry on.",
+    licence_locked: "Your trial or licence has ended: the space is read-only. Renew your licence in Settings to carry on.",
     license_store_off: "Paying with a licence is not open yet.",
     license_store_unreachable: "The licence store does not answer: try again in a moment.",
     company_suspended: "This company is suspended. Contact the Struo team.",

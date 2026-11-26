@@ -578,8 +578,25 @@ function LicenseSection() {
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const load = () => getLicenseOffer().then(setOffer).catch(() => setOffer(null));
+  // Spec 081: after « Buy », the store's Pulse applies the licence by itself: wait for it here.
+  const [waiting, setWaiting] = useState<{ since: number; count: number } | null>(null);
+  const load = () => getLicenseOffer().then((value) => { setOffer(value); return value; }).catch(() => { setOffer(null); return null; });
   useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setInterval(async () => {
+      const value = await load();
+      const latest = value?.redemptions[0];
+      if (value && value.redemptions.length > waiting.count && latest) {
+        setWaiting(null);
+        setMessage({ ok: true, text: t('lic.arrived', { date: date(latest.paidUntil) }) });
+      } else if (Date.now() - waiting.since > 4 * 60_000) {
+        window.clearInterval(timer);
+      }
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiting]);
   const date = (value: string) => new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'fr-FR', { dateStyle: 'long' }).format(new Date(value));
   return (
     <section className="card stack" id="licence">
@@ -594,13 +611,16 @@ function LicenseSection() {
               <b>{product.label}</b>
               {product.priceMinor ? <span className="offer-price">{formatMoney(locale, product.priceMinor, offer.currency)}</span> : null}
               {points.length ? <ul>{points.map((point) => <li key={point}><Rich text={point} /></li>)}</ul> : null}
-              <a className={`btn ${product.highlight ? '' : 'secondary'} small`} href={product.buyUrl!} target="_blank" rel="noreferrer">{t('lic.buy')}</a>
+              <a className={`btn ${product.highlight ? '' : 'secondary'} small`} href={product.buyUrl!} target="_blank" rel="noreferrer" onClick={() => { if (offer.automatic) setWaiting({ since: Date.now(), count: offer.redemptions.length }); }}>{t('lic.buy')}</a>
             </article>
           );
         })}</div>
       ) : null}
       {offer && !offer.storeConfigured ? <p className="notice warn small" style={{ margin: 0 }}>{t('lic.storeOff')}</p> : null}
-      <form className="row tight nowrap" onSubmit={async (event) => {
+      {waiting ? <p className="notice info small" style={{ margin: 0 }}>{Date.now() - waiting.since > 4 * 60_000 ? t('lic.late') : t('lic.waiting')}</p> : null}
+      <details className="licence-key" open={!offer?.automatic}>
+      <summary className="small">{t('lic.haveKey')}</summary>
+      <form className="row tight nowrap" style={{ marginTop: '.6rem' }} onSubmit={async (event) => {
         event.preventDefault(); setBusy(true); setMessage(null);
         try {
           const result = await redeemLicense({ data: { key } });
@@ -610,6 +630,7 @@ function LicenseSection() {
         <input value={key} onChange={(event) => setKey(event.target.value)} placeholder={t('lic.placeholder')} autoComplete="off" style={{ flex: 1, minWidth: 0, fontFamily: 'monospace' }} />
         <button type="submit" className="btn" disabled={busy || key.trim().length < 6}>{t('lic.activate')}</button>
       </form>
+      </details>
       {message ? <p className={message.ok ? 'notice ok small' : 'error small'} style={{ margin: 0 }}>{message.text}</p> : null}
       {offer?.redemptions.length ? (
         <div className="stack" style={{ gap: '.3rem' }}>

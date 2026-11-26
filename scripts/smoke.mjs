@@ -21,10 +21,10 @@ const text = async (path, init) => { const res = await get(path, init); return {
 // The landing in both languages, its photos, prices on quote by default.
 {
   const fr = await text('/', { headers: { 'accept-language': 'fr-FR,fr' } });
-  ok('landing FR', fr.res.status === 200 && fr.body.includes('sous contrôle'));
+  ok('landing FR', fr.res.status === 200 && fr.body.includes('aussi bien que vos ouvrages'));
   ok('landing has no unfilled {placeholder}', !/\{[a-z]+\}/u.test(fr.body.replace(/<script[\s\S]*?<\/script>/gu, '')));
   const en = await text('/', { headers: { 'accept-language': 'en-GB,en' } });
-  ok('landing EN from the browser language', en.res.status === 200 && en.body.includes('under control'));
+  ok('landing EN from the browser language', en.res.status === 200 && en.body.includes('as well as you build'));
   const images = [...new Set([...fr.body.matchAll(/src="(\/landing\/[^"]+)"/gu)].map((match) => match[1]))];
   const codes = await Promise.all(images.map(async (src) => (await get(src)).status));
   ok('landing photos', images.length >= 6 && codes.every((code) => code === 200), `${images.length} photos`);

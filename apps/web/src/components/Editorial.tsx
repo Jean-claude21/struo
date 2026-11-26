@@ -18,8 +18,9 @@ export function EdHeader({ base = '' }: { base?: string }) {
       <a className="ed-brand" href={base ? '/' : '#top'} aria-label={t('lp.home')}><BrandMark size={30} onDark /><strong>struo</strong></a>
       <nav aria-label={t('lp.navLabel')}>
         <a href={`${base}#probleme`}>{t('lp.nav.problem')}</a>
-        <a href={`${base}#systeme`}>{t('lp.nav.system')}</a>
-        <a href={`${base}#preuve`}>{t('lp.nav.proof')}</a>
+        <a href={`${base}#piliers`}>{t('lp.nav.platform')}</a>
+        <a href={`${base}#equipe`}>{t('lp.nav.team')}</a>
+        <a href={`${base}#offre`}>{t('lp.nav.offer')}</a>
         <a href={`${base}#tarifs`}>{t('lp.nav.pricing')}</a>
       </nav>
       <div className="ed-nav-end">
