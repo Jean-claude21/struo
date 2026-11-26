@@ -6,10 +6,10 @@ test('the landing reads well and fits the screen @visual', async ({ page }, info
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
-  await expect(page.locator('h1')).toContainText('sous contrôle');
+  await expect(page.locator('h1')).toContainText('aussi bien que vos ouvrages');
   await shot(page, info, '01-landing-top');
   await fitsWidth(page);
-  for (const id of ['probleme', 'calcul', 'systeme', 'preuve', 'tarifs', 'rappel']) {
+  for (const id of ['probleme', 'calcul', 'piliers', 'equipe', 'offre', 'preuve', 'tarifs', 'questions', 'rappel']) {
     await page.locator(`#${id}`).scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
     await shot(page, info, `02-landing-${id}`);
@@ -34,6 +34,7 @@ test('the main actions lead somewhere', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('a[href="/signup"]').first()).toBeVisible();
   await expect(page.locator('a[href="#rappel"]').first()).toBeVisible();
+  await expect(page.locator('a[href="/api/demo/start?role=owner"]')).toHaveCount(1);
   await page.goto('/demo');
   await page.waitForLoadState('networkidle');
   await expect(page.locator('body')).toContainText(/démo|Démo/u);
@@ -46,12 +47,12 @@ test('the main actions lead somewhere', async ({ page }) => {
 test('the call-back form asks only the name and a way to reach', async ({ page }, info) => {
   await page.goto('/#rappel');
   const form = page.locator('#rappel form');
-  await expect(form.locator('.ed-req')).toHaveCount(2);
+  await expect(form.locator('label i')).toHaveCount(2);
   await form.locator('input[name="name"]').fill('Test automatique (E2E)');
   await form.locator('input[name="reach"]').fill(`e2e-${Date.now()}@interco.struo.test`);
   await shot(page, info, '05-callback-filled');
   await form.locator('button[type="submit"]').click();
-  await expect(page.locator('#rappel .ed-sent')).toBeVisible();
+  await expect(page.locator('#rappel .h-sent')).toBeVisible();
   await shot(page, info, '06-callback-sent');
 });
 
