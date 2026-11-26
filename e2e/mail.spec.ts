@@ -113,6 +113,7 @@ test('invitation, sign-up, address check and forgotten password arrive by e-mail
     await person.goto(linkIn(reset, /reset-password/u));
     await person.waitForLoadState('networkidle');
     await person.locator('input[name="password"]').fill(second);
+    await person.locator('input[name="confirm"]').fill(second);
     since = Date.now() - 5_000;
     await person.getByRole('button', { name: /Enregistrer le mot de passe/u }).click();
     await nextMail(tag, since, /mot de passe Struo a été modifié/u);
