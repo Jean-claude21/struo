@@ -66,6 +66,7 @@ real external account · ⏳ next.
 | 072 | `072-trial-settings` | Sign-in and self-serve trial on the landing; trial length and demo limit set by the founder | 🟡 for review | `licence.test.ts` |
 | 073 | `073-notifications` | Notification centre (bell), review notice to the site lead, per-site targeting, choices per person, phone reminder | 🟡 for review | `notifications.test.ts` |
 | 080 | `080-home-v2` | Home « Bâtissez votre entreprise » (framework Kete, real screens, demo per role) and licence texts that renew by themselves (081) | 🟡 for review | `e2e/public.spec.ts` |
+| 082 | `082-mail-e2e` | Real e-mails read in a testmail.app inbox: invitation, address check, forgotten password, password changed | 🟡 for review | `e2e/mail.spec.ts` |
 | 019 | `019-field-validation` | Field test with 2 site leads and the pilot client's manager; hypothesis: ≥ 3 reports per week per site lead for a month | ⏳ | Product risk n°1 (see vision) |
 
 The status column is updated in the pull request that delivers the feature, with its proof.
