@@ -350,6 +350,8 @@ export const uxFr = {
     switchCompany: 'Changer d’entreprise',
     newCompany: 'Créer une entreprise',
     signOut: 'Se déconnecter',
+    install: 'Installer Struo sur cet appareil',
+    appDescription: 'Le bureau de votre entreprise du BTP : chantiers, finances, équipes et clients.',
     profile: 'Mon profil',
     notifications: 'Notifications',
     noNotifications: 'Rien de nouveau.',

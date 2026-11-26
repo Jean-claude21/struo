@@ -1,10 +1,11 @@
 // Struo field app service worker: the app opens without network.
 // - Built assets (/assets/*, hashed names): cache first.
 // - Field pages (/field…): network first, cached copy when offline.
-// - Everything else (API, office pages) goes to the network untouched: data is never served stale
-//   by the worker; the field app keeps its own data in IndexedDB.
-const VERSION = 'struo-field-v2';
-const SHELL = ['/field', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'];
+// - Office pages (/app…): network only; without network, a static « offline » page (spec 084).
+// - Everything else (API) goes to the network untouched: data is never served stale by the worker;
+//   the field app keeps its own data in IndexedDB.
+const VERSION = 'struo-field-v3';
+const SHELL = ['/field', '/offline.html', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -47,6 +48,11 @@ self.addEventListener('fetch', (event) => {
       );
       return;
     }
+  }
+
+  if (request.mode === 'navigate' && (url.pathname === '/app' || url.pathname.startsWith('/app/'))) {
+    event.respondWith(fetch(request).catch(() => caches.match('/offline.html').then((cached) => cached || Response.error())));
+    return;
   }
 
   if (request.mode === 'navigate' && url.pathname.startsWith('/field')) {
