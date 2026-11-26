@@ -66,3 +66,12 @@ test('the legal pages open and fit @visual', async ({ page }, info) => {
   await page.goto('/confidentialite');
   await shot(page, info, '07-legal-privacy');
 });
+
+test('the office installs like an app, in the person’s language', async ({ request }) => {
+  const fr = await (await request.get('/api/app/manifest', { headers: { 'accept-language': 'fr-FR' } })).json() as { start_url: string; display: string; lang: string; icons: unknown[] };
+  expect(fr).toMatchObject({ start_url: '/app', display: 'standalone', lang: 'fr' });
+  expect(fr.icons.length).toBeGreaterThan(1);
+  const en = await (await request.get('/api/app/manifest', { headers: { 'accept-language': 'en-GB' } })).json() as { lang: string };
+  expect(en.lang).toBe('en');
+  expect((await request.get('/offline.html')).status()).toBe(200);
+});

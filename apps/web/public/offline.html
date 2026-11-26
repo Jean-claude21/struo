@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- Spec 084: shown by the service worker when the office opens without network. Static and
+     bilingual on purpose: it must work with no server and no catalog. -->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#202820">
+<title>Struo</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+  :root { --bg: #f8f7f1; --ink: #202820; --muted: #515c52; --line: #d7d9d0; --accent: #b9461e; --card: #ffffff; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #131a15; --ink: #eef0ea; --muted: #a9b2a8; --line: #2c3a30; --accent: #e0683c; --card: #1a231d; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--ink);
+         font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width: 420px; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 28px 24px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -.5px; margin-bottom: 18px; }
+  h1 { font-size: 22px; line-height: 1.25; margin: 0 0 10px; }
+  p { color: var(--muted); line-height: 1.55; margin: 0 0 20px; }
+  button { font: inherit; font-weight: 700; color: #fff; background: var(--accent); border: 0; border-radius: 8px; padding: 12px 18px; cursor: pointer; width: 100%; }
+  a { color: var(--muted); display: block; text-align: center; margin-top: 14px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><img src="/icon.svg" alt="" width="26" height="26"> struo</div>
+  <h1 data-fr="Pas de réseau pour l’instant" data-en="No network right now">Pas de réseau pour l’instant</h1>
+  <p data-fr="Le bureau a besoin du réseau pour afficher des chiffres à jour. Dès que la connexion revient, la page se recharge toute seule. Sur le chantier, l’application terrain, elle, fonctionne sans réseau."
+     data-en="The office needs the network to show up-to-date figures. As soon as the connection is back, the page reloads by itself. On site, the field app works without network.">Le bureau a besoin du réseau pour afficher des chiffres à jour. Dès que la connexion revient, la page se recharge toute seule. Sur le chantier, l’application terrain, elle, fonctionne sans réseau.</p>
+  <button type="button" onclick="location.reload()" data-fr="Réessayer" data-en="Try again">Réessayer</button>
+  <a href="/field" data-fr="Ouvrir l’application terrain" data-en="Open the field app">Ouvrir l’application terrain</a>
+</main>
+<script>
+  (function () {
+    var cookie = document.cookie.match(/struo_lang=(fr|en)/);
+    var lang = cookie ? cookie[1] : (/^en/i.test(navigator.language || '') ? 'en' : 'fr');
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-' + lang + ']').forEach(function (node) { node.textContent = node.getAttribute('data-' + lang); });
+    window.addEventListener('online', function () { location.reload(); });
+  })();
+</script>
+</body>
+</html>

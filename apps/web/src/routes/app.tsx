@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   BarChart3, Building2, CalendarRange, ChevronsUpDown, FileText, FolderKanban, HardHat, Home, LogOut, Menu, Monitor, Moon, Palette, Plus,
-  Keyboard, ListChecks, MailWarning, Sparkles, Receipt, Search, Settings, Shield, Sun, UserRound, Users, Wallet, WalletCards, Contact, type LucideIcon,
+  Keyboard, ListChecks, MonitorDown, MailWarning, Sparkles, Receipt, Search, Settings, Shield, Sun, UserRound, Users, Wallet, WalletCards, Contact, type LucideIcon,
 } from 'lucide-react';
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { CommandPalette } from '@/components/Palette.tsx';
@@ -34,6 +34,10 @@ export const Route = createFileRoute('/app')({
     }
     return { viewer: { ...viewer, company: viewer.company } };
   },
+  head: () => ({
+    links: [{ rel: 'manifest', href: '/api/app/manifest' }],
+    meta: [{ name: 'apple-mobile-web-app-capable', content: 'yes' }, { name: 'apple-mobile-web-app-title', content: 'Struo' }],
+  }),
   component: OfficeLayout,
   errorComponent: OfficeError,
 });
@@ -120,6 +124,16 @@ function OfficeLayout() {
 
   useEffect(() => { setTheme(readTheme()); }, []);
   useEffect(() => { setSideOpen(false); }, [path]);
+  // Spec 084: installable office. The worker shows an « offline » page; it never keeps office data.
+  const [installer, setInstaller] = useState<{ prompt: () => Promise<void> } | null>(null);
+  useEffect(() => {
+    if ('serviceWorker' in navigator) void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+    const offer = (event: Event) => { event.preventDefault(); setInstaller(event as unknown as { prompt: () => Promise<void> }); };
+    const done = () => setInstaller(null);
+    window.addEventListener('beforeinstallprompt', offer);
+    window.addEventListener('appinstalled', done);
+    return () => { window.removeEventListener('beforeinstallprompt', offer); window.removeEventListener('appinstalled', done); };
+  }, []);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       const typing = /input|textarea|select/iu.test((event.target as HTMLElement).tagName) || (event.target as HTMLElement).isContentEditable;
@@ -236,6 +250,7 @@ function OfficeLayout() {
                   <div className="muted xsmall trunc">{viewer.email}</div>
                 </div>
                 <MenuItem icon={UserRound} onSelect={() => { close(); void navigate({ to: '/app/account' }); }}>{t('account.title')}</MenuItem>
+                {installer ? <MenuItem icon={MonitorDown} onSelect={() => { close(); void installer.prompt().finally(() => setInstaller(null)); }}>{t('shell.install')}</MenuItem> : null}
                 <div className="msep" />
                 <div className="mhead">{t('ui.theme')}</div>
                 <MenuItem icon={Sun} checked={theme === 'light'} onSelect={() => changeTheme('light')}>{t('ui.themeLight')}</MenuItem>
