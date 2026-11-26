@@ -351,6 +351,8 @@ export const uxEn: typeof uxFr = {
     switchCompany: 'Switch company',
     newCompany: 'Create a company',
     signOut: 'Sign out',
+    install: 'Install Struo on this device',
+    appDescription: 'Your construction company’s office: sites, finances, teams and clients.',
     profile: 'My profile',
     notifications: 'Notifications',
     noNotifications: 'Nothing new.',
