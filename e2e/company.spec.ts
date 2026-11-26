@@ -65,7 +65,8 @@ test('the accountant opens the books, and is kept out of the field reports', asy
   await expect(page).toHaveURL(/\/app\/finance/u);
   await shot(page, info, '40-accountant-finance');
   await fitsWidth(page);
-  await page.goto('/app/field');
+  // The app sends the accountant away at once: that redirect may interrupt the navigation itself.
+  await page.goto('/app/field').catch((error: Error) => { if (!/interrupted by another navigation/u.test(error.message)) throw error; });
   await expect(page).not.toHaveURL(/\/app\/field$/u);
 });
 
