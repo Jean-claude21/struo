@@ -1,8 +1,9 @@
-// Public landing (spec 061): the founder's « editorial cockpit » mockup, implemented as is
-// (struo-landing-editorial-cockpit: same sections, words, photos and look, scoped under .ed).
-// What the mockup only pretended is real here: the cockpit pins switch the site, the estimate uses
-// the visitor's currency, prices come from the visitor's country (on quote when none is published),
-// each role opens its own demo, and the call-back form sends a real request.
+// Public landing (spec 080): « Build your company as well as you build », written with the Kete
+// Product Framework (docs/product/strategy-sheet.md): identity line + plain description, the four
+// losses of control, the cost (the visitor's own estimate), from disorder to control, four pillars
+// each shown by a real screen of Struo (demo company), the five roles and their demo, the field
+// without network, the 30-day setup, honest proof (the tool itself, no invented result), prices of
+// the visitor's country, objections, call-back. Styles under `.ed2` (classes h-), header/footer `.ed`.
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { COUNTRY_COOKIE, sortedCountries } from '@/features/settings/countries.ts';
@@ -20,21 +21,13 @@ export const Route = createFileRoute('/')({
 
 const IMG = '/landing/ed';
 
-// The five sites of the cockpit (demo data): position on the map, state and progress.
-const SITES = [
-  { left: 18, top: 31, tone: 'ok', progress: 74, watch: false },
-  { left: 57, top: 21, tone: 'ok', progress: 61, watch: true },
-  { left: 72, top: 59, tone: 'warn', progress: 48, watch: true },
-  { left: 37, top: 67, tone: 'ok', progress: 86, watch: false },
-  { left: 87, top: 36, tone: 'ok', progress: 53, watch: false },
-] as const;
-
+/** The five roles, each with a real screen of the demo company. */
 const ROLES = [
-  { key: 'owner', image: 'daily-routine' },
-  { key: 'engineer', image: 'proof-demo' },
-  { key: 'site_lead', image: 'team-launch' },
-  { key: 'accountant', image: 'value-cost' },
-  { key: 'client', image: 'client-trust' },
+  { key: 'owner', image: 'cap-owner-today' },
+  { key: 'engineer', image: 'cap-engineer-field' },
+  { key: 'site_lead', image: 'cap-field-home' },
+  { key: 'accountant', image: 'cap-owner-finance' },
+  { key: 'client', image: 'cap-client-home' },
 ] as const;
 
 // Starting value of one working hour per currency: an editable assumption, never a claim.
@@ -43,42 +36,6 @@ const HOURLY: Record<string, number> = {
   NGN: 3500, GHS: 60, KES: 600, RWF: 3500, CDF: 8000, GNF: 25000, MGA: 12000,
 };
 const decimals = (currency: string) => new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2;
-
-function Cockpit() {
-  const { t } = useI18n();
-  const [active, setActive] = useState(2);
-  const site = SITES[active]!;
-  const k = (name: string) => t(`lp.hero.s${active}${name}` as MessageKey);
-  return (
-    <div className="ed-cockpit" aria-label={t('lp.hero.cockpitLabel')}>
-      <div className="ed-cockpit-top"><span><i /><i /><i /></span><b>{t('lp.hero.today')}</b><em>{t('lp.hero.live')}</em></div>
-      <div className="ed-cockpit-main">
-        <div className="ed-map" aria-label={t('lp.hero.mapLabel')}>
-          <svg viewBox="0 0 600 430" aria-hidden="true">
-            <path d="M-30 330 C150 270 210 380 380 290 S530 200 650 230" className="ed-road" />
-            <path d="M180 -20 C160 120 230 220 190 450" className="ed-road" />
-            <path d="M410 -20 C390 130 470 260 430 450" className="ed-road ed-thin" />
-            <path d="M-20 120 C170 160 330 60 640 110" className="ed-road ed-thin" />
-          </svg>
-          {SITES.map((item, index) => (
-            <button key={index} type="button" className={`ed-pin ed-${item.tone}${index === active ? ' ed-is-active' : ''}`} style={{ left: `${item.left}%`, top: `${item.top}%` }}
-              aria-label={t(`lp.hero.s${index}n` as MessageKey)} aria-pressed={index === active} onClick={() => setActive(index)} />
-          ))}
-          <div className="ed-map-count"><small>{t('lp.hero.active')}</small><strong>05</strong></div>
-        </div>
-        <aside className="ed-site-panel" aria-live="polite">
-          <p className="ed-site-status">{site.watch ? t('lp.hero.watch') : t('lp.hero.ok')}</p>
-          <h2>{k('n')}</h2>
-          <p>{k('m')}</p>
-          <div className="ed-progress"><i style={{ width: `${site.progress}%` }} /></div>
-          <strong>{site.progress} %</strong>
-          <p>{k('t')}</p>
-        </aside>
-      </div>
-      <div className="ed-cockpit-foot"><span><b>3</b> {t('lp.hero.decisions')}</span><span><b>2</b> {t('lp.hero.reports')}</span><span><b>1</b> {t('lp.hero.invoice')}</span></div>
-    </div>
-  );
-}
 
 /** The visitor's own estimate, in their currency. */
 function Calculator({ currency, country }: { currency: string; country: string }) {
@@ -122,7 +79,7 @@ function Calculator({ currency, country }: { currency: string; country: string }
   );
 }
 
-/** The call-back request (spec 045), in the mockup's form. */
+/** The call-back request (spec 045): only the name and a way to reach are required. */
 function CallBack() {
   const { t } = useI18n();
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
@@ -140,19 +97,34 @@ function CallBack() {
       trackEvent('contact-error');
     }
   };
-  if (state === 'sent') return <form><p className="ed-sent" role="status">{t('lp.final.sent')}</p></form>;
+  if (state === 'sent') return <div className="h-final-form"><h3>{t('lp.final.formTitle')}</h3><p className="h-sent" role="status">{t('lp.final.sent')}</p></div>;
   return (
-    <form onSubmit={(event) => void submit(event)}>
-      <label><span>{t('lp.final.name')} <span className="ed-req" aria-hidden="true">*</span></span><input name="name" required aria-required="true" maxLength={120} autoComplete="name" /></label>
-      <label>{t('lp.final.company')}<input name="company" maxLength={160} autoComplete="organization" /></label>
-      <label><span>{t('lp.final.reach')} <span className="ed-req" aria-hidden="true">*</span></span><input name="reach" required aria-required="true" minLength={3} maxLength={160} autoComplete="tel" /></label>
-      <label>{t('lp.final.sites')}<input name="sites" type="number" min={0} max={10000} inputMode="numeric" /></label>
+    <form className="h-final-form" onSubmit={(event) => void submit(event)}>
+      <h3>{t('lp.final.formTitle')}</h3>
+      <label><span>{t('lp.final.name')} <i aria-hidden="true">*</i></span><input name="name" required aria-required="true" maxLength={120} autoComplete="name" /></label>
+      <label><span>{t('lp.final.company')}</span><input name="company" maxLength={160} autoComplete="organization" /></label>
+      <label><span>{t('lp.final.reach')} <i aria-hidden="true">*</i></span><input name="reach" required aria-required="true" minLength={3} maxLength={160} autoComplete="tel" /></label>
+      <label><span>{t('lp.final.sites')}</span><input name="sites" type="number" min={0} max={10000} inputMode="numeric" /></label>
       <input name="website" tabIndex={-1} autoComplete="off" className="ed-trap" aria-hidden="true" />
-      <p className="ed-req-note"><span aria-hidden="true">*</span> {t('lp.final.required')}</p>
+      <p className="h-req"><i aria-hidden="true">*</i> {t('lp.final.required')}</p>
       {state === 'error' ? <p className="ed-error" role="alert">{t('lp.final.error')}</p> : null}
-      <button type="submit" disabled={state === 'sending'} data-umami-event="lp-contact">{state === 'sending' ? t('lp.final.sending') : t('lp.final.send')} <span>→</span></button>
+      <button type="submit" disabled={state === 'sending'} data-umami-event="lp-contact">{state === 'sending' ? t('lp.final.sending') : `${t('lp.final.send')} →`}</button>
+      <a className="h-small" href="#equipe">{t('lp.final.demoFirst')}</a>
     </form>
   );
+}
+
+function Browser({ src, alt, label }: { src: string; alt: string; label: string }) {
+  return (
+    <figure className="h-browser">
+      <div className="h-browser-bar"><i /><i /><i /><span>{label}</span></div>
+      <img src={`${IMG}/${src}.webp`} alt={alt} loading="lazy" />
+    </figure>
+  );
+}
+
+function Phone({ src, alt, big = false }: { src: string; alt: string; big?: boolean }) {
+  return <figure className={`h-phone${big ? ' h-big' : ''}`}><img src={`${IMG}/${src}.webp`} alt={alt} loading="lazy" /></figure>;
 }
 
 function Landing() {
@@ -160,6 +132,10 @@ function Landing() {
   const { plans, currency, country, trial } = Route.useLoaderData();
   const [role, setRole] = useState<(typeof ROLES)[number]['key']>('owner');
   const shown = ROLES.find((item) => item.key === role)!;
+  const list = (key: MessageKey) => t(key).split('|');
+  const paid = plans.filter((plan) => plan.code !== 'trial');
+  const priced = paid.some((plan) => plan.priceMinor > 0 && plan.code !== 'enterprise');
+  const tagline = (code: string, fallback: string) => (['starter', 'pro', 'enterprise'].includes(code) ? t(`lp.pricing.${code}` as MessageKey) : fallback);
   useEffect(() => {
     const seen = new Set<string>();
     const watch = new IntersectionObserver((entries) => {
@@ -169,144 +145,205 @@ function Landing() {
         trackEvent(entry.target.id === 'tarifs' ? 'lp-pricing-seen' : 'lp-proof-seen');
       }
     }, { threshold: 0.35 });
-    for (const id of ['preuve', 'tarifs']) { const node = document.getElementById(id); if (node) watch.observe(node); }
+    for (const id of ['equipe', 'tarifs']) { const node = document.getElementById(id); if (node) watch.observe(node); }
     return () => watch.disconnect();
   }, []);
-  const list = (key: MessageKey) => t(key).split('|');
-  const paid = plans.filter((plan) => plan.code !== 'trial');
-  const priced = paid.some((plan) => plan.priceMinor > 0 && plan.code !== 'enterprise');
-  const tagline = (code: string, fallback: string) => (['starter', 'pro', 'enterprise'].includes(code) ? t(`lp.pricing.${code}` as MessageKey) : fallback);
+  const index = (n: number) => <b>{String(n).padStart(2, '0')} / 08</b>;
   return (
-    <div className="ed">
+    <div className="ed ed2">
       <EdHeader />
-
       <main>
-        <section className="ed-hero">
-          <div className="ed-hero-copy">
-            <p className="ed-kicker ed-light"><span /> {t('lp.hero.kicker')}</p>
-            <h1>{t('lp.hero.title1')}<br /><em>{t('lp.hero.title2')}</em></h1>
-            <p className="ed-hero-lead">{t('lp.hero.lead')}</p>
-            <div className="ed-hero-actions">
-              <a className="ed-button ed-button-orange" href="#rappel" data-umami-event="lp-call-hero">{t('lp.hero.call')} <span>→</span></a>
-              <a className="ed-under-link" href="#preuve" data-umami-event="lp-demo-hero">{t('lp.hero.demo')} <span>↗</span></a>
+        {/* 01 · Accroche */}
+        <section className="h-hero">
+          <div className="h-hero-copy">
+            <p className="h-kicker h-light"><span /> {t('lp.hero.kicker')}</p>
+            <h1>{t('lp.hero.title1')} <em>{t('lp.hero.title2')}</em></h1>
+            <p className="h-hero-lead">{t('lp.hero.lead')}</p>
+            <div className="h-hero-actions">
+              <a className="h-button h-button-orange" href="#rappel" data-umami-event="lp-call-hero">{t('lp.hero.call')} <span>→</span></a>
+              <a className="h-under-link" href="#equipe" data-umami-event="lp-demo-hero">{t('lp.hero.demo')} <span>↗</span></a>
             </div>
-            {trial.public ? <a className="ed-trial-link" href="/signup" data-umami-event="lp-trial-hero">{t('lp.trial.link', { n: trial.days })} <span>→</span></a> : null}
-            <ul className="ed-reassure">{[t('lp.hero.setup'), ...(trial.public ? [t('lp.trial.free', { n: trial.days })] : []), t('lp.hero.noCommitment')].map((item) => <li key={item}>{item}</li>)}</ul>
+            {trial.public ? <a className="h-trial-link" href="/signup" data-umami-event="lp-trial-hero">{t('lp.trial.link', { n: trial.days })} →</a> : null}
+            <ul className="h-reassure">{list('lp.hero.reassure').map((item) => <li key={item}>{item}</li>)}</ul>
           </div>
-          <Cockpit />
-        </section>
-
-        <div className="ed-ticker"><div>{list('lp.ticker').map((word, index, all) => (
-          <span key={index} style={{ display: 'contents' }}><span>{word}</span>{index < all.length - 1 ? <i>✦</i> : null}</span>
-        ))}</div></div>
-
-        <section className="ed-problem" id="probleme">
-          <div className="ed-section-index"><p className="ed-kicker ed-dark"><span /> {t('lp.problem.kicker')}</p><b>01 / 05</b></div>
-          <div className="ed-problem-grid">
-            <h2>{t('lp.problem.title1')}<br /><em>{t('lp.problem.title2')}</em></h2>
-            <div className="ed-problem-copy">
-              {([1, 2, 3] as const).map((n) => <article key={n}><span>{t(`lp.problem.t${n}` as MessageKey)}</span><p>{t(`lp.problem.b${n}` as MessageKey)}</p></article>)}
-            </div>
-          </div>
-          <div className="ed-problem-photo">
-            <img src={`${IMG}/problem-chaos.webp`} alt={t('lp.problem.alt')} loading="lazy" width={1672} height={941} />
-            <p>{t('lp.problem.punch1')}<br /><strong>{t('lp.problem.punch2')}</strong></p>
+          <div className="h-hero-visual">
+            <figure className="h-browser"><div className="h-browser-bar"><i /><i /><i /><span>{t('lp.hero.screen')}</span></div><img src={`${IMG}/cap-owner-today.webp`} alt={t('lp.hero.officeAlt')} /></figure>
+            <figure className="h-phone"><img src={`${IMG}/cap-field-home.webp`} alt={t('lp.hero.fieldAlt')} /></figure>
           </div>
         </section>
 
-        <section className="ed-cost" id="calcul">
-          <div className="ed-cost-copy">
-            <p className="ed-kicker ed-light"><span /> {t('lp.cost.kicker')}</p>
-            <h2>{t('lp.cost.title1')}<br /><em>{t('lp.cost.title2')}</em></h2>
+        <div className="h-ticker"><div>{list('lp.ticker').map((word, i, all) => <span key={word} style={{ display: 'contents' }}><span>{word}</span>{i < all.length - 1 ? <i>✦</i> : null}</span>)}</div></div>
+
+        {/* 02 · Problème */}
+        <section className="h-problem" id="probleme">
+          <div className="h-section-index"><p className="h-kicker h-dark"><span /> {t('lp.problem.kicker')}</p>{index(1)}</div>
+          <div className="h-split">
+            <div>
+              <h2>{t('lp.problem.title1')} <em>{t('lp.problem.title2')}</em></h2>
+              <div className="h-pains">
+                {([1, 2, 3, 4] as const).map((n) => <article key={n}><b>{String(n).padStart(2, '0')}</b><h3>{t(`lp.problem.p${n}t` as MessageKey)}</h3><p>{t(`lp.problem.p${n}b` as MessageKey)}</p></article>)}
+              </div>
+            </div>
+            <figure className="h-photo"><img src={`${IMG}/problem-chaos.webp`} alt={t('lp.problem.alt')} loading="lazy" /><figcaption>{t('lp.problem.caption')}</figcaption></figure>
+          </div>
+        </section>
+
+        {/* 03 · Enjeux */}
+        <section className="h-cost" id="calcul">
+          <div className="h-cost-copy">
+            <p className="h-kicker h-light"><span /> {t('lp.cost.kicker')}</p>
+            <h2>{t('lp.cost.title1')} <em>{t('lp.cost.title2')}</em></h2>
             <p>{t('lp.cost.lead1')} <strong>{t('lp.cost.leadStrong')}</strong> {t('lp.cost.lead2')}</p>
             <small>{t('lp.cost.source')}</small>
-            <img className="ed-cost-image" src={`${IMG}/value-cost.webp`} alt={t('lp.cost.alt')} loading="lazy" width={1672} height={941} />
           </div>
           <Calculator currency={currency} country={country} />
         </section>
 
-        <section className="ed-day" id="systeme">
-          <div className="ed-section-index"><p className="ed-kicker ed-dark"><span /> {t('lp.day.kicker')}</p><b>02 / 05</b></div>
-          <div className="ed-day-head"><h2>{t('lp.day.title1')}<br /><em>{t('lp.day.title2')}</em></h2><p>{t('lp.day.lead')}</p></div>
-          <div className="ed-day-layout">
-            <figure><img src={`${IMG}/daily-routine.webp`} alt={t('lp.day.alt')} loading="lazy" width={1536} height={1024} /><figcaption>{t('lp.day.caption')}</figcaption></figure>
-            <ol className="ed-timeline">
-              {([1, 2, 3, 4, 5] as const).map((n) => (
-                <li key={n} className={n === 1 ? 'ed-active' : undefined}><time>{t(`lp.day.t${n}` as MessageKey)}</time><div><h3>{t(`lp.day.h${n}` as MessageKey)}</h3><p>{t(`lp.day.b${n}` as MessageKey)}</p></div></li>
-              ))}
-            </ol>
+        {/* 04 · Transformation */}
+        <section className="h-transform">
+          <div className="h-section-index"><p className="h-kicker h-dark"><span /> {t('lp.transform.kicker')}</p>{index(2)}</div>
+          <h2>{t('lp.transform.title1')} <em>{t('lp.transform.title2')}</em></h2>
+          <div className="h-before-after">
+            <article className="h-before">
+              <p className="h-tag">{t('lp.transform.before')}</p>
+              <ul>{([1, 2, 3, 4] as const).map((n) => <li key={n}>{t(`lp.transform.b${n}` as MessageKey)}</li>)}</ul>
+              <img src={`${IMG}/problem-chaos.webp`} alt="" loading="lazy" />
+            </article>
+            <article className="h-after">
+              <p className="h-tag">{t('lp.transform.after')}</p>
+              <ul>{([1, 2, 3, 4] as const).map((n) => <li key={n}>{t(`lp.transform.a${n}` as MessageKey)}</li>)}</ul>
+              <img src={`${IMG}/cap-owner-today.webp`} alt={t('lp.transform.afterAlt')} loading="lazy" />
+            </article>
           </div>
         </section>
 
-        <section className="ed-offer">
-          <div className="ed-section-index ed-light-index"><p className="ed-kicker ed-light"><span /> {t('lp.offer.kicker')}</p><b>03 / 05</b></div>
-          <div className="ed-offer-head"><h2>{t('lp.offer.title1')}<br /><em>{t('lp.offer.title2')}</em></h2><p>{t('lp.offer.lead')}</p></div>
-          <div className="ed-offer-steps">
-            {([1, 2, 3, 4, 5] as const).map((n) => (
-              <article key={n}><span>{String(n).padStart(2, '0')}</span><h3>{t(`lp.offer.s${n}t` as MessageKey)}</h3><p>{t(`lp.offer.s${n}b` as MessageKey)}</p><b>{t(`lp.offer.s${n}s` as MessageKey)}</b></article>
-            ))}
+        {/* 05–06 · Solution, piliers */}
+        <section className="h-pillars" id="piliers">
+          <div className="h-section-index h-light-index"><p className="h-kicker h-light"><span /> {t('lp.pillars.kicker')}</p>{index(3)}</div>
+          <div className="h-head"><h2>{t('lp.pillars.title1')} <em>{t('lp.pillars.title2')}</em></h2><p>{t('lp.pillars.lead')}</p></div>
+          <div className="h-pillar">
+            <div><span>{t('lp.pillars.f')}</span><h3>{t('lp.pillars.ft')}</h3><p>{t('lp.pillars.fb')}</p></div>
+            <Browser src="cap-owner-finance" alt={t('lp.pillars.ft')} label={t('lp.pillars.fs')} />
           </div>
-          <div className="ed-offer-media">
-            <img src={`${IMG}/team-launch.webp`} alt={t('lp.offer.alt1')} loading="lazy" width={1536} height={1024} /><p><b>{t('lp.offer.tag1')}</b> {t('lp.offer.cap1')}</p>
-            <img src={`${IMG}/client-trust.webp`} alt={t('lp.offer.alt2')} loading="lazy" width={1536} height={1024} /><p><b>{t('lp.offer.tag2')}</b> {t('lp.offer.cap2')}</p>
+          <div className="h-pillar h-reverse">
+            <div><span>{t('lp.pillars.o')}</span><h3>{t('lp.pillars.ot')}</h3><p>{t('lp.pillars.ob')}</p></div>
+            <Browser src="cap-engineer-planning" alt={t('lp.pillars.ot')} label={t('lp.pillars.os')} />
+          </div>
+          <div className="h-pillar">
+            <div><span>{t('lp.pillars.a')}</span><h3>{t('lp.pillars.at')}</h3><p>{t('lp.pillars.ab')}</p></div>
+            <Browser src="cap-owner-indicators" alt={t('lp.pillars.at')} label={t('lp.pillars.as')} />
+          </div>
+          <div className="h-pillar h-reverse">
+            <div><span>{t('lp.pillars.c')}</span><h3>{t('lp.pillars.ct')}</h3><p>{t('lp.pillars.cb')}</p></div>
+            <Phone src="cap-client-home" alt={t('lp.pillars.ct')} big />
           </div>
         </section>
 
-        <section className="ed-features" id="preuve">
-          <div className="ed-section-index"><p className="ed-kicker ed-dark"><span /> {t('lp.proof.kicker')}</p><b>04 / 05</b></div>
-          <div className="ed-demo-head"><h2>{t('lp.proof.title1')}<br /><em>{t('lp.proof.title2')}</em></h2><p>{t('lp.proof.lead')}</p></div>
-          <div className="ed-roles">
-            {ROLES.map((item, index) => (
-              <button key={item.key} type="button" className={`ed-role${item.key === role ? ' ed-active' : ''}`} aria-pressed={item.key === role} onClick={() => setRole(item.key)}>
-                <span>{String(index + 1).padStart(2, '0')}</span><b>{t(`lp.proof.${item.key}` as MessageKey)}</b><small>{t(`lp.proof.${item.key}S` as MessageKey)}</small>
+        {/* 08 · Démonstration */}
+        <section className="h-team" id="equipe">
+          <div className="h-section-index"><p className="h-kicker h-dark"><span /> {t('lp.team.kicker')}</p>{index(4)}</div>
+          <div className="h-head"><h2>{t('lp.team.title1')} <em>{t('lp.team.title2')}</em></h2><p>{t('lp.team.lead')}</p></div>
+          <div className="h-roles" role="tablist">
+            {ROLES.map((item, i) => (
+              <button key={item.key} type="button" role="tab" aria-selected={item.key === role} className={`h-role${item.key === role ? ' h-active' : ''}`} onClick={() => setRole(item.key)}>
+                <span>{String(i + 1).padStart(2, '0')}</span><b>{t(`lp.team.${item.key}` as MessageKey)}</b><small>{t(`lp.team.${item.key}S` as MessageKey)}</small>
               </button>
             ))}
           </div>
-          <div className="ed-role-screen">
-            <img src={`${IMG}/${shown.image}.webp`} alt={t(`lp.proof.${role}A` as MessageKey)} loading="lazy" width={1536} height={1024} />
-            <div>
-              <p>{t(`lp.proof.${role}L` as MessageKey)}</p>
-              <h3>{t(`lp.proof.${role}T` as MessageKey)}</h3>
-              <a href={`/api/demo/start?role=${role}`} data-umami-event={`lp-role-${role}`}>{t('lp.proof.open')} <span>↗</span></a>
+          <div className="h-role-screen">
+            <div className="h-role-visual"><img src={`${IMG}/${shown.image}.webp`} alt={t(`lp.team.${role}` as MessageKey)} loading="lazy" /></div>
+            <div className="h-role-text">
+              <p>{t(`lp.team.${role}` as MessageKey)}</p>
+              <h3>{t(`lp.team.${role}T` as MessageKey)}</h3>
+              <a href={`/api/demo/start?role=${role}`} data-umami-event={`lp-role-${role}`}>{t('lp.team.open')} <span>↗</span></a>
             </div>
           </div>
         </section>
 
-        <section className="ed-pricing" id="tarifs">
-          <div className="ed-section-index"><p className="ed-kicker ed-dark"><span /> {t('lp.pricing.kicker')}</p><b>05 / 05</b></div>
-          <div className="ed-pricing-head"><h2>{t('lp.pricing.title1')}<br /><em>{t('lp.pricing.title2')}</em></h2><p>{priced ? t('lp.pricing.leadPriced', { currency }) : t('lp.pricing.leadQuote')}</p></div>
-          <div className="ed-pricing-grid">
+        {/* 07 · Différenciation */}
+        <section className="h-field">
+          <div className="h-field-copy">
+            <p className="h-kicker h-light"><span /> {t('lp.field.kicker')}</p>
+            <h2>{t('lp.field.title1')} <em>{t('lp.field.title2')}</em></h2>
+            <p>{t('lp.field.lead')}</p>
+            <ul className="h-diff">{([1, 2, 3, 4, 5] as const).map((n) => <li key={n}><b>{t(`lp.field.d${n}b` as MessageKey)}</b> {t(`lp.field.d${n}` as MessageKey)}</li>)}</ul>
+          </div>
+          <Phone src="cap-field-home" alt={t('lp.field.alt')} big />
+        </section>
+
+        {/* Offre : la mise en ordre en 30 jours */}
+        <section className="h-offer" id="offre">
+          <div className="h-section-index h-light-index"><p className="h-kicker h-light"><span /> {t('lp.offer.kicker')}</p>{index(5)}</div>
+          <div className="h-head"><h2>{t('lp.offer.title1')} <em>{t('lp.offer.title2')}</em></h2><p>{t('lp.offer.lead')}</p></div>
+          <div className="h-steps">
+            {([1, 2, 3, 4, 5] as const).map((n) => (
+              <article key={n}><span>{String(n).padStart(2, '0')}</span><h3>{t(`lp.offer.s${n}t` as MessageKey)}</h3><p>{t(`lp.offer.s${n}b` as MessageKey)}</p><b>{t(`lp.offer.s${n}s` as MessageKey)}</b></article>
+            ))}
+          </div>
+        </section>
+
+        {/* 09 · Preuves */}
+        <section className="h-proof" id="preuve">
+          <div className="h-section-index"><p className="h-kicker h-dark"><span /> {t('lp.proof.kicker')}</p>{index(6)}</div>
+          <div className="h-split">
+            <div>
+              <h2>{t('lp.proof.title1')} <em>{t('lp.proof.title2')}</em></h2>
+              <p className="h-lead">{t('lp.proof.lead')}</p>
+              <a className="h-under-link h-dark-link" href="#equipe">{t('lp.proof.open')} <span>↗</span></a>
+            </div>
+            <Browser src="cap-engineer-field" alt={t('lp.proof.alt')} label={t('lp.proof.screen')} />
+          </div>
+        </section>
+
+        {/* 10 · Tarifs */}
+        <section className="h-pricing" id="tarifs">
+          <div className="h-section-index"><p className="h-kicker h-dark"><span /> {t('lp.pricing.kicker')}</p>{index(7)}</div>
+          <div className="h-head"><h2>{t('lp.pricing.title1')} <em>{t('lp.pricing.title2')}</em></h2><p>{priced ? t('lp.pricing.leadPriced', { currency }) : t('lp.pricing.leadQuote')}</p></div>
+          <div className="h-plans">
             {paid.map((plan) => {
               const words = planWords(plan, locale);
               const price = plan.priceMinor > 0 && plan.code !== 'enterprise';
               return (
-                <article key={plan.code} className={words.highlight ? 'ed-featured' : undefined}>
+                <article key={plan.code} className={words.highlight ? 'h-featured' : undefined}>
                   {words.highlight ? <b>{t('lp.offer.recommended').toUpperCase()}</b> : null}
                   <span>{words.name.toUpperCase()}</span>
-                  <h3 className={price ? 'ed-priced' : undefined}>{price ? <>{formatMoney(locale, plan.priceMinor, plan.currencyCode)}<small>{t('lp.pricing.perMonth')}</small></> : t('lp.pricing.onQuote')}</h3>
+                  <h3>{price ? <>{formatMoney(locale, plan.priceMinor, plan.currencyCode)} <small>{t('lp.pricing.perMonth')}</small></> : t('lp.pricing.onQuote')}</h3>
                   <p>{tagline(plan.code, words.tagline)}</p>
                   <ul>
+                    {words.highlight ? <li>{t('lp.pricing.setup')}</li> : null}
                     <li>{plan.maxUsers ? t('landing.users', { n: plan.maxUsers }) : t('landing.usersUnlimited')}</li>
                     <li>{plan.maxProjects ? t('landing.projects', { n: plan.maxProjects }) : t('landing.projectsUnlimited')}</li>
-                    {words.highlight ? <li>{t('lp.pricing.setup')}</li> : null}
                     {plan.code === 'enterprise' ? <li>{t('lp.pricing.dedicated')}</li> : null}
                   </ul>
                   <a href="#rappel" data-umami-event={`lp-plan-${plan.code}`}>{t('lp.pricing.talk')}</a>
-                  {trial.public && plan.code !== 'enterprise' ? <a className="ed-plan-trial" href="/signup" data-umami-event={`lp-trial-${plan.code}`}>{t('lp.trial.short', { n: trial.days })}</a> : null}
+                  {trial.public && plan.code !== 'enterprise' ? <a className="h-small" href="/signup" data-umami-event={`lp-trial-${plan.code}`}>{t('lp.trial.short', { n: trial.days })}</a> : null}
                 </article>
               );
             })}
           </div>
-          <div className="ed-risk-strip">{[...(trial.public ? [t('lp.trial.free', { n: trial.days })] : []), ...list('lp.pricing.risk')].map((item) => <span key={item}>{item}</span>)}</div>
+          <div className="h-risk">{[...(trial.public ? [t('lp.trial.free', { n: trial.days })] : []), ...list('lp.pricing.risk')].map((item) => <span key={item}>{item}</span>)}</div>
         </section>
 
-        <section className="ed-final" id="rappel">
-          <img src={`${IMG}/handover-future.webp`} alt={t('lp.final.alt')} loading="lazy" width={1672} height={941} />
-          <div className="ed-final-panel">
-            <p className="ed-kicker ed-light"><span /> {t('lp.final.kicker')}</p>
-            <h2>{t('lp.final.title1')}<br /><em>{t('lp.final.title2')}</em></h2>
-            <CallBack />
+        {/* 11 · Objections */}
+        <section className="h-faq" id="questions">
+          <div className="h-section-index"><p className="h-kicker h-dark"><span /> {t('lp.faq.kicker')}</p>{index(8)}</div>
+          <div className="h-split">
+            <h2>{t('lp.faq.title1')} <em>{t('lp.faq.title2')}</em></h2>
+            <div className="h-answers">
+              {([1, 2, 3, 4, 5, 6] as const).map((n) => <details key={n} open={n === 1}><summary>{t(`lp.faq.q${n}` as MessageKey)}</summary><p>{t(`lp.faq.a${n}` as MessageKey)}</p></details>)}
+            </div>
           </div>
+        </section>
+
+        {/* 12 · Conversion */}
+        <section className="h-final" id="rappel">
+          <div className="h-final-copy">
+            <p className="h-kicker h-light"><span /> {t('lp.final.kicker')}</p>
+            <h2>{t('lp.final.title1')} <em>{t('lp.final.title2')}</em></h2>
+            <p>{t('lp.final.lead')}</p>
+            <img src={`${IMG}/handover-future.webp`} alt={t('lp.final.alt')} loading="lazy" />
+          </div>
+          <CallBack />
         </section>
       </main>
       <EdFooter />

@@ -75,7 +75,7 @@ export const fr = {
     license_expired: "Cette licence a expiré.",
     license_already_used: "Cette licence a déjà été utilisée.",
     license_unknown_product: "Cette licence ne correspond à aucune formule Struo.",
-    licence_locked: "Votre essai ou votre licence est terminé : l’espace est en lecture seule. Saisissez une licence dans Paramètres pour continuer.",
+    licence_locked: "Votre essai ou votre licence est terminé : l’espace est en lecture seule. Renouvelez votre licence dans Paramètres pour continuer.",
     license_store_off: "Le paiement par licence n’est pas encore ouvert.",
     license_store_unreachable: "La boutique de licences ne répond pas : réessayez dans un instant.",
     company_suspended: "Cette entreprise est suspendue. Contactez l’équipe Struo.",

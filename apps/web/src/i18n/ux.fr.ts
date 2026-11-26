@@ -231,7 +231,7 @@ export const uxFr = {
     redemptions: "Licences activées par les entreprises",
   },
   lic: {
-    title: "Payer avec une licence",
+    title: "Ma licence",
     how: "Achetez une licence Struo sur Chariow (mobile money ou carte), puis collez ici la clé reçue par e-mail : l’abonnement est prolongé aussitôt.",
     buy: "Acheter",
     storeOff: "Le paiement par licence n’est pas encore ouvert.",
@@ -239,6 +239,10 @@ export const uxFr = {
     activate: "Activer",
     applied: "Licence activée : abonnement payé jusqu’au {date}.",
     history: "Licences déjà activées",
+    haveKey: "Vous avez déjà une clé, ou vous avez payé avec une autre adresse e-mail ?",
+    waiting: "Paiement en cours de vérification : votre licence s’active toute seule dans quelques instants. Vous pouvez laisser cette page ouverte.",
+    arrived: "C’est fait : votre licence est active jusqu’au {date}. Merci !",
+    late: "Toujours rien ? Si vous avez payé avec une autre adresse e-mail, collez la clé reçue de la boutique ci-dessous.",
   },
   views: {
     byDay: "Par jour",

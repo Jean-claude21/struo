@@ -10,6 +10,10 @@ on:
         description: Also run on BrowserStack's real browsers
         type: boolean
         default: false
+      captures:
+        description: Only capture the real product screens (demo company) for the website
+        type: boolean
+        default: false
   workflow_run:
     workflows: [ci]
     types: [completed]
@@ -47,7 +51,13 @@ jobs:
           echo "staging did not reach ${{ github.event.workflow_run.head_sha }} in 10 minutes"; exit 1
       - run: npx playwright install --with-deps chromium webkit
       - name: Simulate (computer, iPhone, Android)
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.captures) }}
         run: npx playwright test -c e2e
+      - name: Capture the real product screens
+        if: github.event_name == 'workflow_dispatch' && inputs.captures
+        env:
+          CAPTURE: '1'
+        run: npx playwright test -c e2e captures.spec.ts --project=desktop --project=iphone
       - name: Real browsers (BrowserStack)
         if: always() && github.event_name == 'workflow_dispatch' && inputs.browserstack
         env:
