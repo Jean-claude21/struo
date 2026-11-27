@@ -218,7 +218,7 @@ export const aiFr = {
     send_client_report: 'Envoie le rapport au client et le fige. Exige votre confirmation.',
     cash_forecast: 'La trésorerie prévue à 30, 60 et 90 jours, semaine par semaine, et ses hypothèses.',
     list_supplier_bills: 'Les factures fournisseurs à payer et leurs échéances.',
-    add_supplier_bill: 'Ajoute une facture fournisseur à payer (elle entre dans la prévision) ; la même référence du même fournisseur est refusée.',
+    add_supplier_bill: 'Ajoute une facture fournisseur à payer (elle entre dans la prévision), même déjà échue ; la même référence du même fournisseur est refusée.',
     pay_supplier_bill: 'Marque une facture fournisseur payée (dépense du chantier). Exige votre confirmation.',
     list_team: 'Les membres de l’entreprise et leur rôle.',
     invite_member: 'Invite quelqu’un avec un rôle (e-mail envoyé). Exige votre confirmation.',

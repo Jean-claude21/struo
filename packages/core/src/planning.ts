@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { asActor, ensure, journal, orgToday, parse } from './access.ts';
+import { outsideSiteDates, type OutsideSiteDates } from './projects.ts';
 import type { Actor, Db, Tx } from './db.ts';
 import { DomainError, notFound } from './errors.ts';
 
@@ -52,7 +53,7 @@ const milestoneInput = z.object({
   clientValidation: z.boolean().default(false),
 });
 
-export async function addMilestone(db: Db, actor: Actor, input: unknown): Promise<{ id: string }> {
+export async function addMilestone(db: Db, actor: Actor, input: unknown): Promise<{ id: string; outsideSiteDates: OutsideSiteDates[] }> {
   ensure(actor, 'planning.write');
   const data = parse(milestoneInput, input);
   return asActor(db, actor, async (tx) => {
@@ -67,7 +68,8 @@ export async function addMilestone(db: Db, actor: Actor, input: unknown): Promis
         data.action ?? null, data.priority, data.clientValidation],
     );
     await journal(tx, actor, 'milestone.add', rows[0]!.id, null, data);
-    return { id: rows[0]!.id };
+    const id = rows[0]!.id;
+    return { id, outsideSiteDates: (await outsideSiteDates(tx, actor.orgId, data.projectId)).filter((item) => item.id === id) };
   });
 }
 
@@ -196,7 +198,9 @@ const dependenciesInput = z.object({
 export async function setMilestoneDependencies(db: Db, actor: Actor, milestoneId: string, input: unknown): Promise<void> {
   ensure(actor, 'planning.write');
   const data = parse(dependenciesInput, input);
-  const unique = data.dependsOn.filter((entry, index, all) => all.findIndex((other) => other.id === entry.id) === index);
+  // The same predecessor named twice keeps its longest gap: waiting for both means waiting the longest.
+  const unique = [...data.dependsOn.reduce((byId, entry) => byId.set(entry.id, { id: entry.id, lagDays: Math.max(entry.lagDays, byId.get(entry.id)?.lagDays ?? 0) }),
+    new Map<string, { id: string; lagDays: number }>()).values()];
   const ids = unique.map((item) => item.id);
   if (ids.includes(milestoneId)) throw new DomainError('dependency_cycle', 422);
   await asActor(db, actor, async (tx) => {

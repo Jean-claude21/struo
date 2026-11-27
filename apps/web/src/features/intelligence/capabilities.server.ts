@@ -163,12 +163,12 @@ export const CAPABILITIES: Capability[] = [
       startDate: date.optional(), endDate: date.optional(), budgetMinor: z.number().int().min(0).optional(),
       client: z.string().optional().describe('Client name (must exist) or id; an empty string detaches the client'),
     }),
-    description: 'Changes a site: name, client, status (pending, active, suspended, done), place, dates or budget.',
+    description: 'Changes a site: name, client, status (pending, active, suspended, done), place, dates or budget. outsideSiteDates lists the milestones and phases now outside its dates: tell the person.',
     async run({ rt, actor, projectId }, { site: ref, client, ...rest }) {
       const id = await projectId(ref);
       const patch = client === undefined ? rest : { ...rest, clientId: client === '' ? null : await clientRef(rt, actor, client) };
-      await core.updateProject(rt.db, actor, id, patch);
-      return { ok: true, changed: Object.keys(patch) };
+      const { outsideSiteDates } = await core.updateProject(rt.db, actor, id, patch);
+      return { ok: true, changed: Object.keys(patch), outsideSiteDates };
     },
   }),
   define({
@@ -180,8 +180,8 @@ export const CAPABILITIES: Capability[] = [
       const detail = await core.getProject(rt.db, actor, await projectId(ref));
       const found = detail.phases.find((item) => item.id === phase || item.name.toLowerCase() === phase.toLowerCase());
       if (!found) throw new core.DomainError('not_found', 404);
-      await core.updatePhase(rt.db, actor, found.id, patch);
-      return { ok: true, phase: found.name };
+      const { outsideSiteDates } = await core.updatePhase(rt.db, actor, found.id, patch);
+      return { ok: true, phase: found.name, outsideSiteDates };
     },
   }),
 
@@ -322,7 +322,7 @@ export const CAPABILITIES: Capability[] = [
     name: 'prepare_invoice', group: 'finance', permission: 'finance.write', autonomy: 2,
     input: z.object({ site, kind: z.enum(core.INVOICE_KINDS), fromProgress: z.boolean().optional().describe('Prefill one progress line per lot from validated progress (default true for progress statements)'),
       label: z.string().optional(),
-      items: z.array(z.object({ designation: z.string().min(1), unit: z.string().optional(), quantity: z.number().min(0), unitPriceMinor: z.number().int().min(0) })).optional()
+      items: z.array(z.object({ designation: z.string().min(1), unit: z.string().optional(), quantity: z.number().positive(), unitPriceMinor: z.number().int().min(0) })).optional()
         .describe('Priced lines to add (quantity can have decimals)') }),
     description: 'Creates an invoice DRAFT with detailed lines (progress lots from validated progress, and/or priced items). Nothing is issued: tell the person to open the draft (link returned), check the lines and press « Émettre » there, or ask you to issue it (issue_invoice).',
     async run({ rt, actor, projectId }, input) {
@@ -359,6 +359,7 @@ export const CAPABILITIES: Capability[] = [
     input: z.object({ site, invoiceId: z.string().uuid().optional(), amountMinor: money, method: z.enum(core.PAYMENT_METHODS), receivedOn: date.optional(), reference: z.string().optional() }),
     description: 'Records a payment received (mobile money, transfer, cheque, cash) on a site, against an invoice if given.',
     async run({ rt, actor, projectId }, input) { return core.recordPayment(rt.db, actor, { ...input, site: undefined, projectId: await projectId(input.site) }); },
+    async check({ rt, actor, projectId }, input) { await core.checkNewPayment(rt.db, actor, { ...input, site: undefined, projectId: await projectId(input.site) }); },
     summary: async (context, input) => `${input.site} · ${fmt(context, input.amountMinor)} · ${input.method}${input.reference ? ` · ${input.reference}` : ''}${input.receivedOn ? ` · ${input.receivedOn}` : ''}`,
   }),
   // Spec 053: the money to come.
@@ -375,17 +376,21 @@ export const CAPABILITIES: Capability[] = [
   }),
   define({
     name: 'add_supplier_bill', group: 'finance', permission: 'finance.write', autonomy: 2,
-    input: z.object({ supplier: z.string().min(1), label: z.string().min(1), amountMinor: money, dueOn: date, site: site.optional(), category: z.enum(core.EXPENSE_CATEGORIES).optional(), reference: z.string().optional() }),
-    description: 'Adds a supplier bill to pay, on a site or as overheads; it enters the cash forecast. The same supplier and reference twice is refused (bill_duplicate).',
+    input: z.object({ supplier: z.string().min(1), label: z.string().min(1), amountMinor: money, dueOn: date, issuedOn: date.optional().describe('The bill\'s own date; without it, today (or the due date when already past)'),
+      site: site.optional(), category: z.enum(core.EXPENSE_CATEGORIES).optional(), reference: z.string().optional() }),
+    description: 'Adds a supplier bill to pay, on a site or as overheads; it enters the cash forecast. An already overdue bill can be entered. The same supplier and reference twice is refused (bill_duplicate).',
     async run({ rt, actor, projectId }, input) { return core.createSupplierBill(rt.db, actor, { ...input, site: undefined, projectId: input.site ? await projectId(input.site) : null }); },
   }),
   define({
     name: 'pay_supplier_bill', group: 'finance', permission: 'finance.write', autonomy: 4, input: z.object({ billId: z.string().uuid(), paidOn: date.optional() }),
     description: 'Marks a supplier bill paid; a bill of a site becomes that site’s expense.',
     run: ({ rt, actor }, input) => core.paySupplierBill(rt.db, actor, input.billId, { paidOn: input.paidOn }),
-    summary: async ({ rt, actor }, input) => {
+    async check({ rt, actor }, input) { await core.checkSupplierBillPayment(rt.db, actor, input.billId, { paidOn: input.paidOn }); },
+    summary: async (context, input) => {
+      const { rt, actor } = context;
       const bill = (await core.listSupplierBills(rt.db, actor)).find((row) => row.id === input.billId);
-      return bill ? `${bill.supplier} · ${bill.label} · ${bill.amountMinor}` : input.billId;
+      const { paidOn } = await core.checkSupplierBillPayment(rt.db, actor, input.billId, { paidOn: input.paidOn });
+      return bill ? `${bill.supplier} · ${bill.label} · ${fmt(context, bill.amountMinor)} ${bill.currency} · ${paidOn}` : input.billId;
     },
   }),
   define({
@@ -452,7 +457,7 @@ export const CAPABILITIES: Capability[] = [
   define({
     name: 'add_milestone', group: 'planning', permission: 'planning.write', autonomy: 2,
     input: z.object({ site, name: z.string().min(1), category: z.enum(core.MILESTONE_CATEGORIES).optional(), plannedOn: date, clientValidation: z.boolean().optional() }),
-    description: 'Adds a milestone to a site.',
+    description: 'Adds a milestone to a site. outsideSiteDates is not empty when it falls outside the site dates: tell the person.',
     async run({ rt, actor, projectId }, input) { return core.addMilestone(rt.db, actor, { ...input, site: undefined, projectId: await projectId(input.site) }); },
   }),
   define({

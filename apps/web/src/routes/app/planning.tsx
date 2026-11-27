@@ -57,11 +57,14 @@ function Planning() {
 
   const run = async (work: () => Promise<unknown>, text: string, undo?: () => Promise<unknown>) => {
     try {
-      await work();
+      const result = await work();
       await router.invalidate();
       toast({ text, action: undo ? { label: t('ui.undo'), run: async () => { await undo(); await router.invalidate(); } } : undefined });
-    } catch {
-      toast({ text: t('errors.generic'), kind: 'err' });
+      // Spec 086: what now falls outside its site's dates is said, not hidden.
+      const outside = (result as { outsideSiteDates?: unknown[] } | undefined)?.outsideSiteDates;
+      if (outside?.length) toast({ text: t('plan.outsideSite', { n: outside.length }), kind: 'info' });
+    } catch (caught) {
+      toast({ text: errorText(caught), kind: 'err' });
     }
   };
 

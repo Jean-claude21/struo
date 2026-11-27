@@ -33,7 +33,7 @@ export async function companyKpis(db: Db, actor: Actor, period: KpiPeriod) {
          (select coalesce(sum(total_minor), 0) from invoice where org_id = $1 and status = 'issued' and issued_on > current_date - 90)::bigint as invoiced90,
          (select round(avg(p.received_on - i.due_on)) from payment p join invoice i on i.id = p.invoice_id
            where p.org_id = $1 and p.received_on between $2 and $3) as "payDelay",
-         (select coalesce(sum(amount_minor), 0) / 3.0 from expense where org_id = $1 and spent_on > current_date - 90) as burn,
+         (select coalesce(sum(amount_minor), 0) / 3.0 from expense where org_id = $1 and spent_on > current_date - 90 and spent_on <= current_date) as burn,
          (select coalesce(sum(cash_minor), 0) from project_finance where org_id = $1)::bigint as cash,
          (select coalesce(sum(retention_minor), 0) from project_finance where org_id = $1)::bigint as retentions,
          (select coalesce(sum(greatest(p.budget_minor - coalesce(f.invoiced_minor * 10000 / (10000 + p.vat_bps), 0), 0)), 0)
@@ -110,7 +110,9 @@ export async function companyKpis(db: Db, actor: Actor, period: KpiPeriod) {
         payDelayDays: finance.payDelay === null ? null : num(finance.payDelay),
         // Share of what was owed that came in: collected ÷ (collected + still receivable). Never above 100 %.
         collectionRatePct: num(finance.collected) + receivable > 0 ? Math.round((num(finance.collected) * 100) / (num(finance.collected) + receivable)) : null,
-        cashMinor: cash, burnMinor: Math.round(burn), runwayMonths: burn > 0 ? Math.round((cash / burn) * 10) / 10 : null,
+        cashMinor: cash, burnMinor: Math.round(burn),
+        // No cash left is no runway (0), never a negative number of months.
+        runwayMonths: burn > 0 ? Math.max(0, Math.round((cash / burn) * 10) / 10) : null,
         retentionsMinor: num(finance.retentions), backlogMinor: num(finance.backlog),
         cpi: spentOpen > 0 ? Math.round((earned / spentOpen) * 100) / 100 : null,
       };
