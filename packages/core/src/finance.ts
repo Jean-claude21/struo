@@ -103,10 +103,11 @@ export async function recordPayment(db: Db, actor: Actor, input: unknown): Promi
   return asActor(db, actor, (tx) => recordPaymentTx(tx, actor, input));
 }
 
-/** Records a payment inside a transaction the caller holds (so it can lock what decides it first). */
-export async function recordPaymentTx(tx: Tx, actor: Actor, input: unknown): Promise<{ id: string }> {
-  ensure(actor, 'finance.write');
-  const data = parse(paymentInput, input);
+/**
+ * What decides a payment, read under lock: its site, the company's day, and the invoice it settles
+ * (issued, on that site, with enough left to pay). Refuses what would make the books wrong.
+ */
+async function paymentGroundsTx(tx: Tx, actor: Actor, data: z.infer<typeof paymentInput>): Promise<{ currency: string; today: string }> {
   const project = (
     await tx.query<{ currency: string }>('select currency_code as currency from project where id = $1 and org_id = $2', [data.projectId, actor.orgId])
   ).rows[0];
@@ -115,18 +116,35 @@ export async function recordPaymentTx(tx: Tx, actor: Actor, input: unknown): Pro
   if (data.receivedOn && data.receivedOn > today) throw new DomainError('received_in_future', 422);
   if (data.invoiceId) {
     // Locked, so two payments entered at once cannot both fit the same balance.
-    const invoice = await tx.query('select 1 from invoice where id = $1 and project_id = $2 and status = $3 for update', [
-      data.invoiceId, data.projectId, 'issued',
+    const { rows: [invoice] } = await tx.query<{ status: string }>('select status from invoice where id = $1 and project_id = $2 for update', [
+      data.invoiceId, data.projectId,
     ]);
-    if (!invoice.rowCount) throw new DomainError('invoice_not_in_project', 422);
+    if (!invoice) throw new DomainError('invoice_not_in_project', 422);
+    // A draft or a cancelled invoice is owed by nobody.
+    if (invoice.status !== 'issued') throw new DomainError('invoice_not_payable', 409, { status: invoice.status });
     // More than what is left would count as collected money that is not owed (the balance shows 0).
     const { rows: [left] } = await tx.query<{ balance: number }>('select balance_minor as balance from invoice_balance where invoice_id = $1', [data.invoiceId]);
     if (data.amountMinor > (left?.balance ?? 0)) throw new DomainError('payment_exceeds_balance', 422, { balance: left?.balance ?? 0 });
   }
+  return { currency: project.currency, today };
+}
+
+/** What would refuse this payment, checked without writing (the preview before the « yes »). */
+export async function checkNewPayment(db: Db, actor: Actor, input: unknown): Promise<void> {
+  ensure(actor, 'finance.write');
+  const data = parse(paymentInput, input);
+  await asActor(db, actor, (tx) => paymentGroundsTx(tx, actor, data));
+}
+
+/** Records a payment inside a transaction the caller holds (so it can lock what decides it first). */
+export async function recordPaymentTx(tx: Tx, actor: Actor, input: unknown): Promise<{ id: string }> {
+  ensure(actor, 'finance.write');
+  const data = parse(paymentInput, input);
+  const { currency, today } = await paymentGroundsTx(tx, actor, data);
   const { rows } = await tx.query<{ id: string }>(
     `insert into payment (org_id, project_id, invoice_id, received_on, amount_minor, currency_code, method, reference, note, created_by)
      values ($1, $2, $3, coalesce($4::date, current_date), $5, $6, $7, $8, $9, $10) returning id`,
-    [actor.orgId, data.projectId, data.invoiceId ?? null, data.receivedOn ?? today, data.amountMinor, project.currency,
+    [actor.orgId, data.projectId, data.invoiceId ?? null, data.receivedOn ?? today, data.amountMinor, currency,
       data.method, data.reference ?? null, data.note ?? null, actor.userId],
   );
   const id = rows[0]!.id;

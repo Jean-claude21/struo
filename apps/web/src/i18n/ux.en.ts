@@ -481,6 +481,7 @@ export const uxEn: typeof uxFr = {
     lag: 'days after',
     depsSaved: 'Dependencies saved',
     cascade: '{name} rescheduled · {n} following milestone(s) pushed in cascade',
+    outsideSite: '{n} planning item(s) now fall outside the site’s dates.',
     beyondEnd: '{n} milestone(s) now fall after the site’s planned end ({date}).',
     phases: 'Phases',
     phaseMoved: 'Phase {name} rescheduled',

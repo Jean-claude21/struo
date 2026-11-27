@@ -220,7 +220,7 @@ export const aiEn: typeof aiFr = {
     send_client_report: 'Sends the report to the client and freezes it. Needs your confirmation.',
     cash_forecast: 'The cash forecast at 30, 60 and 90 days, week by week, and its assumptions.',
     list_supplier_bills: 'Supplier bills to pay and their due dates.',
-    add_supplier_bill: 'Adds a supplier bill to pay (it enters the forecast); the same supplier’s reference twice is refused.',
+    add_supplier_bill: 'Adds a supplier bill to pay (it enters the forecast), even one already overdue; the same supplier’s reference twice is refused.',
     pay_supplier_bill: 'Marks a supplier bill paid (the site expense). Needs your confirmation.',
     list_team: 'The members of the company and their role.',
     invite_member: 'Invites someone with a role (e-mail sent). Needs your confirmation.',
