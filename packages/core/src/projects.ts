@@ -45,10 +45,22 @@ export async function listClients(db: Db, actor: Actor, q?: string): Promise<Cli
   });
 }
 
+/**
+ * Two clients with the same name (any case or accent) cannot be told apart by a person, an import or an
+ * assistant: the second is refused.
+ */
+async function ensureClientNameFree(tx: Tx, orgId: string, name: string, exceptId: string | null): Promise<void> {
+  const { rowCount } = await tx.query(
+    `select 1 from client where org_id = $1 and unaccent(lower(btrim(name))) = unaccent(lower(btrim($2))) and ($3::uuid is null or id <> $3) limit 1`,
+    [orgId, name, exceptId]);
+  if (rowCount) throw new DomainError('client_name_taken', 409, { name: name.trim() });
+}
+
 export async function createClient(db: Db, actor: Actor, input: unknown): Promise<Client> {
   ensure(actor, 'clients.write');
   const data = parse(clientInput, input);
   return asActor(db, actor, async (tx) => {
+    await ensureClientNameFree(tx, actor.orgId, data.name, null);
     const { rows } = await tx.query<{ id: string }>(
       `insert into client (org_id, name, kind, email, phone, address, notes) values ($1, $2, $3, $4, $5, $6, $7)
        returning id`,
@@ -66,6 +78,7 @@ export async function updateClient(db: Db, actor: Actor, id: string, input: unkn
   await asActor(db, actor, async (tx) => {
     const before = (await tx.query('select * from client where id = $1 and org_id = $2', [id, actor.orgId])).rows[0];
     if (!before) throw notFound();
+    if (data.name !== undefined) await ensureClientNameFree(tx, actor.orgId, data.name, id);
     const entries = Object.entries(data).filter(([, value]) => value !== undefined);
     if (entries.length) {
       await tx.query(
@@ -218,6 +231,33 @@ const projectInput = z.object({
   phases: z.array(z.object({ name: z.string().trim().min(1).max(80), budgetMinor: z.number().int().min(0).default(0) })).optional(),
 });
 
+/** A milestone still to reach, or a phase, planned outside its site's dates. */
+export interface OutsideSiteDates { kind: 'milestone' | 'phase'; id: string; name: string; from: string | null; to: string | null; siteStart: string | null; siteEnd: string | null }
+
+/**
+ * What of a site's planning now falls outside its dates. Kept, never refused (a site does run late):
+ * said back, so a person or an assistant sees it at once.
+ */
+export async function outsideSiteDates(tx: Tx, orgId: string, projectId: string): Promise<OutsideSiteDates[]> {
+  const { rows } = await tx.query<OutsideSiteDates>(
+    `with site as (select start_date as s, end_date as e from project where id = $2 and org_id = $1)
+     select 'milestone' as kind, m.id, m.name, to_char(m.planned_on, 'YYYY-MM-DD') as "from", to_char(m.planned_on, 'YYYY-MM-DD') as "to",
+            to_char(site.s, 'YYYY-MM-DD') as "siteStart", to_char(site.e, 'YYYY-MM-DD') as "siteEnd"
+       from milestone m, site
+      where m.org_id = $1 and m.project_id = $2 and m.actual_on is null
+        and ((site.s is not null and m.planned_on < site.s) or (site.e is not null and m.planned_on > site.e))
+     union all
+     select 'phase', x.id, x.name, to_char(x.start_date, 'YYYY-MM-DD'), to_char(x.end_date, 'YYYY-MM-DD'),
+            to_char(site.s, 'YYYY-MM-DD'), to_char(site.e, 'YYYY-MM-DD')
+       from project_phase x, site
+      where x.org_id = $1 and x.project_id = $2
+        and ((site.s is not null and coalesce(x.start_date, x.end_date) < site.s) or (site.e is not null and coalesce(x.end_date, x.start_date) > site.e))
+     order by 4 nulls last`,
+    [orgId, projectId],
+  );
+  return rows;
+}
+
 /** An end before the start is refused in words, not by the database's bare check. */
 function ensureDateOrder(start: string | null | undefined, end: string | null | undefined): void {
   if (start && end && end < start) throw new DomainError('end_before_start', 422);
@@ -314,7 +354,7 @@ export async function createProject(db: Db, actor: Actor, input: unknown): Promi
 
 const projectPatch = projectInput.omit({ phases: true }).partial();
 
-export async function updateProject(db: Db, actor: Actor, id: string, input: unknown): Promise<void> {
+export async function updateProject(db: Db, actor: Actor, id: string, input: unknown): Promise<{ outsideSiteDates: OutsideSiteDates[] }> {
   ensure(actor, 'projects.write');
   const data = parse(projectPatch, input);
   const columns: Record<string, string> = {
@@ -325,10 +365,15 @@ export async function updateProject(db: Db, actor: Actor, id: string, input: unk
   // A status explicitly sent is applied; zod's default must not overwrite it when absent.
   const raw = (input ?? {}) as Record<string, unknown>;
   const entries = Object.entries(data).filter(([key, value]) => value !== undefined && key in raw && columns[key]);
-  await asActor(db, actor, async (tx) => {
+  return asActor(db, actor, async (tx) => {
     const before = (await tx.query('select * from project where id = $1 and org_id = $2 for update', [id, actor.orgId])).rows[0];
     if (!before) throw notFound();
-    const patched = Object.fromEntries(entries) as { startDate?: string | null; endDate?: string | null };
+    const patched = Object.fromEntries(entries) as { startDate?: string | null; endDate?: string | null; clientId?: string | null };
+    // An unknown client is « not found », not the database's bare foreign-key error.
+    if (patched.clientId) {
+      const client = await tx.query('select 1 from client where id = $1 and org_id = $2', [patched.clientId, actor.orgId]);
+      if (!client.rowCount) throw notFound();
+    }
     ensureDateOrder('startDate' in patched ? patched.startDate : before.start_date, 'endDate' in patched ? patched.endDate : before.end_date);
     if (entries.length) {
       try {
@@ -343,6 +388,7 @@ export async function updateProject(db: Db, actor: Actor, id: string, input: unk
       }
     }
     await journal(tx, actor, 'project.update', id, before, Object.fromEntries(entries));
+    return { outsideSiteDates: await outsideSiteDates(tx, actor.orgId, id) };
   });
 }
 
@@ -363,10 +409,10 @@ const phaseInput = z.object({
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).nullable().optional(),
 });
 
-export async function updatePhase(db: Db, actor: Actor, phaseId: string, input: unknown): Promise<void> {
+export async function updatePhase(db: Db, actor: Actor, phaseId: string, input: unknown): Promise<{ outsideSiteDates: OutsideSiteDates[] }> {
   ensure(actor, 'projects.write');
   const data = parse(phaseInput, input);
-  await asActor(db, actor, async (tx) => {
+  return asActor(db, actor, async (tx) => {
     const before = (await tx.query('select * from project_phase where id = $1 and org_id = $2 for update', [phaseId, actor.orgId])).rows[0];
     if (!before) throw notFound();
     ensureDateOrder(data.startDate !== undefined ? data.startDate : before.start_date, data.endDate !== undefined ? data.endDate : before.end_date);
@@ -380,6 +426,7 @@ export async function updatePhase(db: Db, actor: Actor, phaseId: string, input: 
         data.startDate !== undefined, data.startDate ?? null, data.endDate !== undefined, data.endDate ?? null],
     );
     await journal(tx, actor, 'phase.update', phaseId, before, data);
+    return { outsideSiteDates: (await outsideSiteDates(tx, actor.orgId, before.project_id)).filter((item) => item.id === phaseId) };
   });
 }
 
@@ -480,7 +527,7 @@ export async function importProjectsCsv(
         let clientId: string | null = null;
         if (cell('client')) {
           const existing = await tx.query<{ id: string }>(
-            'select id from client where org_id = $1 and lower(name) = lower($2) limit 1',
+            'select id from client where org_id = $1 and unaccent(lower(btrim(name))) = unaccent(lower(btrim($2))) limit 1',
             [actor.orgId, cell('client')],
           );
           clientId =

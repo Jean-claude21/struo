@@ -47,7 +47,10 @@ export async function createSupplierBill(db: Db, actor: Actor, input: unknown): 
   const data = parse(billInput, input);
   return asActor(db, actor, async (tx) => {
     const currency = await currencyOf(tx, actor.orgId, data.projectId ?? null);
-    const issuedOn = data.issuedOn ?? await orgToday(tx, actor.orgId);
+    // A bill entered late may already be due: without its issue date, it is taken as issued on its due
+    // date (never later than today), so an overdue bill can still be recorded.
+    const today = await orgToday(tx, actor.orgId);
+    const issuedOn = data.issuedOn ?? (data.dueOn < today ? data.dueOn : today);
     if (data.dueOn < issuedOn) throw new DomainError('due_before_issue', 422);
     // The same supplier's bill entered twice would be paid twice in the cash forecast.
     if (data.reference) {
@@ -92,19 +95,35 @@ export async function listSupplierBills(db: Db, actor: Actor, filters: { status?
 }
 
 /** Pays a bill: a bill of a site becomes that site's expense (so margins stay true). */
+type BillToPay = { projectId: string | null; supplier: string; label: string; category: string; amount: number; currency: string; status: string };
+
+/** The bill, locked, if it can be paid on that day (or today): it exists, is still to pay, and the day has come. */
+async function billToPayTx(tx: Tx, actor: Actor, id: string, paidOnInput?: string): Promise<{ bill: BillToPay; paidOn: string }> {
+  const { rows } = await tx.query<BillToPay>(
+    `select project_id as "projectId", supplier, label, category, amount_minor::float8 as amount, currency_code as currency, status
+       from supplier_bill where id = $1 and org_id = $2 for update`, [id, actor.orgId]);
+  const bill = rows[0];
+  if (!bill) throw notFound();
+  if (bill.status !== 'to_pay') throw new DomainError('bill_closed', 409);
+  // Paying records an expense: like any expense, on a day that has come.
+  const today = await orgToday(tx, actor.orgId);
+  const paidOn = paidOnInput ?? today;
+  if (paidOn > today) throw new DomainError('spent_in_future', 422);
+  return { bill, paidOn };
+}
+
+/** What would refuse paying this bill, checked without writing (the preview before the « yes »). */
+export async function checkSupplierBillPayment(db: Db, actor: Actor, id: string, input: unknown = {}): Promise<{ paidOn: string }> {
+  ensure(actor, 'finance.write');
+  const data = parse(z.object({ paidOn: day.optional() }), input);
+  return asActor(db, actor, async (tx) => ({ paidOn: (await billToPayTx(tx, actor, id, data.paidOn)).paidOn }));
+}
+
 export async function paySupplierBill(db: Db, actor: Actor, id: string, input: unknown = {}): Promise<{ expenseId: string | null }> {
   ensure(actor, 'finance.write');
   const data = parse(z.object({ paidOn: day.optional() }), input);
   return asActor(db, actor, async (tx) => {
-    const { rows } = await tx.query<{ projectId: string | null; supplier: string; label: string; category: string; amount: number; currency: string; status: string }>(
-      `select project_id as "projectId", supplier, label, category, amount_minor::float8 as amount, currency_code as currency, status
-         from supplier_bill where id = $1 and org_id = $2 for update`, [id, actor.orgId]);
-    const bill = rows[0];
-    if (!bill) throw notFound();
-    if (bill.status !== 'to_pay') throw new DomainError('bill_closed', 409);
-    // Paying records an expense: like any expense, on a day that has come.
-    const paidOn = data.paidOn ?? await orgToday(tx, actor.orgId);
-    if (paidOn > await orgToday(tx, actor.orgId)) throw new DomainError('spent_in_future', 422);
+    const { bill, paidOn } = await billToPayTx(tx, actor, id, data.paidOn);
     let expenseId: string | null = null;
     if (bill.projectId) {
       const expense = await tx.query<{ id: string }>(
@@ -165,7 +184,7 @@ export async function cashForecast(db: Db, actor: Actor, weeks = 13): Promise<Ca
     const { rows: [base] } = await tx.query(
       `select
          (select coalesce(sum(amount_minor), 0) from payment where org_id = $1 and currency_code = $2 and ($3::date is null or received_on > $3))::float8 as collected,
-         (select coalesce(sum(amount_minor), 0) from expense where org_id = $1 and currency_code = $2 and ($3::date is null or spent_on > $3))::float8 as spent,
+         (select coalesce(sum(amount_minor), 0) from expense where org_id = $1 and currency_code = $2 and ($3::date is null or spent_on > $3) and spent_on <= current_date)::float8 as spent,
          (select coalesce(sum(balance_minor), 0) from invoice_balance where org_id = $1 and currency_code = $2 and balance_minor > 0 and due_on < current_date)::float8 as overdue_in,
          (select coalesce(sum(amount_minor), 0) from supplier_bill where org_id = $1 and currency_code = $2 and status = 'to_pay' and due_on < current_date)::float8 as overdue_bills,
          (select coalesce(sum(greatest(0, s.agreed_minor - coalesce((select sum(e.amount_minor) from expense e where e.subcontract_id = s.id), 0))), 0)
