@@ -21,6 +21,7 @@ import {
 } from '@/features/field/store.ts';
 import { useI18n, type MessageKey } from '@/i18n/index.tsx';
 import { updateTask } from '@/features/office/server.ts';
+import { todayIso } from '@/components/ui.tsx';
 
 export const Route = createFileRoute('/field')({
   ssr: false,
@@ -33,7 +34,7 @@ type Flow = null | 'report' | 'incident' | 'checklist' | 'delivery' | 'pv' | { d
 const INCIDENT_KINDS = [['material_delay', Truck], ['defect', Hammer], ['weather', CloudRain], ['accident', TriangleAlert], ['equipment', Wrench], ['other', ClipboardCheck]] as const;
 const PRIORITIES = ['info', 'important', 'critical'] as const;
 const now = () => new Date().toISOString();
-const todayIso = () => new Date().toISOString().slice(0, 10);
+
 
 function useOnline() {
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -369,7 +370,7 @@ function appliesToday(template: { required: boolean; mode?: string; phaseName?: 
 function FieldTask({ task }: { task: { id: string; title: string; dueOn: string | null; status: string; priority: string } }) {
   const { t } = useI18n();
   const [state, setState] = useState<'open' | 'sending' | 'done' | 'offline'>('open');
-  const late = task.dueOn !== null && task.dueOn < new Date().toISOString().slice(0, 10);
+  const late = task.dueOn !== null && task.dueOn < todayIso();
   const finish = async () => {
     if (!navigator.onLine) { setState('offline'); return; }
     setState('sending');
@@ -855,7 +856,7 @@ function OfficeTab({ site, queue, canRequest, onQueued }: { site: FieldProject; 
             <label className="field">{t('fieldOffice.item')}<input name="item" required maxLength={200} placeholder={t('fieldOffice.itemPlaceholder')} /></label>
             <div className="pair">
               <label className="field">{t('fieldOffice.quantity')}<input name="quantity" maxLength={80} placeholder={t('fieldOffice.quantityPlaceholder')} /></label>
-              <label className="field">{t('fieldOffice.neededOn')}<input name="neededOn" type="date" min={new Date().toISOString().slice(0, 10)} /></label>
+              <label className="field">{t('fieldOffice.neededOn')}<input name="neededOn" type="date" min={todayIso()} /></label>
             </div>
             <label className="field">{t('fieldOffice.note')}<textarea name="note" rows={2} maxLength={1000} /></label>
             <div className="pair">

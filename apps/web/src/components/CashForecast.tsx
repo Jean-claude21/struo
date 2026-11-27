@@ -4,7 +4,7 @@ import { Check, Landmark, Plus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { BarChart, Legend } from './charts.tsx';
 import { KpiTile, Panel, useToast } from './kit.tsx';
-import { DateText, formatMoney, parseMoney } from './ui.tsx';
+import { DateText, formatMoney, parseMoney, todayIso } from './ui.tsx';
 import { cancelSupplierBill, createSupplierBill, getCash, paySupplierBill, setCashBalance } from '@/features/office/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 
@@ -72,7 +72,7 @@ export function CashForecast({ canWrite }: { canWrite: boolean }) {
             void run(() => setCashBalance({ data: { amountMinor: negative ? -amount : amount, on: String(form.get('on')) } }), t('cash.balanceSaved')).then(() => setEditingBalance(false));
           }}>
             <label className="field">{t('cash.bankBalance')}<input name="amount" inputMode="decimal" required /></label>
-            <label className="field">{t('cash.on')}<input name="on" type="date" defaultValue={new Date().toISOString().slice(0, 10)} max={new Date().toISOString().slice(0, 10)} required /></label>
+            <label className="field">{t('cash.on')}<input name="on" type="date" defaultValue={todayIso()} max={todayIso()} required /></label>
             <button type="submit" className="btn small" style={{ alignSelf: 'flex-end' }}>{t('app.save')}</button>
             <button type="button" className="btn ghost small" style={{ alignSelf: 'flex-end' }} onClick={() => setEditingBalance(false)}>{t('app.cancel')}</button>
           </form>

@@ -481,6 +481,7 @@ export const uxFr = {
     lag: 'jours après',
     depsSaved: 'Dépendances enregistrées',
     cascade: '{name} replanifié · {n} jalon(s) suivant(s) décalé(s) en cascade',
+    beyondEnd: '{n} jalon(s) tombent désormais après la fin prévue du chantier ({date}).',
     phases: 'Phases',
     phaseMoved: 'Phase {name} replanifiée',
     otherSite: 'autre chantier',

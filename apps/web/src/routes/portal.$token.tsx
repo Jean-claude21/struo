@@ -7,7 +7,7 @@ import { ArrowRight, Bell, Check, CircleCheck, FileText, FolderOpen, HardHat, Ho
 import { LanguageSwitch } from '@/components/PublicHeader.tsx';
 import { SignaturePad, type SignaturePadHandle } from '@/components/SignaturePad.tsx';
 import { Modal, useToast } from '@/components/kit.tsx';
-import { decimalsOf, formatDate, formatMoney, parseMoney } from '@/components/ui.tsx';
+import { decimalsOf, formatDate, formatMoney, parseMoney, todayIso } from '@/components/ui.tsx';
 import { getPortal, portalDecideChange, portalMessage, portalRequestCode, portalSetEmail, portalSubscribePush, portalVerifyCode } from '@/features/portal/server.ts';
 import { useI18n } from '@/i18n/index.tsx';
 import { usePhotoViewer } from '@/components/PhotoViewer.tsx';
@@ -172,7 +172,7 @@ function HomeTab({ data, money, date, onTab, onSign }: {
   const { view, news, show } = data;
   const photoUrl = (id: string) => `/api/portal/${token}/file/${id}`;
   const toSign = view.milestones.filter((milestone) => milestone.clientValidation && !milestone.validatedAt && milestone.actualOn);
-  const soon = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+  const soon = todayIso(3);
   const pendingClaims = new Set(data.claims.filter((claim) => claim.status === 'pending').map((claim) => claim.invoiceId));
   const dueNow = view.invoices.filter((invoice) => invoice.balance > 0 && invoice.dueOn <= soon && !pendingClaims.has(invoice.id));
   const waitingChanges = data.changeOrders.filter((order) => order.status === 'sent');
@@ -440,7 +440,7 @@ function ClaimDialog({ invoice, money, onClose, onDone }: { invoice: Space['view
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIso();
   const submit = async (form: HTMLFormElement) => {
     const body = new FormData(form);
     const amount = parseMoney(String(body.get('amount') ?? ''), invoice.currency);

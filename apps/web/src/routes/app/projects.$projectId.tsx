@@ -2,7 +2,7 @@ import { can, sees } from '@struo/core/permissions';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { DocumentDialog, ExpenseDialog, InvoiceDialog, MilestoneDialog, PaymentDialog, ReminderDialog, ReportCard } from '@/components/forms.tsx';
-import { Badge, DateText, Empty, ErrorText, Field, formData, formatMoney, Kpi, Money, parseMoney, Progress, Tabs, useAction } from '@/components/ui.tsx';
+import { Badge, DateText, Empty, ErrorText, Field, formData, formatMoney, Kpi, Money, parseMoney, Progress, Tabs, todayIso, useAction } from '@/components/ui.tsx';
 import {
   addPhase, archiveProject, createChangeOrder, createPortalLink, decideChangeOrder, getProjectPage, getSiteDay, invoiceChangeOrder, sendChangeOrder, postMessage, removePhase, resolveIncident, revokePortalLink,
   updateDocument, updateMilestone, updatePhase, updateProject,
@@ -748,7 +748,7 @@ function ChangesTab({ data }: { data: Data }) {
   const money = (minor: number) => formatMoney(locale, minor, data.project.currencyCode);
   const writer = data.role !== 'site_lead';
   const canInvoice = can(data.role, 'finance.write');
-  const due = () => { const date = new Date(); date.setDate(date.getDate() + 30); return date.toISOString().slice(0, 10); };
+  const due = () => todayIso(30);
   const c = data.contract;
   const shape = { draft: 'todo', sent: 'review', accepted: 'done', refused: 'late' } as const;
   return (
@@ -820,10 +820,10 @@ function ChangesTab({ data }: { data: Data }) {
 /** Spec 048: one page per day of the site, from what is already recorded. */
 function JournalTab({ projectId }: { projectId: string }) {
   const { t } = useI18n();
-  const [day, setDay] = useState(() => new Date().toISOString().slice(0, 10));
+  const [day, setDay] = useState(() => todayIso());
   const [journal, setJournal] = useState<Awaited<ReturnType<typeof getSiteDay>> | null>(null);
   useEffect(() => { let live = true; setJournal(null); void getSiteDay({ data: { projectId, day } }).then((value) => { if (live) setJournal(value); }); return () => { live = false; }; }, [projectId, day]);
-  const shift = (days: number) => { const date = new Date(`${day}T12:00:00`); date.setDate(date.getDate() + days); setDay(date.toISOString().slice(0, 10)); };
+  const shift = (days: number) => { const date = new Date(`${day}T12:00:00`); date.setDate(date.getDate() + days); setDay(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`); };
   return (
     <Panel title={t('journal.title')} actions={(
       <div className="row tight">
