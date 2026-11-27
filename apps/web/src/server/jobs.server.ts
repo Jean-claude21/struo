@@ -205,9 +205,11 @@ export async function runLicenceNotices(rt: Runtime, now = new Date()): Promise<
 export function startJobs(rt: Runtime): void {
   if (started) return;
   started = true;
-  // Every 15 minutes the jobs check in with the error tracker: if they stop, an alert is raised.
+  // Every hour, on the hour, the jobs check in with the error tracker: if they stop, an alert is
+  // raised. Hourly, not every 15 minutes: between two runs the Neon database can sleep
+  // (LEARNINGS-BASES-SERVERLESS.md); the digest and reports still leave from 7:00 local time.
   const tick = () => {
-    monitorJob('struo-jobs', '*/15 * * * *', async () => {
+    monitorJob('struo-jobs', '0 * * * *', async () => {
       // Demo copies (spec 042): delete the expired ones, keep a few ready for the next visitors.
       // Spec 055: every run is noted (ok or failed) for the founder's console.
       const run = async (name: string, work: () => Promise<unknown>) => {
@@ -223,6 +225,9 @@ export function startJobs(rt: Runtime): void {
       await run('client-reports', () => runClientReports(rt, new Date(), localClock));
     }).catch((error: unknown) => reportError(error, { where: 'jobs' }));
   };
-  setTimeout(tick, 30_000).unref?.();
-  setInterval(tick, 15 * 60_000).unref?.();
+  const hour = 60 * 60_000;
+  const plan = () => {
+    setTimeout(() => { tick(); plan(); }, hour - (Date.now() % hour) || hour).unref?.();
+  };
+  plan();
 }

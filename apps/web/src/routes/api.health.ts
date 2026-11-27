@@ -1,18 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { runtime } from '@/server/runtime.server.ts';
 
-// Health check: Coolify switches to a new release only when this answers.
+// Health check: Coolify switches to a new release only when this answers. It never touches the
+// database: Docker asks every 30 s, and a query each time would keep Neon awake for good
+// (LEARNINGS-BASES-SERVERLESS.md). The database is checked on /api/health/db, by hand.
 export const Route = createFileRoute('/api/health')({
   server: {
     handlers: {
-      GET: async () => {
-        try {
-          await runtime().db.query('select 1');
-          return Response.json({ status: 'ok', version: process.env.APP_VERSION ?? 'dev' });
-        } catch {
-          return Response.json({ status: 'database_unreachable' }, { status: 503 });
-        }
-      },
+      GET: () => Response.json({ status: 'ok', version: process.env.APP_VERSION ?? 'dev' }),
     },
   },
 });
