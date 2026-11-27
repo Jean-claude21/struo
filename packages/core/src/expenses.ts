@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { asActor, ensure, journal, parse } from './access.ts';
+import { asActor, ensure, journal, orgToday, parse } from './access.ts';
 import type { Actor, Db } from './db.ts';
-import { notFound } from './errors.ts';
+import { DomainError, notFound } from './errors.ts';
 
 export const EXPENSE_CATEGORIES = ['materials', 'labour', 'subcontracting', 'equipment', 'transport', 'fees', 'other'] as const;
 
@@ -22,10 +22,13 @@ export async function addExpense(db: Db, actor: Actor, input: unknown): Promise<
       await tx.query<{ currency: string }>('select currency_code as currency from project where id = $1 and org_id = $2', [data.projectId, actor.orgId])
     ).rows[0];
     if (!project) throw notFound();
+    // Money spent is money gone: a date still to come would count in margins and cash before it happens.
+    const today = await orgToday(tx, actor.orgId);
+    if (data.spentOn && data.spentOn > today) throw new DomainError('spent_in_future', 422);
     const { rows } = await tx.query<{ id: string }>(
       `insert into expense (org_id, project_id, spent_on, category, supplier, label, amount_minor, currency_code, created_by)
        values ($1, $2, coalesce($3::date, current_date), $4, $5, $6, $7, $8, $9) returning id`,
-      [actor.orgId, data.projectId, data.spentOn ?? null, data.category, data.supplier ?? null, data.label,
+      [actor.orgId, data.projectId, data.spentOn ?? today, data.category, data.supplier ?? null, data.label,
         data.amountMinor, project.currency, actor.userId],
     );
     await journal(tx, actor, 'expense.add', rows[0]!.id, null, data);

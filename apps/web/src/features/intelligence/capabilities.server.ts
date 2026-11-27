@@ -13,7 +13,7 @@ import { translate } from '@/i18n/index.tsx';
 import { alertText } from '@/server/jobs.server.ts';
 import { invitationMail } from '@/server/mail.server.ts';
 import { outboundAllowed } from '@/server/demo.server.ts';
-import { companyLocale, deliverClientReport, notifyReviewed } from '@/server/notify.server.ts';
+import { companyLocale, deliverClientReport, notifyClient, notifyReviewed } from '@/server/notify.server.ts';
 import { draftSections } from '@/server/report.server.ts';
 import type { Runtime } from '@/server/runtime.server.ts';
 import { forecast } from '@/server/weather.server.ts';
@@ -43,6 +43,8 @@ export interface Capability<I extends z.ZodObject = z.ZodObject> {
   run(context: CapabilityContext, input: z.output<I>): Promise<unknown>;
   /** What a person checks before validating a draft (levels 3 and 4). */
   summary?(context: CapabilityContext, input: z.output<I>): Promise<string>;
+  /** Throws what `run` would refuse, without writing: the preview then shows the refusal, not a draft bound to fail. */
+  check?(context: CapabilityContext, input: z.output<I>): Promise<void>;
   /** Pages the result comes from, to open. */
   sources?(result: unknown, input: z.output<I>): Source[];
 }
@@ -78,7 +80,7 @@ export const CAPABILITIES: Capability[] = [
     description: 'Call first: the company, your role, today, its currency, and what needs attention now (alerts, most severe first).',
     async run({ rt, actor, locale }) {
       const [settings, alerts, operations] = await Promise.all([core.getSettings(rt.db, actor), core.listAlerts(rt.db, actor), core.operationsSummary(rt.db, actor)]);
-      return { company: settings.name, currency: settings.currencyCode, role: actor.role, today: new Date().toISOString().slice(0, 10),
+      return { company: settings.name, currency: settings.currencyCode, role: actor.role, today: await core.companyToday(rt.db, actor),
         alerts: alerts.slice(0, 25).map((alert) => ({ severity: alert.severity, kind: alert.kind, projectId: alert.projectId, text: alertText(alert, locale) })), operations };
     },
   }),
@@ -148,6 +150,10 @@ export const CAPABILITIES: Capability[] = [
       const clientId = input.client ? await clientRef(rt, actor, input.client) : null;
       return core.createProject(rt.db, actor, { ...input, client: undefined, clientId });
     },
+    async check({ rt, actor }, input) {
+      const clientId = input.client ? await clientRef(rt, actor, input.client) : null;
+      await core.checkNewProject(rt.db, actor, { ...input, client: undefined, clientId });
+    },
     summary: async (context, input) => `${input.code ?? ''} ${input.name}${input.client ? ` · ${input.client}` : ''}${input.budgetMinor ? ` · ${fmt(context, input.budgetMinor)}` : ''}${input.startDate ? ` · ${input.startDate} → ${input.endDate ?? '?'}` : ''}`,
   }),
   define({
@@ -155,10 +161,12 @@ export const CAPABILITIES: Capability[] = [
     input: z.object({
       site, name: z.string().optional(), status: z.enum(core.PROJECT_STATUSES).optional(), location: z.string().optional(),
       startDate: date.optional(), endDate: date.optional(), budgetMinor: z.number().int().min(0).optional(),
+      client: z.string().optional().describe('Client name (must exist) or id; an empty string detaches the client'),
     }),
-    description: 'Changes a site: name, status (pending, active, suspended, done), place, dates or budget.',
-    async run({ rt, actor, projectId }, { site: ref, ...patch }) {
+    description: 'Changes a site: name, client, status (pending, active, suspended, done), place, dates or budget.',
+    async run({ rt, actor, projectId }, { site: ref, client, ...rest }) {
       const id = await projectId(ref);
+      const patch = client === undefined ? rest : { ...rest, clientId: client === '' ? null : await clientRef(rt, actor, client) };
       await core.updateProject(rt.db, actor, id, patch);
       return { ok: true, changed: Object.keys(patch) };
     },
@@ -239,7 +247,8 @@ export const CAPABILITIES: Capability[] = [
       assignee: z.string().optional().describe('Name of the member who acts'), dueOn: date.optional(), impactDays: z.number().int().min(0).max(365).optional(), resolutionNote: z.string().optional() }),
     description: 'Follows an incident: decision, action, who acts, by when, impact in days, then resolution.',
     async run({ rt, actor }, { incidentId, assignee, ...patch }) {
-      const assigneeId = assignee ? (await core.listMembers(rt.db, actor)).find((member) => member.name.toLowerCase().includes(assignee.toLowerCase()))?.userId ?? null : undefined;
+      // An unknown or ambiguous name is refused: silently clearing who acts would lose the follow-up.
+      const assigneeId = assignee ? pickByName(await core.listMembers(rt.db, actor), assignee, 'member').userId : undefined;
       await core.updateIncident(rt.db, actor, incidentId, { ...patch, ...(assigneeId !== undefined ? { assigneeId } : {}) });
       return { ok: true };
     },
@@ -306,6 +315,7 @@ export const CAPABILITIES: Capability[] = [
       deductionMinor: z.number().int().min(0).optional(), issuedOn: date.optional(), dueOn: date }),
     description: 'Issues an invoice (advance, progress statement or final) on a site. VAT and retention come from the site.',
     async run({ rt, actor, projectId }, input) { return core.createInvoice(rt.db, actor, { ...input, site: undefined, projectId: await projectId(input.site) }); },
+    async check({ rt, actor, projectId }, input) { await core.checkNewInvoice(rt.db, actor, { ...input, site: undefined, projectId: await projectId(input.site) }); },
     summary: async (context, input) => `${input.site} · ${input.kind} · ${fmt(context, input.amountMinor)} HT${input.deductionMinor ? ` − ${fmt(context, input.deductionMinor)}` : ''} · ${input.dueOn}${input.label ? ` · ${input.label}` : ''}`,
   }),
   define({
@@ -332,7 +342,13 @@ export const CAPABILITIES: Capability[] = [
   define({
     name: 'issue_invoice', group: 'finance', permission: 'finance.write', autonomy: 4, input: z.object({ draftId: z.string().uuid() }),
     description: 'Issues an invoice draft: it gets the next number of the company series and is frozen.',
-    run: ({ rt, actor }, input) => core.issueInvoice(rt.db, actor, input.draftId),
+    async run({ rt, actor }, input) {
+      const issued = await core.issueInvoice(rt.db, actor, input.draftId);
+      // As from the screen (spec 051): the client is told a new invoice waits in their space.
+      const { rows } = await rt.owner.query<{ projectId: string }>('select project_id as "projectId" from invoice where id = $1 and org_id = $2', [input.draftId, actor.orgId]);
+      if (rows[0]) void notifyClient(rt, actor.orgId, rows[0].projectId, 'invoice', { number: issued.number });
+      return issued;
+    },
     async summary({ rt, actor, locale }, input) {
       const edit = await core.getInvoiceForEdit(rt.db, actor, input.draftId);
       return `${edit.projectCode} · ${edit.kind} · ${edit.lines.length} ligne(s) · net ${new Intl.NumberFormat(locale === 'en' ? 'en-GB' : 'fr-FR').format(edit.netMinor)} ${edit.currencyCode}`;
@@ -360,7 +376,7 @@ export const CAPABILITIES: Capability[] = [
   define({
     name: 'add_supplier_bill', group: 'finance', permission: 'finance.write', autonomy: 2,
     input: z.object({ supplier: z.string().min(1), label: z.string().min(1), amountMinor: money, dueOn: date, site: site.optional(), category: z.enum(core.EXPENSE_CATEGORIES).optional(), reference: z.string().optional() }),
-    description: 'Adds a supplier bill to pay, on a site or as overheads; it enters the cash forecast.',
+    description: 'Adds a supplier bill to pay, on a site or as overheads; it enters the cash forecast. The same supplier and reference twice is refused (bill_duplicate).',
     async run({ rt, actor, projectId }, input) { return core.createSupplierBill(rt.db, actor, { ...input, site: undefined, projectId: input.site ? await projectId(input.site) : null }); },
   }),
   define({
@@ -442,14 +458,27 @@ export const CAPABILITIES: Capability[] = [
   define({
     name: 'move_milestone', group: 'planning', permission: 'planning.write', autonomy: 2,
     input: z.object({ milestoneId: z.string().uuid(), plannedOn: date }),
-    description: 'Moves a milestone; the milestones waiting for it are pushed in cascade and listed with their former dates.',
+    description: 'Moves a milestone; the milestones waiting for it are pushed in cascade and listed with their former dates. beyondSiteEnd lists those now after their site end date: tell the person.',
     run: ({ rt, actor }, input) => core.moveMilestone(rt.db, actor, input.milestoneId, { plannedOn: input.plannedOn }),
   }),
   define({
-    name: 'mark_milestone_reached', group: 'planning', permission: 'planning.write', autonomy: 2,
+    name: 'mark_milestone_reached', group: 'planning', permission: 'planning.write', autonomy: 3,
     input: z.object({ milestoneId: z.string().uuid(), actualOn: date.optional() }),
-    description: 'Marks a milestone reached (today unless a date is given).',
-    async run({ rt, actor }, input) { await core.updateMilestone(rt.db, actor, input.milestoneId, { actualOn: input.actualOn ?? new Date().toISOString().slice(0, 10) }); return { ok: true }; },
+    description: 'Marks a milestone reached (today unless a date is given). Refused while a milestone it waits for is not reached, or for a date to come.',
+    async run({ rt, actor }, input) {
+      const reached = await core.markMilestoneReached(rt.db, actor, input.milestoneId, { actualOn: input.actualOn });
+      // As from the screen (spec 051): a stage the client signs off is announced to them.
+      const { rows } = await rt.owner.query<{ projectId: string; name: string }>(
+        'select project_id as "projectId", name from milestone where id = $1 and org_id = $2 and client_validation and client_validated_at is null', [input.milestoneId, actor.orgId]);
+      if (rows[0]) void notifyClient(rt, actor.orgId, rows[0].projectId, 'milestone', { stage: rows[0].name });
+      return { ok: true, ...reached };
+    },
+    // Level 3: reaching a stage the client signs off notifies the client, so the person says yes first.
+    async summary({ rt, actor }, input) {
+      const row = (await core.listMilestones(rt.db, actor)).find((item) => item.id === input.milestoneId);
+      return `${row ? `${row.projectCode} · ${row.name}` : input.milestoneId} · ${input.actualOn ?? await core.companyToday(rt.db, actor)}`;
+    },
+    async check({ rt, actor }, input) { await core.checkMilestoneReachable(rt.db, actor, input.milestoneId, { actualOn: input.actualOn }); },
   }),
   define({
     name: 'set_milestone_dependencies', group: 'planning', permission: 'planning.write', autonomy: 2,
@@ -467,7 +496,7 @@ export const CAPABILITIES: Capability[] = [
   define({
     name: 'add_expense', group: 'expenses', permission: 'expenses.write', autonomy: 2,
     input: z.object({ site, category: z.enum(core.EXPENSE_CATEGORIES), label: z.string().min(1), supplier: z.string().optional(), amountMinor: money, spentOn: date.optional() }),
-    description: 'Records an expense on a site.',
+    description: 'Records an expense on a site. A date in the future is refused (spent_in_future).',
     async run({ rt, actor, projectId }, input) { return core.addExpense(rt.db, actor, { ...input, site: undefined, projectId: await projectId(input.site) }); },
   }),
   define({
@@ -597,11 +626,22 @@ export const CAPABILITIES: Capability[] = [
   }),
 ];
 
+/**
+ * One row by the name a person typed: the exact name (any case) wins, else the only name containing it.
+ * None is « not found », several is « ambiguous »: never a silent guess.
+ */
+function pickByName<T extends { name: string }>(rows: T[], typed: string, what: 'member' | 'client'): T {
+  const wanted = typed.trim().toLowerCase();
+  const exact = rows.filter((row) => row.name.toLowerCase() === wanted);
+  const found = exact.length ? exact : rows.filter((row) => row.name.toLowerCase().includes(wanted));
+  if (found.length === 1) return found[0]!;
+  if (!found.length) throw new core.DomainError(what === 'member' ? 'member_not_found' : 'not_found', 404, { name: typed });
+  throw new core.DomainError(what === 'member' ? 'member_ambiguous' : 'client_ambiguous', 409, { name: typed });
+}
+
 async function clientRef(rt: Runtime, actor: core.Actor, ref: string): Promise<string> {
   if (/^[0-9a-f-]{36}$/iu.test(ref)) return ref;
-  const found = (await core.listClients(rt.db, actor, ref)).find((client) => client.name.toLowerCase().includes(ref.toLowerCase()));
-  if (!found) throw new core.DomainError('not_found', 404);
-  return found.id;
+  return pickByName(await core.listClients(rt.db, actor, ref), ref, 'client').id;
 }
 
 export const capabilityByName = new Map(CAPABILITIES.map((capability) => [capability.name, capability]));

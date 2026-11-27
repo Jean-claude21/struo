@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { asActor, ensure, journal, parse } from './access.ts';
+import { asActor, ensure, journal, orgToday, parse } from './access.ts';
 import type { Actor, Db, Tx } from './db.ts';
 import { DomainError, notFound } from './errors.ts';
 import { EXPENSE_CATEGORIES } from './expenses.ts';
@@ -47,10 +47,19 @@ export async function createSupplierBill(db: Db, actor: Actor, input: unknown): 
   const data = parse(billInput, input);
   return asActor(db, actor, async (tx) => {
     const currency = await currencyOf(tx, actor.orgId, data.projectId ?? null);
+    const issuedOn = data.issuedOn ?? await orgToday(tx, actor.orgId);
+    if (data.dueOn < issuedOn) throw new DomainError('due_before_issue', 422);
+    // The same supplier's bill entered twice would be paid twice in the cash forecast.
+    if (data.reference) {
+      const twin = await tx.query(
+        `select 1 from supplier_bill where org_id = $1 and status <> 'cancelled' and lower(supplier) = lower($2) and lower(reference) = lower($3) limit 1`,
+        [actor.orgId, data.supplier, data.reference]);
+      if (twin.rowCount) throw new DomainError('bill_duplicate', 409, { reference: data.reference });
+    }
     const { rows } = await tx.query<{ id: string }>(
       `insert into supplier_bill (org_id, project_id, supplier, label, reference, category, amount_minor, currency_code, issued_on, due_on, created_by)
        values ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9::date, current_date), $10, $11) returning id`,
-      [actor.orgId, data.projectId ?? null, data.supplier, data.label, data.reference || null, data.category, data.amountMinor, currency, data.issuedOn ?? null, data.dueOn, actor.userId]);
+      [actor.orgId, data.projectId ?? null, data.supplier, data.label, data.reference || null, data.category, data.amountMinor, currency, issuedOn, data.dueOn, actor.userId]);
     await journal(tx, actor, 'bill.add', rows[0]!.id, null, data);
     return { id: rows[0]!.id };
   });
@@ -93,16 +102,19 @@ export async function paySupplierBill(db: Db, actor: Actor, id: string, input: u
     const bill = rows[0];
     if (!bill) throw notFound();
     if (bill.status !== 'to_pay') throw new DomainError('bill_closed', 409);
+    // Paying records an expense: like any expense, on a day that has come.
+    const paidOn = data.paidOn ?? await orgToday(tx, actor.orgId);
+    if (paidOn > await orgToday(tx, actor.orgId)) throw new DomainError('spent_in_future', 422);
     let expenseId: string | null = null;
     if (bill.projectId) {
       const expense = await tx.query<{ id: string }>(
         `insert into expense (org_id, project_id, spent_on, category, supplier, label, amount_minor, currency_code, created_by)
          values ($1, $2, coalesce($3::date, current_date), $4, $5, $6, $7, $8, $9) returning id`,
-        [actor.orgId, bill.projectId, data.paidOn ?? null, bill.category, bill.supplier, bill.label, bill.amount, bill.currency, actor.userId]);
+        [actor.orgId, bill.projectId, paidOn, bill.category, bill.supplier, bill.label, bill.amount, bill.currency, actor.userId]);
       expenseId = expense.rows[0]!.id;
     }
     await tx.query(`update supplier_bill set status = 'paid', paid_on = coalesce($3::date, current_date), expense_id = $4 where id = $1 and org_id = $2`,
-      [id, actor.orgId, data.paidOn ?? null, expenseId]);
+      [id, actor.orgId, paidOn, expenseId]);
     await journal(tx, actor, 'bill.pay', id, null, { expenseId });
     return { expenseId };
   });

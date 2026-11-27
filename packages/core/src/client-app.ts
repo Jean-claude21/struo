@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { asActor, ensure, journal, parse } from './access.ts';
 import type { Actor, Db } from './db.ts';
 import { DomainError, notFound } from './errors.ts';
-import { PAYMENT_METHODS, recordPayment } from './finance.ts';
+import { PAYMENT_METHODS, recordPaymentTx } from './finance.ts';
 import { hashToken } from './portal.ts';
 
 /**
@@ -167,23 +167,23 @@ export async function listPaymentClaims(db: Db, actor: Actor, filters: { status?
 export async function confirmPaymentClaim(db: Db, actor: Actor, id: string, input: unknown = {}): Promise<{ paymentId: string }> {
   ensure(actor, 'finance.write');
   const data = parse(z.object({ amountMinor: z.number().int().positive().optional(), receivedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional() }), input);
-  const claim = await asActor(db, actor, async (tx) => {
+  // One transaction holding the claim's lock from the check to the update: two confirmations at once
+  // cannot both see « pending » and record the money twice.
+  return asActor(db, actor, async (tx) => {
     const { rows } = await tx.query<{ projectId: string; invoiceId: string; amountMinor: number; paidOn: string; method: string; reference: string | null; status: string }>(
       `select project_id as "projectId", invoice_id as "invoiceId", amount_minor::float8 as "amountMinor", to_char(paid_on, 'YYYY-MM-DD') as "paidOn", method, reference, status
          from payment_claim where id = $1 and org_id = $2 for update`, [id, actor.orgId]);
-    return rows[0];
-  });
-  if (!claim) throw notFound();
-  if (claim.status !== 'pending') throw new DomainError('claim_decided', 409);
-  const payment = await recordPayment(db, actor, {
-    projectId: claim.projectId, invoiceId: claim.invoiceId, amountMinor: data.amountMinor ?? claim.amountMinor, method: claim.method,
-    receivedOn: data.receivedOn ?? claim.paidOn, reference: claim.reference, note: 'client',
-  });
-  await asActor(db, actor, async (tx) => {
+    const claim = rows[0];
+    if (!claim) throw notFound();
+    if (claim.status !== 'pending') throw new DomainError('claim_decided', 409);
+    const payment = await recordPaymentTx(tx, actor, {
+      projectId: claim.projectId, invoiceId: claim.invoiceId, amountMinor: data.amountMinor ?? claim.amountMinor, method: claim.method,
+      receivedOn: data.receivedOn ?? claim.paidOn, reference: claim.reference, note: 'client',
+    });
     await tx.query(`update payment_claim set status = 'confirmed', payment_id = $3, decided_by = $4, decided_at = now() where id = $1 and org_id = $2`, [id, actor.orgId, payment.id, actor.userId]);
     await journal(tx, actor, 'payment.claim.confirm', id, null, { paymentId: payment.id });
+    return { paymentId: payment.id };
   });
-  return { paymentId: payment.id };
 }
 
 /** Refuses a declaration (not received, wrong amount…), with the reason the client will read. */

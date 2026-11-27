@@ -45,6 +45,7 @@ export function createStruoMcpServer(rt: Runtime, actor: core.Actor, locale: 'fr
           const { confirmed, ...rest } = args as Record<string, unknown> & { confirmed?: boolean };
           const input = capability.input.parse(rest);
           if (commits && confirmed !== true) {
+            await capability.check?.(context, input);
             return text({ preview: capability.summary ? await capability.summary(context, input) : input, needsConfirmation: true,
               next: `Show this to the person. If they agree, call ${capability.name} again with the same arguments and confirmed: true.` });
           }

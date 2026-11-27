@@ -156,7 +156,7 @@ function Planning() {
   /** Moves a milestone; what waits for it is pushed by the server, and « undo » puts everything back. */
   const reschedule = async (milestone: Ms, date: string) => {
     try {
-      const { shifted } = await moveMilestone({ data: { id: milestone.id, plannedOn: date } });
+      const { shifted, beyondSiteEnd } = await moveMilestone({ data: { id: milestone.id, plannedOn: date } });
       await router.invalidate();
       const back = [{ id: milestone.id, plannedOn: milestone.plannedOn }, ...shifted.map((item) => ({ id: item.id, plannedOn: item.from }))];
       const days = Math.round((new Date(date).getTime() - new Date(milestone.plannedOn).getTime()) / 86400000);
@@ -164,6 +164,7 @@ function Planning() {
         text: shifted.length ? t('plan.cascade', { name: milestone.name, n: shifted.length }) : t('plan.moved', { name: milestone.name, days }),
         action: { label: t('ui.undo'), run: async () => { await restoreMilestoneDates({ data: { items: back } }); await router.invalidate(); } },
       });
+      if (beyondSiteEnd.length) toast({ text: t('plan.beyondEnd', { n: beyondSiteEnd.length, date: beyondSiteEnd[0]!.siteEnd }), kind: 'info' });
     } catch (caught) {
       toast({ text: errorText(caught), kind: 'err' });
     }
