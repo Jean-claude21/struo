@@ -92,7 +92,8 @@ function FieldApp() {
   }, [refresh]);
   useEffect(() => { if (online) void refresh(); }, [online, refresh]);
   useEffect(() => {
-    const timer = window.setInterval(() => { if (navigator.onLine) void refresh(); }, 60_000);
+    // Only while the page is seen: a phone left open must not keep the database awake.
+    const timer = window.setInterval(() => { if (navigator.onLine && document.visibilityState === 'visible') void refresh(); }, 60_000);
     return () => window.clearInterval(timer);
   }, [refresh]);
 
